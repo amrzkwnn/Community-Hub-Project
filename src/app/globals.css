@@ -1,0 +1,873 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    color-scheme: light;
+    /* Sime Darby Property / Elmina Heritage Civic PropTech Tokens */
+    --background: #f8f9fa;
+    --foreground: #0f172a;
+    --card: #ffffff;
+    --card-foreground: #0f172a;
+    --popover: #ffffff;
+    --popover-foreground: #0f172a;
+    --primary: #9e1315;
+    --primary-hover: #841012;
+    --primary-foreground: #ffffff;
+    --secondary: #b45309;
+    --secondary-container: #fef3c7;
+    --secondary-foreground: #0f172a;
+    --tertiary: #1d4ed8;
+    --tertiary-container: #dbeafe;
+    --muted: #f1f5f9;
+    --muted-foreground: #64748b;
+    --accent: #fee2e2;
+    --accent-foreground: #9e1315;
+    --destructive: #dc2626;
+    --destructive-foreground: #ffffff;
+    --border: #e2e8f0;
+    --input: #e2e8f0;
+    --ring: rgba(158, 19, 21, 0.4);
+    --radius: 0.5rem;
+
+    /* Motion Curves & Timing */
+    --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-in-out-cubic: cubic-bezier(0.65, 0, 0.35, 1);
+    --duration-micro: 150ms;
+    --duration-short: 240ms;
+    --duration-medium: 380ms;
+
+    /* Scalable UI Preset Tokens */
+    --ui-scale: 1;
+  }
+
+
+  .dark {
+    color-scheme: dark;
+    --background: #0f1113;
+    --foreground: #e2e8f0;
+    --card: #17191c;
+    --card-foreground: #e2e8f0;
+    --popover: #17191c;
+    --popover-foreground: #e2e8f0;
+    --primary: #ffb4ab;
+    --primary-hover: #ffdad6;
+    --primary-foreground: #5c0005;
+    --secondary: #fde047;
+    --secondary-container: #451a03;
+    --secondary-foreground: #fef08a;
+    --tertiary: #aac7ff;
+    --tertiary-container: #00458e;
+    --muted: #1f2226;
+    --muted-foreground: #94a3b8;
+    --accent: #5c0005;
+    --accent-foreground: #ffb4ab;
+    --destructive: #ef4444;
+    --destructive-foreground: #ffffff;
+    --border: #2d3139;
+    --input: #2d3139;
+    --ring: rgba(255, 180, 171, 0.4);
+  }
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-inter, 'Inter', system-ui, -apple-system, sans-serif);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Page entrance animation */
+.page-fade-rise {
+  animation: pageFadeRise var(--duration-medium) var(--ease-out-expo) forwards;
+}
+
+@keyframes pageFadeRise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ==========================================================================
+   Application-Wide Scalable UI System (Compact: 90%, Default: 100%, Large: 110%)
+   ========================================================================== */
+:root {
+  --ui-scale: 1;
+}
+
+html {
+  font-size: 16px;
+  transition: font-size 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+html[data-ui-scale="compact"] {
+  font-size: 90%;
+  --ui-scale: 0.9;
+}
+
+html[data-ui-scale="default"] {
+  font-size: 100%;
+  --ui-scale: 1;
+}
+
+html[data-ui-scale="large"] {
+  font-size: 110%;
+  --ui-scale: 1.1;
+}
+
+/* Universal Scalable Typography Rules for Arbitrary Pixel Font Classes */
+html[data-ui-scale] .text-\[8px\] { font-size: calc(8px * var(--ui-scale)) !important; }
+html[data-ui-scale] .text-\[9px\] { font-size: calc(9px * var(--ui-scale)) !important; }
+html[data-ui-scale] .text-\[9\.5px\] { font-size: calc(9.5px * var(--ui-scale)) !important; }
+html[data-ui-scale] .text-\[10px\] { font-size: calc(10px * var(--ui-scale)) !important; }
+html[data-ui-scale] .text-\[10\.5px\] { font-size: calc(10.5px * var(--ui-scale)) !important; }
+html[data-ui-scale] .text-\[11px\] { font-size: calc(11px * var(--ui-scale)) !important; }
+html[data-ui-scale] .text-\[11\.5px\] { font-size: calc(11.5px * var(--ui-scale)) !important; }
+html[data-ui-scale] .text-\[12px\] { font-size: calc(12px * var(--ui-scale)) !important; }
+html[data-ui-scale] .text-\[12\.5px\] { font-size: calc(12.5px * var(--ui-scale)) !important; }
+html[data-ui-scale] .text-\[13px\] { font-size: calc(13px * var(--ui-scale)) !important; }
+html[data-ui-scale] .text-\[13\.5px\] { font-size: calc(13.5px * var(--ui-scale)) !important; }
+html[data-ui-scale] .text-\[14px\] { font-size: calc(14px * var(--ui-scale)) !important; }
+html[data-ui-scale] .text-\[15px\] { font-size: calc(15px * var(--ui-scale)) !important; }
+html[data-ui-scale] .text-\[16px\] { font-size: calc(16px * var(--ui-scale)) !important; }
+html[data-ui-scale] .text-\[17px\] { font-size: calc(17px * var(--ui-scale)) !important; }
+html[data-ui-scale] .text-\[18px\] { font-size: calc(18px * var(--ui-scale)) !important; }
+html[data-ui-scale] .text-\[19px\] { font-size: calc(19px * var(--ui-scale)) !important; }
+html[data-ui-scale] .text-\[20px\] { font-size: calc(20px * var(--ui-scale)) !important; }
+html[data-ui-scale] .text-\[22px\] { font-size: calc(22px * var(--ui-scale)) !important; }
+html[data-ui-scale] .text-\[24px\] { font-size: calc(24px * var(--ui-scale)) !important; }
+html[data-ui-scale] .text-\[28px\] { font-size: calc(28px * var(--ui-scale)) !important; }
+html[data-ui-scale] .text-\[32px\] { font-size: calc(32px * var(--ui-scale)) !important; }
+
+/* Scale Material Symbols icons proportionally with scale */
+html[data-ui-scale] .material-symbols-outlined {
+  font-size: calc(1em * var(--ui-scale));
+}
+
+/* Preserve GIS / Leaflet map geometry and coordinate calculations from distortion */
+.leaflet-container,
+.leaflet-pane,
+.leaflet-tile-pane,
+.leaflet-map-pane,
+.leaflet-tile {
+  font-size: 12px;
+}
+
+/* ==========================================================================
+   Section-Switching Transitions (Subtle horizontal slide + opacity fade-in, 220ms)
+   ========================================================================== */
+.section-slide-forward {
+  animation: sectionSlideForward 220ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+
+.section-slide-backward {
+  animation: sectionSlideBackward 220ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes sectionSlideForward {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes sectionSlideBackward {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    transition: none !important;
+  }
+  .section-slide-forward,
+  .section-slide-backward {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
+/* Nav Microinteractions (Section 14.B) */
+.nav-link {
+  transition: background-color var(--duration-short) ease, color var(--duration-short) ease;
+}
+
+/* 0. Home launchpad gentle hearth/roof lift */
+.nav-icon-home {
+  transition: transform var(--duration-short) var(--ease-spring);
+}
+.nav-link:hover .nav-icon-home,
+.nav-link:focus-visible .nav-icon-home {
+  transform: translateY(-2px) scale(1.08);
+}
+
+/* 1. Community feed speech bubble duo pulse */
+.nav-icon-feed .badge-dot-1 {
+  animation: feedPulse 2.4s ease-in-out infinite;
+}
+.nav-icon-feed .badge-dot-2 {
+  animation: feedPulse 2.4s ease-in-out infinite 0.4s;
+}
+.nav-link:hover .nav-icon-feed,
+.nav-link:focus-visible .nav-icon-feed {
+  transform: scale(1.08);
+  transition: transform var(--duration-short) var(--ease-spring);
+}
+@keyframes feedPulse {
+  0%, 100% { opacity: 0.4; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+
+/* 2. Resilience map pin drop stroke */
+.nav-icon-map {
+  transition: transform var(--duration-short) var(--ease-spring);
+}
+.nav-link:hover .nav-icon-map,
+.nav-link:focus-visible .nav-icon-map {
+  transform: translateY(-2px);
+}
+
+/* 3. Circular exchange gentle 180-deg rotation */
+.nav-icon-exchange {
+  transition: transform 600ms var(--ease-out-expo);
+}
+.nav-link:hover .nav-icon-exchange,
+.nav-link:focus-visible .nav-icon-exchange {
+  transform: rotate(180deg);
+}
+
+/* 4. Local services delicate handshake / tool pulse */
+.nav-icon-services {
+  transition: transform var(--duration-short) var(--ease-spring);
+}
+.nav-link:hover .nav-icon-services,
+.nav-link:focus-visible .nav-icon-services {
+  transform: scale(1.12) rotate(-8deg);
+}
+
+/* 5. Secure messages subtle envelope lift */
+.nav-icon-messages {
+  transition: transform var(--duration-short) var(--ease-spring);
+}
+.nav-link:hover .nav-icon-messages,
+.nav-link:focus-visible .nav-icon-messages {
+  transform: translateY(-1px) scale(1.08);
+}
+
+/* 6. Notifications restrained bell swing */
+.nav-icon-notifications {
+  transform-origin: top center;
+  transition: transform var(--duration-short) var(--ease-spring);
+}
+.nav-link:hover .nav-icon-notifications,
+.nav-link:focus-visible .nav-icon-notifications {
+  animation: bellSwing 0.6s var(--ease-spring);
+}
+@keyframes bellSwing {
+  0% { transform: rotate(0); }
+  25% { transform: rotate(14deg); }
+  50% { transform: rotate(-10deg); }
+  75% { transform: rotate(6deg); }
+  100% { transform: rotate(0); }
+}
+
+/* 7. Settings calm 45-degree gear rotation */
+.nav-icon-settings {
+  transition: transform 400ms var(--ease-out-expo);
+}
+.nav-link:hover .nav-icon-settings,
+.nav-link:focus-visible .nav-icon-settings {
+  transform: rotate(45deg);
+}
+
+/* 8. Management Console: document-check subtle pulse & lift */
+.nav-icon-management {
+  transition: transform var(--duration-short) var(--ease-spring);
+}
+.nav-link:hover .nav-icon-management,
+.nav-link:focus-visible .nav-icon-management {
+  transform: scale(1.12) translateY(-1px);
+}
+
+/* 9. Profile avatar interactive highlight */
+.avatar-hover-ring {
+  transition: box-shadow var(--duration-short) ease, transform var(--duration-short) ease;
+}
+.avatar-hover-ring:hover,
+.avatar-hover-ring:focus-visible {
+  box-shadow: 0 0 0 3px rgba(158, 19, 21, 0.4);
+  transform: scale(1.05);
+}
+
+/* Focus visibility rings (WCAG AAA compliant on both light & dark themes) */
+button:focus-visible, 
+a:focus-visible, 
+input:focus-visible, 
+select:focus-visible, 
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid #9e1315 !important;
+  outline-offset: 2px !important;
+}
+
+.dark button:focus-visible, 
+.dark a:focus-visible, 
+.dark input:focus-visible, 
+.dark select:focus-visible, 
+.dark textarea:focus-visible,
+.dark [tabindex]:focus-visible {
+  outline: 2px solid #ffb4ab !important;
+  outline-offset: 2px !important;
+}
+
+/* Section 14.A: Modal minimize sequence */
+.modal-minimize-out {
+  animation: modalMinimize 320ms var(--ease-in-out-cubic) forwards;
+}
+@keyframes modalMinimize {
+  0% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.7) translateY(40px);
+  }
+}
+
+/* Success Card Pop sequence */
+.toast-spring-pop {
+  animation: toastSpringPop 420ms var(--ease-spring) forwards;
+}
+@keyframes toastSpringPop {
+  0% {
+    opacity: 0;
+    transform: translateY(24px) scale(0.85);
+  }
+  70% {
+    opacity: 1;
+    transform: translateY(-2px) scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Animated SVG Thumbs-up illustration */
+.thumbs-up-svg {
+  transform-origin: bottom center;
+  animation: thumbBounceSettle 650ms var(--ease-spring) 120ms forwards;
+}
+@keyframes thumbBounceSettle {
+  0% {
+    opacity: 0;
+    transform: translateY(12px) scale(0.6) rotate(-14deg);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(-4px) scale(1.1) rotate(11deg);
+  }
+  80% {
+    opacity: 1;
+    transform: translateY(1px) scale(0.98) rotate(7deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1) rotate(8deg);
+  }
+}
+
+/* Subtle sparkle burst on success */
+.sparkle-burst {
+  animation: sparkleBurst 500ms var(--ease-out-expo) 250ms forwards;
+}
+@keyframes sparkleBurst {
+  0% { transform: scale(0); opacity: 0; }
+  50% { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(1); opacity: 0.9; }
+}
+
+/* Newly inserted dispatch highlight pulse */
+.new-dispatch-highlight {
+  animation: highlightGlow 2.5s var(--ease-out-expo) forwards;
+}
+@keyframes highlightGlow {
+  0% {
+    border-color: #9e1315;
+    background-color: rgba(254, 242, 242, 0.7);
+    box-shadow: 0 0 0 3px rgba(158, 19, 21, 0.15);
+  }
+  100% {
+    border-color: rgba(226, 232, 240, 0.8);
+    background-color: #ffffff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  }
+}
+
+/* ==========================================================================
+   Detail Window Animations (Circular Exchange Drawer & Local Services Window)
+   ========================================================================== */
+
+/* 1. Circular Exchange: Right-Slide Drawer (280ms in / 210ms out) */
+@keyframes exchangeDrawerSlideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0.85;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes exchangeDrawerSlideOut {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0.4;
+  }
+}
+
+@keyframes exchangeBackdropFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes exchangeBackdropFadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.exchange-drawer-backdrop {
+  will-change: opacity;
+  animation: exchangeBackdropFadeIn 280ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.exchange-drawer-backdrop-closing {
+  animation: exchangeBackdropFadeOut 210ms cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+}
+
+.exchange-drawer-panel {
+  will-change: transform, opacity;
+  transform: translateX(100%);
+  animation: exchangeDrawerSlideIn 280ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.exchange-drawer-panel-open {
+  transform: translateX(0);
+  opacity: 1;
+}
+.exchange-drawer-panel-closing {
+  animation: exchangeDrawerSlideOut 210ms cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+}
+
+/* 2. Local Services: Centred Fade-In Detail Window (210ms in / 170ms out) */
+@keyframes servicesWindowFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes servicesWindowFadeOut {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes servicesBackdropFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes servicesBackdropFadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.services-window-backdrop {
+  will-change: opacity;
+  animation: servicesBackdropFadeIn 210ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.services-window-backdrop-closing {
+  animation: servicesBackdropFadeOut 170ms cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+}
+
+.services-window-panel {
+  will-change: transform, opacity;
+  opacity: 0;
+  transform: translateY(8px);
+  animation: servicesWindowFadeIn 210ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.services-window-panel-open {
+  opacity: 1;
+  transform: translateY(0);
+}
+.services-window-panel-closing {
+  animation: servicesWindowFadeOut 170ms cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .exchange-drawer-backdrop,
+  .exchange-drawer-backdrop-closing,
+  .exchange-drawer-panel,
+  .exchange-drawer-panel-open,
+  .exchange-drawer-panel-closing,
+  .services-window-backdrop,
+  .services-window-backdrop-closing,
+  .services-window-panel,
+  .services-window-panel-open,
+  .services-window-panel-closing {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+  }
+}
+
+/* ==========================================================================
+   Comprehensive Dark Theme Design Tokens & Surface Mappings (DESIGN.md 2.3)
+   ========================================================================== */
+
+.dark body {
+  background-color: #0f1113;
+  color: #e2e8f0;
+}
+
+/* Base Surfaces & Structural Panels */
+.dark .bg-white {
+  background-color: #17191c;
+}
+.dark .bg-white\/95 {
+  background-color: rgba(23, 25, 28, 0.95);
+}
+.dark .bg-white\/90 {
+  background-color: rgba(23, 25, 28, 0.90);
+}
+.dark .bg-\[\#F8F9FA\] {
+  background-color: #0f1113;
+}
+.dark .bg-slate-50,
+.dark .bg-slate-50\/70,
+.dark .bg-slate-50\/80,
+.dark .bg-slate-50\/90 {
+  background-color: #1b1e22;
+}
+.dark .bg-slate-100 {
+  background-color: #23272d;
+}
+.dark .bg-slate-200,
+.dark .bg-slate-200\/60 {
+  background-color: #2e333b;
+}
+
+/* Natural Stone Neutral Dark Surfaces */
+.dark .bg-stone-50,
+.dark .bg-stone-50\/60,
+.dark .bg-stone-50\/70,
+.dark .bg-stone-50\/80,
+.dark .bg-stone-50\/90 {
+  background-color: #16181b;
+}
+.dark .bg-stone-100 {
+  background-color: #22252a;
+}
+.dark .bg-stone-200 {
+  background-color: #2c3036;
+}
+
+/* Borders & Structural Dividers */
+.dark .border-slate-100,
+.dark .border-slate-200,
+.dark .border-slate-200\/60,
+.dark .border-slate-200\/70,
+.dark .border-slate-200\/80,
+.dark .border-slate-200\/90,
+.dark .border-slate-300 {
+  border-color: #2d3139;
+}
+.dark .border-stone-100,
+.dark .border-stone-200,
+.dark .border-stone-200\/60,
+.dark .border-stone-200\/70,
+.dark .border-stone-200\/80 {
+  border-color: #2d3139;
+}
+.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
+.dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #2d3139;
+}
+
+/* High-Contrast Typography */
+.dark .text-slate-900 {
+  color: #f1f5f9;
+}
+.dark .text-slate-800 {
+  color: #e2e8f0;
+}
+.dark .text-slate-700 {
+  color: #cbd5e1;
+}
+.dark .text-slate-600 {
+  color: #94a3b8;
+}
+.dark .text-slate-500,
+.dark .text-slate-400 {
+  color: #8290a2;
+}
+
+/* Hover States */
+.dark .hover\:bg-slate-50:hover {
+  background-color: #1e2227;
+}
+.dark .hover\:bg-slate-100:hover,
+.dark .hover\:bg-slate-100\/70:hover {
+  background-color: #252a32;
+}
+.dark .hover\:text-slate-900:hover {
+  color: #ffffff;
+}
+.dark .hover\:text-slate-800:hover {
+  color: #f1f5f9;
+}
+.dark .hover\:text-slate-700:hover {
+  color: #e2e8f0;
+}
+.dark .hover\:border-slate-300:hover {
+  border-color: #404752;
+}
+
+/* Form Controls & Inputs */
+.dark input:not([type="checkbox"]):not([type="radio"]),
+.dark textarea,
+.dark select {
+  background-color: #1b1e22;
+  color: #f1f5f9;
+  border-color: #2d3139;
+}
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: #64748b;
+}
+
+/* Brand Crimson Accents & Active Badges */
+.dark .bg-rose-50,
+.dark .bg-rose-50\/70,
+.dark .bg-rose-50\/80,
+.dark .bg-rose-100,
+.dark .bg-rose-100\/80 {
+  background-color: #2a1517;
+}
+.dark .text-rose-900,
+.dark .text-rose-950 {
+  color: #ffdad6;
+}
+.dark .border-rose-100,
+.dark .border-rose-200,
+.dark .border-rose-200\/80,
+.dark .border-rose-200\/90,
+.dark .border-rose-300 {
+  border-color: #4d1c1e;
+}
+
+/* Civic & Semantic Status Highlights */
+.dark .bg-emerald-50,
+.dark .bg-emerald-50\/50 {
+  background-color: #0c2417;
+}
+.dark .text-emerald-900,
+.dark .text-emerald-950 {
+  color: #bbf7d0;
+}
+.dark .text-emerald-800 {
+  color: #4ade80;
+}
+.dark .border-emerald-200,
+.dark .border-emerald-200\/70 {
+  border-color: #14532d;
+}
+
+.dark .bg-amber-50 {
+  background-color: #271c06;
+}
+.dark .text-amber-900 {
+  color: #fef08a;
+}
+.dark .border-amber-200,
+.dark .border-amber-200\/70 {
+  border-color: #713f12;
+}
+
+.dark .bg-blue-50 {
+  background-color: #081d38;
+}
+.dark .text-blue-900 {
+  color: #bfdbfe;
+}
+.dark .border-blue-200 {
+  border-color: #1e3a8a;
+}
+
+/* Strict prefers-reduced-motion accessibility rule */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.25);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.45);
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* ==========================================================================
+   Center-Focused Feature Carousel (Approved Google Stitch Design)
+   ========================================================================== */
+:root {
+  --carousel-offset: 140px;
+}
+@media (min-width: 640px) {
+  :root {
+    --carousel-offset: 190px;
+  }
+}
+@media (min-width: 1024px) {
+  :root {
+    --carousel-offset: 240px;
+  }
+}
+
+.carousel-perspective {
+  perspective: 1200px;
+}
+
+.carousel-stage-card {
+  transition: transform 420ms cubic-bezier(0.25, 1, 0.5, 1),
+              opacity 420ms cubic-bezier(0.25, 1, 0.5, 1),
+              box-shadow 420ms cubic-bezier(0.25, 1, 0.5, 1),
+              filter 420ms cubic-bezier(0.25, 1, 0.5, 1),
+              border-color 420ms cubic-bezier(0.25, 1, 0.5, 1);
+  will-change: transform, opacity;
+  transform-style: preserve-3d;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .carousel-stage-card {
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ==========================================================================
+   Home Page: Official Notices & Upcoming Events Responsive Grid
+   ========================================================================== */
+.home-notices-events-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.75rem;
+  align-items: start;
+  width: 100%;
+}
+
+@media (min-width: 768px) {
+  .home-notices-events-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .home-notices-events-grid {
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  }
+}
+
+/* ==========================================================================
+   Floating AI Assistant: Bubble-to-Window Morphing Surface
+   ========================================================================== */
+.ai-assistant-modal-surface {
+  transform-origin: center center;
+  box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.25),
+              0 0 0 1px rgba(15, 23, 42, 0.05);
+}
+
+.dark .ai-assistant-modal-surface {
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7),
+              0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-assistant-modal-surface {
+    transform: translate(-50%, -50%) scale(1, 1) !important;
+    border-radius: 24px !important;
+    transition: opacity 150ms ease-out !important;
+  }
+}
+
