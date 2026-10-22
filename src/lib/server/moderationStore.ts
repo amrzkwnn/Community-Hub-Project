@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import type {
   ModerationReport,
   AiModerationItem,
@@ -11,8 +12,17 @@ import type {
 } from '../../types/index.ts';
 import { INITIAL_AI_MODERATION_ITEMS } from '../data/mockData.ts';
 
-// Storage file location for durable persistence across server requests and reloads
-const STORE_DIR = path.join(process.cwd(), '.runtime_data');
+// Storage file location for durable persistence across server requests and reloads.
+// In serverless environments (e.g. Vercel Lambda), process.cwd() is read-only.
+// We use os.tmpdir() when VERCEL is detected to ensure reliable file operations without EROFS errors.
+const isServerless = Boolean(
+  process.env.VERCEL || 
+  process.env.AWS_LAMBDA_FUNCTION_NAME || 
+  process.env.LAMBDA_TASK_ROOT
+);
+const STORE_DIR = isServerless
+  ? path.join(os.tmpdir(), 'tesdh_runtime_data')
+  : path.join(process.cwd(), '.runtime_data');
 const STORE_FILE = path.join(STORE_DIR, 'moderation_store.json');
 
 interface ModerationStoreData {
@@ -445,7 +455,7 @@ interface ModerationTelemetry {
   totalAnalyses: number;
 }
 
-let runtimeTelemetry: ModerationTelemetry = {
+const runtimeTelemetry: ModerationTelemetry = {
   lastSuccessAt: new Date().toISOString(),
   lastLatencyMs: 1450,
   lastModelUsed: 'gemini-3.5-flash-lite',
