@@ -2888,7 +2888,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     let resolvedConvId: string | null = null;
     let resolvedConv: Conversation | null = null;
     let resolvedMsg: Message | null = null;
-
+    const targetReq = messageRequests.find((r) => r.id === requestId);
     try {
       const syncRes = await fetch('/api/sync', {
         method: 'POST',
@@ -2898,7 +2898,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         },
         body: JSON.stringify({
           action: 'ACCEPT_MESSAGE_REQUEST',
-          payload: { requestId },
+          payload: { requestId, request: targetReq },
           user: currentUser,
         }),
       });

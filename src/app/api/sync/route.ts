@@ -1092,13 +1092,16 @@ export async function POST(request: NextRequest) {
       }
 
       case 'REGISTER_PROPERTY_ADDRESS': {
-        const { targetId, precinct, unitNumber, displayName } = payload;
+        const { targetId, userId, precinct, unitNumber, displayName, fullName, maskedProperty } = payload;
+        const resolvedTargetId = targetId || userId || user?.id;
+        const resolvedPrecinct = precinct || user?.townshipPrecinct || 'Bandar Elmina';
+        const resolvedUnitNumber = unitNumber || user?.unitNumber || '';
         const normalizedProp = {
-          targetId: targetId || user?.id,
-          precinct: precinct || user?.townshipPrecinct || 'Bandar Elmina',
-          unitNumber: unitNumber || user?.unitNumber || '',
-          maskedProperty: unitNumber || `Residence ${precinct || 'Bandar Elmina'}`,
-          displayName: displayName || user?.displayName || user?.fullName || 'Resident',
+          targetId: resolvedTargetId,
+          precinct: resolvedPrecinct,
+          unitNumber: resolvedUnitNumber,
+          maskedProperty: maskedProperty || resolvedUnitNumber || `Residence ${resolvedPrecinct}`,
+          displayName: displayName || fullName || user?.displayName || user?.fullName || 'Resident',
         };
         const updatedProps = [
           ...memory.registeredProperties.filter((p) => p.targetId !== normalizedProp.targetId),
@@ -1112,14 +1115,29 @@ export async function POST(request: NextRequest) {
       case 'SEARCH_PROPERTIES': {
         const { query } = payload;
         const clean = (query || '').toLowerCase().trim();
+        const norm = (str: string) =>
+          str
+            .toLowerCase()
+            .replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, ' ')
+            .replace(/\b(no|nomor|unit|jln|jalan|lorong)\b/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+        const normClean = norm(clean);
+        const queryTokens = normClean.split(' ').filter(Boolean);
+
         const results = memory.registeredProperties.filter((p) => {
           if (user?.id && (p.targetId === user.id || toDatabaseUserId(p.targetId) === toDatabaseUserId(user.id))) {
             return false;
           }
-          const matchesUnit = p.unitNumber && p.unitNumber.toLowerCase().includes(clean);
-          const matchesPrecinct = p.precinct && p.precinct.toLowerCase().includes(clean);
-          const matchesMasked = p.maskedProperty && p.maskedProperty.toLowerCase().includes(clean);
-          return matchesUnit || matchesPrecinct || matchesMasked;
+          const normUnit = norm(p.unitNumber || '');
+          const normPrecinct = norm(p.precinct || '');
+          const normMasked = norm(p.maskedProperty || '');
+          const combined = `${normUnit} ${normPrecinct} ${normMasked}`;
+
+          if (combined.includes(normClean) || (normUnit && normUnit.includes(normClean))) {
+            return true;
+          }
+          return queryTokens.length > 0 && queryTokens.every((t) => combined.includes(t));
         }).map((p) => ({
           targetId: p.targetId,
           precinct: p.precinct,
@@ -1177,9 +1195,9 @@ export async function POST(request: NextRequest) {
 
       case 'ACCEPT_MESSAGE_REQUEST': {
         const { requestId } = payload;
-        const req = memory.messageRequests.find((r) => r.id === requestId);
-        const senderId = req?.senderId || payload.senderId;
-        const recipientId = user?.id || req?.recipientId;
+        const req = memory.messageRequests.find((r) => r.id === requestId) || payload.request;
+        const senderId = req?.senderId || payload.senderId || payload.request?.senderId;
+        const recipientId = user?.id || req?.recipientId || payload.recipientId;
 
         const senderUuid = toDatabaseUserId(senderId);
         const recipientUuid = toDatabaseUserId(recipientId);
