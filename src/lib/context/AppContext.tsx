@@ -78,7 +78,7 @@ interface AppContextType {
   isAuthenticated: boolean;
   isDemoMode: boolean;
   signInWithEmail: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  signUpWithEmail: (data: { email: string; password: string; fullName: string; precinct?: string; unitNumber?: string }) => Promise<{ success: boolean; requiresEmailConfirmation?: boolean; error?: string }>;
+  signUpWithEmail: (data: { email: string; password: string; fullName?: string; precinct?: string; unitNumber?: string }) => Promise<{ success: boolean; requiresEmailConfirmation?: boolean; error?: string }>;
   tryDemo: () => void;
   switchProfile: (profileId: string) => void;
   signOut: () => Promise<void>;
@@ -251,7 +251,7 @@ interface AppContextType {
     isAnonymous: boolean;
     senderDisplayName?: string;
   }) => Promise<{ success: boolean; error?: string }>;
-  acceptMessageRequest: (requestId: string) => Promise<void>;
+  acceptMessageRequest: (requestId: string) => Promise<string | null>;
   rejectMessageRequest: (requestId: string) => Promise<void>;
   blockPropertySender: (requestId: string) => Promise<void>;
   
@@ -1040,7 +1040,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (apiRes.ok) {
           const apiJson = await apiRes.json();
           if (apiJson?.success && apiJson?.data) {
-            const { incidents: sInc, posts: sPosts, comments: sComm, exchange: sEx, services: sServ, conversations: sConv, messages: sMsg } = apiJson.data;
+            const { incidents: sInc, posts: sPosts, comments: sComm, exchange: sEx, services: sServ, conversations: sConv, messages: sMsg, messageRequests: sMsgReq } = apiJson.data;
             if (sInc && sInc.length > 0) {
               setIncidents(sInc);
               try { localStorage.setItem(INCIDENTS_CACHE_KEY, JSON.stringify(sInc)); } catch {}
@@ -1066,6 +1066,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             }
             if (sMsg && sMsg.length > 0) {
               setMessages(sMsg);
+            }
+            if (sMsgReq && sMsgReq.length > 0) {
+              setMessageRequests(sMsgReq);
             }
           }
         }
@@ -1253,17 +1256,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const signUpWithEmail = async (data: {
     email: string;
     password: string;
-    fullName: string;
+    fullName?: string;
     precinct?: string;
     unitNumber?: string;
   }) => {
     try {
+      const derivedName = data.fullName?.trim() || data.email.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
       const { data: authData, error } = await supabase.auth.signUp({
         email: data.email,
         password: data.password,
         options: {
           data: {
-            full_name: data.fullName,
+            full_name: derivedName,
             township_precinct: data.precinct || 'Bandar Elmina',
             unit_number: data.unitNumber || null,
             role: 'resident',
@@ -1288,8 +1292,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return { success: true, requiresEmailConfirmation: false };
       }
 
-      // Supabase sent verification link
-      return { success: true, requiresEmailConfirmation: true };
+      // If user is created, attempt immediate sign-in with password (instant access)
+      if (authData.user) {
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+          email: data.email,
+          password: data.password,
+        });
+
+        if (signInData?.session && signInData?.user) {
+          setSupabaseUser(signInData.user);
+          setIsDemoMode(false);
+          if (typeof window !== 'undefined') {
+            try {
+              localStorage.removeItem(DEMO_MODE_CACHE_KEY);
+            } catch {}
+          }
+          await refreshSupabaseData();
+          return { success: true, requiresEmailConfirmation: false };
+        }
+
+        // If Supabase rejected signIn due to email confirmation setting still active on hosted server
+        if (signInError && signInError.message.toLowerCase().includes('email not confirmed')) {
+          return { 
+            success: false, 
+            error: 'Account registered! However, email confirmation is currently active in your Supabase project settings. Please turn OFF "Confirm Email" in Supabase Dashboard -> Authentication -> Providers -> Email to allow direct instant login.' 
+          };
+        }
+      }
+
+      return { success: true, requiresEmailConfirmation: false };
     } catch (err: any) {
       return { success: false, error: err.message || 'Sign up failed.' };
     }
@@ -2673,64 +2704,124 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       isAnonymous: data.isAnonymous,
     });
 
+    // Sync message request to database & shared state
+    fetch('/api/sync', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-tesdh-session': currentUser.id,
+      },
+      body: JSON.stringify({
+        action: 'SEND_MESSAGE_REQUEST',
+        payload: { request: newRequest },
+        user: currentUser,
+      }),
+    }).catch((err) => console.warn('[Sync] /api/sync SEND_MESSAGE_REQUEST fallback:', err));
+
     return { success: true };
   };
 
-  const acceptMessageRequest = async (requestId: string) => {
-    const req = messageRequests.find((r) => r.id === requestId);
-    if (!req) return;
+  const acceptMessageRequest = async (requestId: string): Promise<string | null> => {
+    let resolvedConvId: string | null = null;
+    let resolvedConv: Conversation | null = null;
+    let resolvedMsg: Message | null = null;
 
-    const newConvId = `conv-${Date.now()}`;
-    const newConv: Conversation = {
-      id: newConvId,
-      participantOneId: req.senderId,
-      participantOneName: req.senderDisplayName || 'Resident Neighbour',
+    try {
+      const syncRes = await fetch('/api/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tesdh-session': currentUser.id,
+        },
+        body: JSON.stringify({
+          action: 'ACCEPT_MESSAGE_REQUEST',
+          payload: { requestId },
+          user: currentUser,
+        }),
+      });
+
+      if (syncRes.ok) {
+        const syncJson = await syncRes.json();
+        if (syncJson?.success && syncJson?.data?.conversationId) {
+          resolvedConvId = syncJson.data.conversationId;
+          resolvedConv = syncJson.data.conversation;
+          resolvedMsg = syncJson.data.initialMessage;
+        }
+      }
+    } catch (syncErr) {
+      console.warn('[Sync] /api/sync ACCEPT_MESSAGE_REQUEST fallback:', syncErr);
+    }
+
+    const req = messageRequests.find((r) => r.id === requestId);
+    if (!req && !resolvedConvId) return null;
+
+    const convId = resolvedConvId || `conv-${Date.now()}`;
+    const newConv: Conversation = resolvedConv || {
+      id: convId,
+      participantOneId: req!.senderId,
+      participantOneName: req!.senderDisplayName || 'Resident Neighbour',
       participantTwoId: currentUser.id,
       participantTwoName: currentUser.displayName,
-      subject: req.subject,
+      subject: req!.subject,
       contextType: 'property_messaging',
       status: 'accepted',
-      lastMessage: req.initialMessage,
+      lastMessage: req!.initialMessage,
       lastMessageTime: new Date().toISOString(),
       unreadCount: 0,
     };
 
     // Add initial message
-    const initialMsg: Message = {
+    const initialMsg: Message = resolvedMsg || {
       id: `msg-${Date.now()}`,
-      conversationId: newConvId,
-      senderId: req.senderId,
-      senderName: req.senderDisplayName || 'Neighbour',
-      isAnonymous: req.isAnonymous,
-      content: req.initialMessage,
-      createdAt: req.createdAt,
+      conversationId: convId,
+      senderId: req!.senderId,
+      senderName: req!.senderDisplayName || 'Neighbour',
+      isAnonymous: req!.isAnonymous,
+      content: req!.initialMessage,
+      createdAt: req!.createdAt,
     };
 
     setMessageRequests((prev) =>
-      prev.map((r) => (r.id === requestId ? { ...r, status: 'accepted', conversationId: newConvId } : r))
+      prev.map((r) => (r.id === requestId ? { ...r, status: 'accepted', conversationId: convId } : r))
     );
-    setConversations((prev) => [newConv, ...prev]);
-    setMessages((prev) => [...prev, initialMsg]);
+    setConversations((prev) => [newConv, ...prev.filter((c) => c.id !== newConv.id)]);
+    setMessages((prev) => [...prev.filter((m) => m.id !== initialMsg.id), initialMsg]);
+    navigateToItem({ tab: 'messages', conversationId: convId });
 
     // Notify sender that request was accepted
-    addNotification({
-      recipientId: req.senderId,
-      senderId: currentUser.id,
-      type: 'message_reply',
-      title: 'Message Request Accepted',
-      content: `The resident at ${req.propertyAddress} has accepted your conversation request. You can now exchange messages securely.`,
-      priority: 'normal',
-      targetTab: 'messages',
-      targetId: newConvId,
-    });
+    if (req) {
+      addNotification({
+        recipientId: req.senderId,
+        senderId: currentUser.id,
+        type: 'message_reply',
+        title: 'Message Request Accepted',
+        content: `The resident at ${req.propertyAddress} has accepted your conversation request. You can now exchange messages securely.`,
+        priority: 'normal',
+        targetTab: 'messages',
+        targetId: convId,
+      });
+    }
 
-    logAudit('ACCEPT_MESSAGE_REQUEST', 'property_message_requests', requestId);
+    logAudit('ACCEPT_MESSAGE_REQUEST', 'property_message_requests', requestId, { conversationId: convId });
+    return convId;
   };
 
   const rejectMessageRequest = async (requestId: string) => {
     setMessageRequests((prev) =>
       prev.map((r) => (r.id === requestId ? { ...r, status: 'rejected' } : r))
     );
+    fetch('/api/sync', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-tesdh-session': currentUser.id,
+      },
+      body: JSON.stringify({
+        action: 'REJECT_MESSAGE_REQUEST',
+        payload: { requestId },
+        user: currentUser,
+      }),
+    }).catch(() => {});
     logAudit('REJECT_MESSAGE_REQUEST', 'property_message_requests', requestId);
   };
 

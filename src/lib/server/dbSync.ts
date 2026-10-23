@@ -6,7 +6,8 @@ import {
   INITIAL_EXCHANGE_ITEMS,
   INITIAL_PROFILES,
   INITIAL_CONVERSATIONS,
-  INITIAL_MESSAGES
+  INITIAL_MESSAGES,
+  INITIAL_MESSAGE_REQUESTS
 } from '@/lib/data/mockData';
 
 // Map persona IDs to canonical Supabase UUIDs
@@ -96,6 +97,7 @@ let memoryExchange = [...INITIAL_EXCHANGE_ITEMS];
 let memoryServices = [...INITIAL_SERVICES];
 let memoryConversations = [...INITIAL_CONVERSATIONS];
 let memoryMessages = [...INITIAL_MESSAGES];
+let memoryMessageRequests = [...INITIAL_MESSAGE_REQUESTS];
 
 export async function bootstrapDatabaseIfEmpty(supabase: any) {
   if (!supabase) return;
@@ -150,6 +152,7 @@ export function getMemoryStore() {
     services: memoryServices,
     conversations: memoryConversations,
     messages: memoryMessages,
+    messageRequests: memoryMessageRequests,
   };
 }
 
@@ -161,6 +164,7 @@ export function updateMemoryStore(updates: {
   services?: any[];
   conversations?: any[];
   messages?: any[];
+  messageRequests?: any[];
 }) {
   if (updates.incidents) memoryIncidents = updates.incidents;
   if (updates.posts) memoryPosts = updates.posts;
@@ -169,4 +173,5 @@ export function updateMemoryStore(updates: {
   if (updates.services) memoryServices = updates.services;
   if (updates.conversations) memoryConversations = updates.conversations;
   if (updates.messages) memoryMessages = updates.messages;
+  if (updates.messageRequests) memoryMessageRequests = updates.messageRequests;
 }

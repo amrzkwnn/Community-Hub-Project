@@ -658,7 +658,10 @@ export default function MessagesView() {
                     <div className="flex items-center gap-2 pt-1">
                       <button
                         onClick={async () => {
-                          await acceptMessageRequest(req.id);
+                          const convId = await acceptMessageRequest(req.id);
+                          if (convId) {
+                            setActiveConversationId(convId);
+                          }
                           setSidebarTab('conversations');
                           showToast('Contact request accepted. Secure channel initiated.');
                         }}
@@ -1555,7 +1558,11 @@ export default function MessagesView() {
                       <div className="flex items-center gap-2 pt-1">
                         <button
                           onClick={async () => {
-                            await acceptMessageRequest(req.id);
+                            const convId = await acceptMessageRequest(req.id);
+                            if (convId) {
+                              setActiveConversationId(convId);
+                              setMobileActiveThreadOpen(true);
+                            }
                             setMobileCategory('all');
                             showToast('Contact request accepted. Secure channel initiated.');
                           }}
