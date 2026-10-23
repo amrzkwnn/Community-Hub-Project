@@ -16,10 +16,16 @@ import KioskView from '@/components/kiosk/KioskView';
 import SettingsView from '@/components/settings/SettingsView';
 import FloatingAiAssistant from '@/components/ai/FloatingAiAssistant';
 import SectionTransition from '@/components/navigation/SectionTransition';
+import AuthView from '@/components/auth/AuthView';
 import { FEATURES } from '@/config/features';
 
 export default function Home() {
-  const { activeTab, setActiveTab } = useApp();
+  const { activeTab, setActiveTab, isAuthenticated } = useApp();
+
+  // Authentication Required for Real Community Access (Requirement Part 12)
+  if (!isAuthenticated) {
+    return <AuthView />;
+  }
 
   // If kiosk mode is active, verify feature flag. Safely redirect to Home if disabled.
   if (activeTab === 'kiosk') {

@@ -101,19 +101,16 @@ export default function MessagesView() {
   );
 
   const [activeConversationId, setActiveConversationId] = useState<string>(
-    userConversations[0]?.id || ''
+    navigationTarget?.conversationId || ''
   );
 
   const prevUserIdRef = useRef(currentUser.id);
 
-  // Invalidate conversation context and reset message composer when currentUser changes
+  // Invalidate conversation context and reset message composer ONLY when currentUser changes
   useEffect(() => {
-    const userConvs = conversations.filter(
-      (c) => c.participantOneId === currentUser.id || c.participantTwoId === currentUser.id
-    );
     if (prevUserIdRef.current !== currentUser.id) {
       prevUserIdRef.current = currentUser.id;
-      setActiveConversationId(userConvs[0]?.id || '');
+      setActiveConversationId('');
       setMobileActiveThreadOpen(false);
       setIsDossierOpen(false);
       setMessageInput('');
@@ -125,12 +122,8 @@ export default function MessagesView() {
       setIsSearchModalOpen(false);
       setIsKeyAuditModalOpen(false);
       setIsBylawsModalOpen(false);
-    } else if (activeConversationId && !userConvs.some((c) => c.id === activeConversationId)) {
-      setActiveConversationId(userConvs[0]?.id || '');
-    } else if (!activeConversationId && userConvs.length > 0) {
-      setActiveConversationId(userConvs[0]?.id || '');
     }
-  }, [currentUser.id, conversations, activeConversationId]);
+  }, [currentUser.id]);
 
   // Deep-link / Quick-Chat navigationTarget listener
   useEffect(() => {
@@ -201,9 +194,13 @@ export default function MessagesView() {
     }
   }, [conversations, currentUser.id]);
 
-  // Active conversation & messages
-  const activeConv = userConversations.find((c) => c.id === activeConversationId) || userConversations[0];
-  const activeMessages = messages.filter((m) => m.conversationId === activeConv?.id);
+  // Active conversation & messages: resolve specific conversation when activeConversationId is provided
+  const activeConv = activeConversationId
+    ? (userConversations.find((c) => c.id === activeConversationId) ||
+       conversations.find((c) => c.id === activeConversationId) ||
+       null)
+    : (userConversations[0] || null);
+  const activeMessages = activeConv ? messages.filter((m) => m.conversationId === activeConv.id) : [];
 
   // Messaging composer state
   const [messageInput, setMessageInput] = useState('');

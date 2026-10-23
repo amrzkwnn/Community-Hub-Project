@@ -75,6 +75,11 @@ interface AppContextType {
   supabaseUser: User | null;
   currentUser: UserProfile;
   availableProfiles: UserProfile[];
+  isAuthenticated: boolean;
+  isDemoMode: boolean;
+  signInWithEmail: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  signUpWithEmail: (data: { email: string; password: string; fullName: string; precinct?: string; unitNumber?: string }) => Promise<{ success: boolean; requiresEmailConfirmation?: boolean; error?: string }>;
+  tryDemo: () => void;
   switchProfile: (profileId: string) => void;
   signOut: () => Promise<void>;
   isAuthModalOpen: boolean;
@@ -536,6 +541,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
   
   const [supabaseUser, setSupabaseUser] = useState<User | null>(null);
+  const DEMO_MODE_CACHE_KEY = 'tesdh-demo-mode-active';
+  const [isDemoMode, setIsDemoMode] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        return localStorage.getItem('tesdh-demo-mode-active') === 'true';
+      } catch {}
+    }
+    return false;
+  });
+  const isAuthenticated = Boolean(supabaseUser) || isDemoMode;
   const [schemaReady, setSchemaReady] = useState<boolean>(false);
   const [schemaErrorMessage, setSchemaErrorMessage] = useState<string | null>(null);
 
@@ -1132,6 +1147,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'service_listings' }, () => {
         refreshSupabaseData();
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, () => {
+        refreshSupabaseData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => {
+        refreshSupabaseData();
+      })
       .subscribe();
 
     return () => {
@@ -1206,17 +1227,102 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const signInWithEmail = async (email: string, password: string) => {
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        return { success: false, error: error.message };
+      }
+      if (data.user) {
+        setSupabaseUser(data.user);
+        setIsDemoMode(false);
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.removeItem(DEMO_MODE_CACHE_KEY);
+          } catch {}
+        }
+        await refreshSupabaseData();
+        return { success: true };
+      }
+      return { success: false, error: 'Sign in failed.' };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'An unexpected error occurred during sign in.' };
+    }
+  };
+
+  const signUpWithEmail = async (data: {
+    email: string;
+    password: string;
+    fullName: string;
+    precinct?: string;
+    unitNumber?: string;
+  }) => {
+    try {
+      const { data: authData, error } = await supabase.auth.signUp({
+        email: data.email,
+        password: data.password,
+        options: {
+          data: {
+            full_name: data.fullName,
+            township_precinct: data.precinct || 'Bandar Elmina',
+            unit_number: data.unitNumber || null,
+            role: 'resident',
+          },
+        },
+      });
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+
+      // Check if session was returned directly (e.g. email confirmation disabled / direct registration)
+      if (authData.session && authData.user) {
+        setSupabaseUser(authData.user);
+        setIsDemoMode(false);
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.removeItem(DEMO_MODE_CACHE_KEY);
+          } catch {}
+        }
+        await refreshSupabaseData();
+        return { success: true, requiresEmailConfirmation: false };
+      }
+
+      // Supabase sent verification link
+      return { success: true, requiresEmailConfirmation: true };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Sign up failed.' };
+    }
+  };
+
+  const tryDemo = () => {
+    setIsDemoMode(true);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(DEMO_MODE_CACHE_KEY, 'true');
+        localStorage.setItem(ACTIVE_PROFILE_CACHE_KEY, INITIAL_PROFILES[0].id);
+      } catch {}
+    }
+    setCurrentUser(INITIAL_PROFILES[0]);
+    setActiveTab('home');
+  };
+
   const signOut = async () => {
     try {
       await supabase.auth.signOut();
     } catch {}
     setSupabaseUser(null);
-    setCurrentUser(INITIAL_PROFILES[0]);
+    setIsDemoMode(false);
     if (typeof window !== 'undefined') {
       try {
         localStorage.removeItem(ACTIVE_PROFILE_CACHE_KEY);
+        localStorage.removeItem(DEMO_MODE_CACHE_KEY);
       } catch {}
     }
+    setCurrentUser(INITIAL_PROFILES[0]);
+    setConversations([]);
+    setMessages([]);
+    setNavigationTarget(null);
     setActiveTab('home');
   };
 
@@ -2636,12 +2742,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   const sendMessage = (conversationId: string, content: string, isAnonymous = false, imageUrl?: string) => {
-    const conv = conversations.find((c) => c.id === conversationId);
-    if (!conv) return;
-
-    if (conv.status && conv.status !== 'accepted') {
-      return;
-    }
+    if (!conversationId) return;
 
     const senderDisplayName = isAnonymous 
       ? 'Elmina Neighbour (Anonymous)' 
@@ -2654,12 +2755,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       senderName: senderDisplayName,
       senderAvatar: isAnonymous ? undefined : currentUser.avatarUrl,
       isAnonymous,
-      content,
+      content: content || '',
       imageUrl,
       createdAt: new Date().toISOString(),
     };
 
-    setMessages((prev) => [...prev, newMsg]);
+    setMessages((prev) => [...prev.filter((m) => m.id !== newMsg.id), newMsg]);
     setConversations((prev) =>
       prev.map((c) =>
         c.id === conversationId
@@ -2672,31 +2773,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       )
     );
 
-    // Notify other participant
-    const recipientId = conv.participantOneId === currentUser.id ? conv.participantTwoId : conv.participantOneId;
-    addNotification({
-      recipientId,
-      senderId: currentUser.id,
-      type: 'message_reply',
-      title: `New Message from ${senderDisplayName}`,
-      content: content ? content.slice(0, 80) : 'Sent a secure photo attachment.',
-      priority: 'normal',
-      targetTab: 'messages',
-      targetId: conversationId,
-    });
+    // Notify other participant if conversation exists
+    const conv = conversations.find((c) => c.id === conversationId);
+    if (conv) {
+      const recipientId = conv.participantOneId === currentUser.id ? conv.participantTwoId : conv.participantOneId;
+      addNotification({
+        recipientId,
+        senderId: currentUser.id,
+        type: 'message_reply',
+        title: `New Message from ${senderDisplayName}`,
+        content: content ? content.slice(0, 80) : 'Sent a secure photo attachment.',
+        priority: 'normal',
+        targetTab: 'messages',
+        targetId: conversationId,
+      });
+    }
 
     // Sync message across devices via /api/sync
-    try {
-      fetch('/api/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'SEND_MESSAGE',
-          payload: { conversationId, content, isAnonymous, imageUrl },
-          user: currentUser,
-        }),
-      }).catch((err) => console.warn('[Sync] /api/sync SEND_MESSAGE fallback:', err));
-    } catch {}
+    fetch('/api/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-tesdh-session': currentUser.id },
+      body: JSON.stringify({
+        action: 'SEND_MESSAGE',
+        payload: { conversationId, content, isAnonymous, imageUrl },
+        user: currentUser,
+      }),
+    }).catch((err) => console.warn('[Sync] /api/sync SEND_MESSAGE fallback:', err));
   };
 
   const getOrCreateConversation = useCallback((
@@ -2751,20 +2853,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setConversations((prev) => [newConv, ...prev]);
 
     // Sync new conversation across devices via /api/sync with authenticated session
-    try {
-      fetch('/api/sync', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'x-tesdh-session': currentUser.id,
-        },
-        body: JSON.stringify({
-          action: 'START_CONVERSATION',
-          payload: { conversation: newConv },
-          user: currentUser,
-        }),
-      }).catch((err) => console.warn('[Sync] /api/sync START_CONVERSATION fallback:', err));
-    } catch {}
+    fetch('/api/sync', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'x-tesdh-session': currentUser.id,
+      },
+      body: JSON.stringify({
+        action: 'START_CONVERSATION',
+        payload: { conversation: newConv },
+        user: currentUser,
+      }),
+    }).catch((err) => console.warn('[Sync] /api/sync START_CONVERSATION fallback:', err));
 
     return newConvId;
   }, [currentUser, profiles, conversations]);
@@ -2775,11 +2875,85 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     initialMessage: string, 
     contextType?: 'service' | 'exchange' | 'management_inquiry' | 'general' | 'property_messaging'
   ): string => {
-    const convId = getOrCreateConversation(recipientId, subject, contextType);
-    if (!convId) return '';
-    if (initialMessage && initialMessage.trim()) {
-      sendMessage(convId, initialMessage);
+    const targetPersonaId = fromDatabaseUserId(recipientId);
+    if (recipientId === currentUser.id || targetPersonaId === currentUser.id) {
+      return '';
     }
+
+    const recipient = profiles.find((p) => p.id === recipientId || p.id === targetPersonaId) || 
+      INITIAL_PROFILES.find((p) => p.id === targetPersonaId) || {
+        id: targetPersonaId,
+        displayName: 'Resident',
+        fullName: 'Resident',
+      };
+
+    const existing = conversations.find(
+      (c) => 
+        (c.participantOneId === currentUser.id && (c.participantTwoId === recipientId || c.participantTwoId === targetPersonaId)) ||
+        ((c.participantOneId === recipientId || c.participantOneId === targetPersonaId) && c.participantTwoId === currentUser.id)
+    );
+
+    const convId = existing ? existing.id : `conv-${Date.now()}`;
+    const cleanInitialMessage = initialMessage ? initialMessage.trim() : '';
+
+    if (!existing) {
+      const newConv: Conversation = {
+        id: convId,
+        participantOneId: currentUser.id,
+        participantOneName: currentUser.displayName,
+        participantTwoId: recipient.id,
+        participantTwoName: recipient.displayName || recipient.fullName || 'Resident',
+        subject: subject || 'Direct Message',
+        contextType: contextType || 'general',
+        status: 'accepted',
+        lastMessage: cleanInitialMessage,
+        lastMessageTime: new Date().toISOString(),
+        unreadCount: 0,
+      };
+      setConversations((prev) => [newConv, ...prev.filter((c) => c.id !== newConv.id)]);
+
+      // Sync conversation and initial message atomically to server/Supabase
+      fetch('/api/sync', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-tesdh-session': currentUser.id,
+        },
+        body: JSON.stringify({
+          action: 'START_CONVERSATION',
+          payload: { conversation: newConv, initialMessage: cleanInitialMessage },
+          user: currentUser,
+        }),
+      }).catch((err) => console.warn('[Sync] /api/sync START_CONVERSATION fallback:', err));
+    }
+
+    if (cleanInitialMessage) {
+      const newMsg: Message = {
+        id: `msg-${Date.now()}`,
+        conversationId: convId,
+        senderId: currentUser.id,
+        senderName: currentUser.displayName,
+        senderAvatar: currentUser.avatarUrl,
+        isAnonymous: false,
+        content: cleanInitialMessage,
+        createdAt: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev.filter((m) => m.id !== newMsg.id), newMsg]);
+      
+      // If conversation already existed, sync the initial message
+      if (existing) {
+        fetch('/api/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-tesdh-session': currentUser.id },
+          body: JSON.stringify({
+            action: 'SEND_MESSAGE',
+            payload: { conversationId: convId, content: cleanInitialMessage },
+            user: currentUser,
+          }),
+        }).catch(() => {});
+      }
+    }
+
     return convId;
   };
 
@@ -3301,6 +3475,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         supabaseUser,
         currentUser,
         availableProfiles: profiles,
+        isAuthenticated,
+        isDemoMode,
+        signInWithEmail,
+        signUpWithEmail,
+        tryDemo,
         switchProfile,
         signOut,
         isAuthModalOpen,
