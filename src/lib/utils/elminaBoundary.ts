@@ -69,12 +69,19 @@ export function validateElminaCoordinates(lat: number, lng: number): {
   message?: string;
   nearestPrecinct?: string;
 } {
+  if (typeof lat !== 'number' || typeof lng !== 'number' || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return {
+      isValid: false,
+      message: 'Invalid coordinates: Latitude and Longitude must be valid finite numbers. Please select a location on the map.',
+    };
+  }
+
   const inside = isPointInsideElmina(lat, lng);
 
   if (!inside) {
     return {
       isValid: false,
-      message: `Coordinates (${lat.toFixed(4)}, ${lng.toFixed(4)}) are outside the Elmina township boundary. Please choose a location within the Elmina zone (Elmina East, West, Green, Valley, or Denai Alam).`,
+      message: `Coordinates (${lat.toFixed(5)}, ${lng.toFixed(5)}) are outside the Elmina township boundary. Please choose a location within the Elmina zone (Elmina East, West, Green, Valley, or Denai Alam).`,
     };
   }
 

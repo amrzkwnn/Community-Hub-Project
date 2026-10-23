@@ -60,6 +60,7 @@ import {
 import { translations, Language } from '@/lib/i18n/translations';
 import { createClient } from '@/lib/supabase/client';
 import { validateElminaCoordinates } from '@/lib/utils/elminaBoundary';
+import { fromDatabaseUserId } from '@/lib/utils/idMapping';
 import type { User } from '@supabase/supabase-js';
 
 interface AppContextType {
@@ -118,6 +119,12 @@ interface AppContextType {
     parentId?: string;
     itemType?: 'post' | 'comment' | 'incident' | 'exchange' | 'service';
     action?: 'report_incident';
+    conversationId?: string;
+    recipientId?: string;
+    draftMessage?: string;
+    contextTitle?: string;
+    contextType?: 'exchange' | 'service' | 'request' | 'general';
+    contextId?: string;
     prefill?: {
       category?: IncidentType;
       title?: string;
@@ -219,6 +226,11 @@ interface AppContextType {
   messages: Message[];
   messageRequests: PropertyMessageRequest[];
   sendMessage: (conversationId: string, content: string, isAnonymous?: boolean, imageUrl?: string) => void;
+  getOrCreateConversation: (
+    recipientId: string, 
+    subject?: string, 
+    contextType?: 'service' | 'exchange' | 'management_inquiry' | 'general' | 'property_messaging'
+  ) => string | null;
   startConversation: (
     recipientId: string, 
     subject: string, 
@@ -688,6 +700,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     parentId?: string;
     itemType?: 'post' | 'comment' | 'incident' | 'exchange' | 'service';
     action?: 'report_incident';
+    conversationId?: string;
+    recipientId?: string;
+    draftMessage?: string;
+    contextTitle?: string;
+    contextType?: 'exchange' | 'service' | 'request' | 'general';
+    contextId?: string;
     prefill?: {
       category?: IncidentType;
       title?: string;
@@ -734,6 +752,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         else url.searchParams.delete('id');
         if (target.subTab) url.searchParams.set('subTab', target.subTab);
         else url.searchParams.delete('subTab');
+        if (target.conversationId) url.searchParams.set('conversationId', target.conversationId);
+        else url.searchParams.delete('conversationId');
+        if (target.recipientId) url.searchParams.set('recipientId', target.recipientId);
+        else url.searchParams.delete('recipientId');
         window.history.pushState(null, '', url.pathname + url.search);
       } catch {}
     }
@@ -908,8 +930,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           latitude: Number(r.latitude),
           longitude: Number(r.longitude),
           severity: r.severity || 'medium',
-          status: r.status === 'pending' ? 'reported' : r.status,
-          isVerified: r.status === 'under_review' || r.status === 'resolved',
+          status: r.status || 'pending',
+          isVerified: r.status === 'under_review' || r.status === 'dispatched' || r.status === 'resolved',
           isAnonymous: Boolean(r.is_anonymous),
           assignedTeam: r.assigned_team,
           managementNotes: r.management_notes,
@@ -944,7 +966,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const mappedExchange: CircularExchangeItem[] = exchangeData.map((e: any) => ({
           id: e.id,
-          authorId: e.author_id,
+          authorId: fromDatabaseUserId(e.author_id),
           authorName: e.author?.full_name || 'Resident',
           authorPrecinct: e.author?.township_precinct || e.precinct,
           authorVerified: e.author?.verification_status === 'verified',
@@ -976,7 +998,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const mappedServices: LocalService[] = servicesData.map((s: any) => ({
           id: s.id,
-          authorId: s.author_id,
+          authorId: fromDatabaseUserId(s.author_id),
           authorName: s.author?.full_name || 'Resident',
           authorPrecinct: s.author?.township_precinct || s.precinct,
           authorVerified: s.author?.verification_status === 'verified',
@@ -997,7 +1019,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       // 7. Synchronize unified database state across all connected devices via /api/sync
       try {
-        const apiRes = await fetch('/api/sync');
+        const apiRes = await fetch('/api/sync', {
+          headers: { 'x-tesdh-session': currentUser.id },
+        });
         if (apiRes.ok) {
           const apiJson = await apiRes.json();
           if (apiJson?.success && apiJson?.data) {
@@ -1757,18 +1781,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     // 2. Duplicate Detection
-    const isDuplicate = incidents.some((inc) => {
-      if (inc.status === 'resolved') return false;
+    const duplicateCandidate = incidents.find((inc) => {
+      if (inc.status === 'resolved' || inc.isArchived) return false;
       const latDiff = Math.abs(inc.latitude - data.latitude);
       const lngDiff = Math.abs(inc.longitude - data.longitude);
       const isNearby = latDiff < 0.003 && lngDiff < 0.003;
       const sameType = inc.incidentType === data.incidentType;
       return isNearby && sameType;
     });
-
-    const duplicateOf = isDuplicate 
-      ? incidents.find((inc) => inc.status !== 'resolved')
-      : undefined;
+    const isDuplicate = Boolean(duplicateCandidate);
+    const duplicateOf = duplicateCandidate;
 
     const newIncident: ResilienceIncident = {
       id: `inc-${Date.now()}`,
@@ -1806,7 +1828,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     try {
       const syncRes = await fetch('/api/sync', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-tesdh-session': currentUser.id,
+        },
         body: JSON.stringify({
           action: 'REPORT_INCIDENT',
           payload: {
@@ -1908,7 +1933,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     try {
       await fetch('/api/sync', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-tesdh-session': currentUser.id,
+        },
         body: JSON.stringify({
           action: 'APPROVE_INCIDENT',
           payload: { incidentId, notes, verifiedBy: currentUser.fullName },
@@ -1947,7 +1975,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     try {
       await fetch('/api/sync', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-tesdh-session': currentUser.id,
+        },
         body: JSON.stringify({
           action: 'REJECT_INCIDENT',
           payload: { incidentId, reason },
@@ -2668,22 +2699,37 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } catch {}
   };
 
-  const startConversation = (
+  const getOrCreateConversation = useCallback((
     recipientId: string, 
-    subject: string, 
-    initialMessage: string, 
+    subject?: string, 
     contextType?: 'service' | 'exchange' | 'management_inquiry' | 'general' | 'property_messaging'
-  ): string => {
-    const recipient = profiles.find((p) => p.id === recipientId) || INITIAL_PROFILES[2];
+  ): string | null => {
+    const targetPersonaId = fromDatabaseUserId(recipientId);
     
+    // Check self-messaging: resident cannot message themselves
+    if (recipientId === currentUser.id || targetPersonaId === currentUser.id) {
+      return null;
+    }
+
+    // Check blocked status
+    if (currentUser.blockedUserIds && (currentUser.blockedUserIds.includes(recipientId) || currentUser.blockedUserIds.includes(targetPersonaId))) {
+      return null;
+    }
+
+    const recipient = profiles.find((p) => p.id === recipientId || p.id === targetPersonaId) || 
+      INITIAL_PROFILES.find((p) => p.id === targetPersonaId) || {
+        id: targetPersonaId,
+        displayName: 'Resident',
+        fullName: 'Resident',
+      };
+
     const existing = conversations.find(
       (c) => 
-        (c.participantOneId === currentUser.id && c.participantTwoId === recipientId) ||
-        (c.participantOneId === recipientId && c.participantTwoId === currentUser.id)
+        (c.participantOneId === currentUser.id && (c.participantTwoId === recipientId || c.participantTwoId === targetPersonaId)) ||
+        ((c.participantOneId === recipientId || c.participantOneId === targetPersonaId) && c.participantTwoId === currentUser.id)
     );
 
     if (existing) {
-      sendMessage(existing.id, initialMessage);
       return existing.id;
     }
 
@@ -2693,22 +2739,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       participantOneId: currentUser.id,
       participantOneName: currentUser.displayName,
       participantTwoId: recipient.id,
-      participantTwoName: recipient.displayName,
-      subject,
+      participantTwoName: recipient.displayName || recipient.fullName || 'Resident',
+      subject: subject || 'Direct Message',
       contextType: contextType || 'general',
       status: 'accepted',
-      lastMessage: initialMessage,
+      lastMessage: '',
       lastMessageTime: new Date().toISOString(),
       unreadCount: 0,
     };
 
     setConversations((prev) => [newConv, ...prev]);
 
-    // Sync new conversation across devices via /api/sync
+    // Sync new conversation across devices via /api/sync with authenticated session
     try {
       fetch('/api/sync', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-tesdh-session': currentUser.id,
+        },
         body: JSON.stringify({
           action: 'START_CONVERSATION',
           payload: { conversation: newConv },
@@ -2717,8 +2766,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }).catch((err) => console.warn('[Sync] /api/sync START_CONVERSATION fallback:', err));
     } catch {}
 
-    sendMessage(newConvId, initialMessage);
     return newConvId;
+  }, [currentUser, profiles, conversations]);
+
+  const startConversation = (
+    recipientId: string, 
+    subject: string, 
+    initialMessage: string, 
+    contextType?: 'service' | 'exchange' | 'management_inquiry' | 'general' | 'property_messaging'
+  ): string => {
+    const convId = getOrCreateConversation(recipientId, subject, contextType);
+    if (!convId) return '';
+    if (initialMessage && initialMessage.trim()) {
+      sendMessage(convId, initialMessage);
+    }
+    return convId;
   };
 
   // Notification Centre Management
@@ -3302,6 +3364,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         messages,
         messageRequests,
         sendMessage,
+        getOrCreateConversation,
         startConversation,
         searchProperties,
         sendPropertyMessageRequest,

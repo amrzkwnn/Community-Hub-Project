@@ -227,9 +227,8 @@ export default function ResilienceView() {
     if (inc.isMerged) return false;
 
     // Public visibility rule:
-    // If pending or rejected, only visible to Management or the reporting resident themselves!
-    const isOwner = Boolean(currentUser && inc.reporterId === currentUser.id);
-    if ((inc.status === 'pending' || inc.status === 'rejected') && !isManagement && !isOwner) {
+    // Pending approval and rejected reports remain strictly hidden from the public map until approved by Management!
+    if ((inc.status === 'pending' || inc.status === 'rejected') && !isManagement) {
       return false;
     }
     
@@ -282,10 +281,9 @@ export default function ResilienceView() {
   const handleOpenReportModal = () => {
     setIsReportingPinMode(true);
     setViewMode('map');
-    // Pre-seed center pin if none exists
-    const initialLat = 3.1802;
-    const initialLng = 101.5165;
-    handlePlacementPinChange(initialLat, initialLng);
+    setPlacementPin(null);
+    setIsLocationValid(false);
+    setCoordError(null);
   };
 
 
@@ -360,18 +358,20 @@ export default function ResilienceView() {
     setNewDesc('');
     setNewImageUrl('');
     
-    // Set success toast matching Step 1: Resident submission requirement
+    // Set confirmation toast matching Part 1 requirement
     const refCode = result.incident ? `#ELM-${result.incident.id.slice(0, 4)}` : '#ELM-889';
-    setSubmissionToast(`Report submitted for JMB Management review & approval (Ref ${refCode}). It will become publicly visible once approved.`);
+    setSubmissionToast(`Incident submitted for Management review (Ref ${refCode}). It will appear on the public map once approved.`);
     setTimeout(() => {
       setSubmissionToast(null);
     }, 6000);
 
-    // Focus on new incident on the map
+    // Focus on new incident on the map only for Management
     setViewMode('map');
-    if (result.incident) {
+    if (result.incident && isManagement) {
       setSelectedIncident(result.incident);
       setMapCenter([result.incident.latitude, result.incident.longitude]);
+    } else {
+      setSelectedIncident(null);
     }
   };
 
@@ -616,19 +616,46 @@ export default function ResilienceView() {
             </div>
           )}
 
+          {/* Pin Dropper Mode Instruction on Mobile */}
+          {isReportingPinMode && (!placementPin || !isLocationValid) && (
+            <div className="absolute bottom-3 inset-x-3 z-30 p-3 rounded-xl bg-blue-50/95 dark:bg-blue-950/95 backdrop-blur-md shadow-xl border border-blue-200 dark:border-blue-900 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="material-symbols-outlined text-[20px] text-blue-600 dark:text-blue-400 shrink-0">
+                  pin_drop
+                </span>
+                <span className="text-xs font-semibold text-blue-900 dark:text-blue-100 truncate">
+                  {coordError || 'Tap anywhere on the Elmina map to place pin'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsReportingPinMode(false);
+                  setCoordError(null);
+                }}
+                className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-400 bg-white/80 dark:bg-slate-800 shrink-0"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+
           {/* Pin Dropper Mode Controls on Mobile */}
           {isReportingPinMode && placementPin && isLocationValid && (
             <div className="absolute bottom-3 inset-x-3 z-30 p-3 rounded-xl bg-white/95 dark:bg-[#15181C]/95 backdrop-blur-md shadow-xl border-t-2 border-[#9E1315] flex items-center justify-between gap-2">
               <div className="min-w-0">
                 <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 block">Pin Placed</span>
                 <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate block">
-                  {newLocationName || 'Bandar Elmina Area'}
+                  {newLocationName || 'Bandar Elmina Area'} ({placementPin.lat.toFixed(4)}, {placementPin.lng.toFixed(4)})
                 </span>
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
                 <button
                   type="button"
-                  onClick={() => setIsReportingPinMode(false)}
+                  onClick={() => {
+                    setIsReportingPinMode(false);
+                    setPlacementPin(null);
+                  }}
                   className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800"
                 >
                   Cancel
@@ -959,15 +986,38 @@ export default function ResilienceView() {
                 onPlacementPinChange={handlePlacementPinChange}
               />
 
+              {/* Desktop Pin Dropper Placement Instruction Card */}
+              {isReportingPinMode && (!placementPin || !isLocationValid) && (
+                <div className="absolute bottom-4 right-4 z-30 p-4 rounded-2xl bg-blue-50/95 dark:bg-blue-950/95 backdrop-blur-md shadow-2xl max-w-xs border-t-4 border-blue-600 border-x border-b border-blue-200 dark:border-blue-900 animate-in fade-in duration-150">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="material-symbols-outlined text-blue-600 dark:text-blue-400 text-[20px] animate-bounce">pin_drop</span>
+                    <span className="font-bold text-sm text-blue-900 dark:text-blue-100">Step 2: Place Pin on Map</span>
+                  </div>
+                  <p className="text-xs text-blue-700 dark:text-blue-300 mb-3">
+                    {coordError || 'Click anywhere on the Elmina map to select the exact GPS location of the incident.'}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsReportingPinMode(false);
+                      setCoordError(null);
+                    }}
+                    className="w-full py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold border border-slate-200 dark:border-slate-700 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
+
               {/* Floating Step 3 Location Confirmation Card on Map (Matching Stitch Step 3) */}
               {isReportingPinMode && placementPin && isLocationValid && (
                 <div className="absolute bottom-4 right-4 z-30 p-4 rounded-2xl bg-white/95 dark:bg-[#15181C]/95 backdrop-blur-md shadow-2xl max-w-xs border-t-4 border-[#ba1b1d] border-x border-b border-slate-200/80 dark:border-slate-800 animate-in fade-in duration-150">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="material-symbols-outlined text-[#ba1b1d] text-[18px]">location_on</span>
-                    <span className="font-bold text-sm text-slate-900 dark:text-white">Location Confirmed</span>
+                    <span className="font-bold text-sm text-slate-900 dark:text-white">Location Selected</span>
                   </div>
                   <p className="text-xs text-slate-600 dark:text-slate-300 mb-3">
-                    {newLocationName || 'Bandar Elmina Area'} (GPS: {placementPin.lat.toFixed(4)}° N, {placementPin.lng.toFixed(4)}° E).
+                    {newLocationName || 'Bandar Elmina Area'} (GPS: {placementPin.lat.toFixed(5)}° N, {placementPin.lng.toFixed(5)}° E).
                   </p>
                   <div className="flex items-center gap-2">
                     <button
@@ -978,7 +1028,7 @@ export default function ResilienceView() {
                       }}
                       className="flex-1 py-1.5 rounded-xl bg-[#ba1b1d] hover:bg-[#94000c] text-white font-bold text-xs shadow-sm transition-all cursor-pointer"
                     >
-                      Confirm & Details
+                      Confirm & Details →
                     </button>
                     <button
                       type="button"

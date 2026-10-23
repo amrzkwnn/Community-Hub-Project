@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { 
   getSupabaseAdmin, 
   toDatabaseUserId, 
+  fromDatabaseUserId,
   mapToSupabaseReportType,
   bootstrapDatabaseIfEmpty,
   getMemoryStore,
@@ -135,7 +136,7 @@ export async function GET(request: NextRequest) {
       if (!exchErr && exchange && exchange.length > 0) {
         dbExchange = exchange.map((e: any) => ({
           id: e.id,
-          authorId: e.author_id,
+          authorId: fromDatabaseUserId(e.author_id),
           authorName: e.author?.full_name || 'Resident',
           authorPrecinct: e.author?.township_precinct || e.precinct,
           authorVerified: e.author?.verification_status === 'verified',
@@ -163,7 +164,7 @@ export async function GET(request: NextRequest) {
       if (!servErr && services && services.length > 0) {
         dbServices = services.map((s: any) => ({
           id: s.id,
-          authorId: s.author_id,
+          authorId: fromDatabaseUserId(s.author_id),
           authorName: s.author?.full_name || 'Resident',
           authorPrecinct: s.author?.township_precinct || s.precinct,
           authorVerified: s.author?.verification_status === 'verified',
@@ -189,11 +190,11 @@ export async function GET(request: NextRequest) {
   let isManagement = false;
   let requestingUserId = sessionHeader || '';
 
-  if (sessionHeader === 'user-azman') {
+  if (sessionHeader === 'user-azman' || sessionHeader === '33333333-3333-4333-8333-333333333333') {
     isManagement = true;
   } else if (sessionHeader) {
     const { INITIAL_PROFILES } = await import('@/lib/data/mockData');
-    const p = INITIAL_PROFILES.find((prof) => prof.id === sessionHeader);
+    const p = INITIAL_PROFILES.find((prof) => prof.id === sessionHeader || prof.id === fromDatabaseUserId(sessionHeader));
     if (p?.role === 'management') {
       isManagement = true;
     }
