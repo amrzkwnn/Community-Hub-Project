@@ -39,6 +39,9 @@ import {
   ManagementReport,
   ManagementReportType,
   ManagementAiChatMessage,
+  ResidentAddressRecord,
+  ResidenceType,
+  AddressVerificationStatus,
 } from '@/types';
 import { FEATURES } from '@/config/features';
 import { 
@@ -56,11 +59,12 @@ import {
   INITIAL_NOTIFICATIONS,
   INITIAL_AI_MODERATION_ITEMS,
   INITIAL_FALSE_POSITIVE_STATS,
+  INITIAL_ADDRESS_REGISTRATIONS,
 } from '@/lib/data/mockData';
 import { translations, Language } from '@/lib/i18n/translations';
 import { createClient } from '@/lib/supabase/client';
 import { validateElminaCoordinates } from '@/lib/utils/elminaBoundary';
-import { fromDatabaseUserId } from '@/lib/utils/idMapping';
+import { fromDatabaseUserId, toDatabaseUserId } from '@/lib/utils/idMapping';
 import type { User } from '@supabase/supabase-js';
 
 interface AppContextType {
@@ -78,7 +82,7 @@ interface AppContextType {
   isAuthenticated: boolean;
   isDemoMode: boolean;
   signInWithEmail: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  signUpWithEmail: (data: { email: string; password: string; fullName: string; precinct?: string; unitNumber?: string }) => Promise<{ success: boolean; requiresEmailConfirmation?: boolean; error?: string }>;
+  signUpWithEmail: (data: { email: string; password: string; fullName?: string; precinct?: string; unitNumber?: string }) => Promise<{ success: boolean; requiresEmailConfirmation?: boolean; error?: string }>;
   tryDemo: () => void;
   switchProfile: (profileId: string) => void;
   signOut: () => Promise<void>;
@@ -242,7 +246,7 @@ interface AppContextType {
     initialMessage: string, 
     contextType?: 'service' | 'exchange' | 'management_inquiry' | 'general' | 'property_messaging'
   ) => string;
-  searchProperties: (query: string) => Promise<{ targetId: string; precinct: string; maskedProperty: string }[]>;
+  searchProperties: (query: string) => Promise<{ targetId: string; precinct: string; maskedProperty: string; residenceType?: string }[]>;
   sendPropertyMessageRequest: (data: {
     recipientId: string;
     propertyAddress: string;
@@ -251,9 +255,23 @@ interface AppContextType {
     isAnonymous: boolean;
     senderDisplayName?: string;
   }) => Promise<{ success: boolean; error?: string }>;
-  acceptMessageRequest: (requestId: string) => Promise<void>;
+  acceptMessageRequest: (requestId: string) => Promise<string | null>;
   rejectMessageRequest: (requestId: string) => Promise<void>;
   blockPropertySender: (requestId: string) => Promise<void>;
+
+  // Resident Address Registration & JMB Approval System
+  addressRegistrations: ResidentAddressRecord[];
+  submitAddressRegistration: (data: {
+    precinct: string;
+    unitNumber: string;
+    streetName?: string;
+    residenceType: ResidenceType;
+    proofDocumentName?: string;
+    proofDocumentUrl?: string;
+  }) => Promise<{ success: boolean; error?: string; registration?: ResidentAddressRecord }>;
+  approveAddressRegistration: (registrationId: string) => Promise<{ success: boolean; error?: string }>;
+  rejectAddressRegistration: (registrationId: string, reason: string) => Promise<{ success: boolean; error?: string }>;
+  revokeAddressRegistration: (registrationId: string, reason?: string) => Promise<{ success: boolean; error?: string }>;
   
   // Community Notification Centre
   notifications: CommunityNotification[];
@@ -560,6 +578,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const INCIDENTS_CACHE_KEY = 'tesdh-persisted-incidents';
   const EXCHANGE_CACHE_KEY = 'tesdh-persisted-exchange';
   const SERVICES_CACHE_KEY = 'tesdh-persisted-services';
+  const CONVERSATIONS_CACHE_KEY = 'tesdh-persisted-conversations';
+  const MESSAGES_CACHE_KEY = 'tesdh-persisted-messages';
+  const MESSAGE_REQUESTS_CACHE_KEY = 'tesdh-persisted-message-requests';
+  const ADDRESS_REGISTRATIONS_CACHE_KEY = 'tesdh-persisted-address-registrations';
+  const PROFILES_CACHE_KEY = 'tesdh-persisted-profiles';
   const ACTIVE_PROFILE_CACHE_KEY = 'tesdh-active-profile-id';
 
   function getPersistedCache<T>(key: string, fallback: T): T {
@@ -579,7 +602,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return fallback;
   }
 
-  const [profiles, setProfiles] = useState<UserProfile[]>(INITIAL_PROFILES);
+  const [profiles, setProfiles] = useState<UserProfile[]>(() =>
+    getPersistedCache<UserProfile[]>(PROFILES_CACHE_KEY, INITIAL_PROFILES)
+  );
   const [currentUser, setCurrentUser] = useState<UserProfile>(INITIAL_PROFILES[0]);
   const isSwitchingProfileRef = useRef(false);
 
@@ -621,9 +646,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [services, setServices] = useState<LocalService[]>(() =>
     getPersistedCache<LocalService[]>(SERVICES_CACHE_KEY, INITIAL_SERVICES)
   );
-  const [conversations, setConversations] = useState<Conversation[]>(INITIAL_CONVERSATIONS);
-  const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES);
-  const [messageRequests, setMessageRequests] = useState<PropertyMessageRequest[]>(INITIAL_MESSAGE_REQUESTS);
+  const [conversations, setConversations] = useState<Conversation[]>(() =>
+    getPersistedCache<Conversation[]>(CONVERSATIONS_CACHE_KEY, INITIAL_CONVERSATIONS)
+  );
+  const [messages, setMessages] = useState<Message[]>(() =>
+    getPersistedCache<Message[]>(MESSAGES_CACHE_KEY, INITIAL_MESSAGES)
+  );
+  const [messageRequests, setMessageRequests] = useState<PropertyMessageRequest[]>(() =>
+    getPersistedCache<PropertyMessageRequest[]>(MESSAGE_REQUESTS_CACHE_KEY, INITIAL_MESSAGE_REQUESTS)
+  );
+  const [addressRegistrations, setAddressRegistrations] = useState<ResidentAddressRecord[]>(() =>
+    getPersistedCache<ResidentAddressRecord[]>(ADDRESS_REGISTRATIONS_CACHE_KEY, INITIAL_ADDRESS_REGISTRATIONS)
+  );
   const [notifications, setNotifications] = useState<CommunityNotification[]>(INITIAL_NOTIFICATIONS);
   const [moderationReports, setModerationReports] = useState<ModerationReport[]>(INITIAL_MODERATION_REPORTS);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(INITIAL_AUDIT_LOGS);
@@ -828,10 +862,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const mappedProfiles: UserProfile[] = profilesData.map((p) => ({
           id: p.id,
           fullName: p.full_name,
-          displayName: p.display_name || p.full_name.split(' ')[0],
+          displayName: p.display_name || p.full_name?.split(' ')[0] || 'Resident',
           role: p.role,
           townshipPrecinct: p.township_precinct,
-          verificationStatus: p.verification_status,
+          unitNumber: p.unit_number,
+          verificationStatus: p.verification_status === 'rejected' ? 'rejected' : 'verified',
           avatarUrl: p.avatar_url,
           createdAt: p.created_at,
         }));
@@ -847,11 +882,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 ...sp,
                 displayName: sp.displayName || merged[idx].displayName,
                 avatarUrl: sp.avatarUrl || merged[idx].avatarUrl,
+                unitNumber: sp.unitNumber || merged[idx].unitNumber,
               };
             } else {
               merged.push(sp);
             }
           }
+          try {
+            localStorage.setItem(PROFILES_CACHE_KEY, JSON.stringify(merged));
+          } catch {}
           return merged;
         });
       }
@@ -1040,7 +1079,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (apiRes.ok) {
           const apiJson = await apiRes.json();
           if (apiJson?.success && apiJson?.data) {
-            const { incidents: sInc, posts: sPosts, comments: sComm, exchange: sEx, services: sServ, conversations: sConv, messages: sMsg } = apiJson.data;
+            const { incidents: sInc, posts: sPosts, comments: sComm, exchange: sEx, services: sServ, conversations: sConv, messages: sMsg, messageRequests: sMsgReq, addressRegistrations: sAddr } = apiJson.data;
             if (sInc && sInc.length > 0) {
               setIncidents(sInc);
               try { localStorage.setItem(INCIDENTS_CACHE_KEY, JSON.stringify(sInc)); } catch {}
@@ -1062,10 +1101,44 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               try { localStorage.setItem(SERVICES_CACHE_KEY, JSON.stringify(sServ)); } catch {}
             }
             if (sConv && sConv.length > 0) {
-              setConversations(sConv);
+              setConversations((prev) => {
+                const map = new Map<string, Conversation>();
+                prev.forEach((c) => map.set(c.id, c));
+                sConv.forEach((c: Conversation) => map.set(c.id, c));
+                const merged = Array.from(map.values());
+                try { localStorage.setItem(CONVERSATIONS_CACHE_KEY, JSON.stringify(merged)); } catch {}
+                return merged;
+              });
             }
             if (sMsg && sMsg.length > 0) {
-              setMessages(sMsg);
+              setMessages((prev) => {
+                const map = new Map<string, Message>();
+                prev.forEach((m) => map.set(m.id, m));
+                sMsg.forEach((m: Message) => map.set(m.id, m));
+                const merged = Array.from(map.values());
+                try { localStorage.setItem(MESSAGES_CACHE_KEY, JSON.stringify(merged)); } catch {}
+                return merged;
+              });
+            }
+            if (sMsgReq && sMsgReq.length > 0) {
+              setMessageRequests((prev) => {
+                const map = new Map<string, PropertyMessageRequest>();
+                prev.forEach((r) => map.set(r.id, r));
+                sMsgReq.forEach((r: PropertyMessageRequest) => map.set(r.id, r));
+                const merged = Array.from(map.values());
+                try { localStorage.setItem(MESSAGE_REQUESTS_CACHE_KEY, JSON.stringify(merged)); } catch {}
+                return merged;
+              });
+            }
+            if (sAddr && sAddr.length > 0) {
+              setAddressRegistrations((prev) => {
+                const map = new Map<string, ResidentAddressRecord>();
+                prev.forEach((r) => map.set(r.id, r));
+                sAddr.forEach((r: ResidentAddressRecord) => map.set(r.id, r));
+                const merged = Array.from(map.values());
+                try { localStorage.setItem(ADDRESS_REGISTRATIONS_CACHE_KEY, JSON.stringify(merged)); } catch {}
+                return merged;
+              });
             }
           }
         }
@@ -1087,12 +1160,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const userProfile: UserProfile = {
           id: data.user.id,
           fullName: meta.full_name || 'Verified Resident',
-          displayName: meta.display_name || 'Resident',
+          displayName: meta.display_name || meta.full_name?.split(' ')[0] || 'Resident',
           role: meta.role || 'resident',
           townshipPrecinct: meta.township_precinct || 'Bandar Elmina',
           unitNumber: meta.unit_number,
           phone: meta.phone,
-          verificationStatus: 'unverified',
+          verificationStatus: 'verified', // Registered account basic status
           createdAt: data.user.created_at,
         };
         setCurrentUser(userProfile);
@@ -1110,12 +1183,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const userProfile: UserProfile = {
             id: session.user.id,
             fullName: meta.full_name || 'Verified Resident',
-            displayName: meta.display_name || 'Resident',
+            displayName: meta.display_name || meta.full_name?.split(' ')[0] || 'Resident',
             role: meta.role || 'resident',
             townshipPrecinct: meta.township_precinct || 'Bandar Elmina',
             unitNumber: meta.unit_number,
             phone: meta.phone,
-            verificationStatus: 'unverified',
+            verificationStatus: 'verified', // Registered account basic status
             createdAt: session.user.created_at,
           };
           setCurrentUser(userProfile);
@@ -1253,17 +1326,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const signUpWithEmail = async (data: {
     email: string;
     password: string;
-    fullName: string;
+    fullName?: string;
     precinct?: string;
     unitNumber?: string;
   }) => {
     try {
+      const derivedName = data.fullName?.trim() || data.email.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
       const { data: authData, error } = await supabase.auth.signUp({
         email: data.email,
         password: data.password,
         options: {
           data: {
-            full_name: data.fullName,
+            full_name: derivedName,
             township_precinct: data.precinct || 'Bandar Elmina',
             unit_number: data.unitNumber || null,
             role: 'resident',
@@ -1275,10 +1349,48 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return { success: false, error: error.message };
       }
 
+      const precinct = data.precinct || 'Elmina Valley 1 (EV1)';
+      const unitNumber = data.unitNumber?.trim() || null;
+      const effectiveUser = authData.session?.user || authData.user;
+
+      const userProfile: UserProfile = {
+        id: effectiveUser?.id || `user-${Date.now()}`,
+        fullName: derivedName,
+        displayName: derivedName.split(' ')[0],
+        role: 'resident',
+        townshipPrecinct: precinct,
+        unitNumber: unitNumber || undefined,
+        verificationStatus: 'verified',
+        createdAt: effectiveUser?.created_at || new Date().toISOString(),
+      };
+
       // Check if session was returned directly (e.g. email confirmation disabled / direct registration)
       if (authData.session && authData.user) {
         setSupabaseUser(authData.user);
         setIsDemoMode(false);
+        setCurrentUser(userProfile);
+        setProfiles((prev) => {
+          const updated = [...prev.filter((p) => p.id !== userProfile.id), userProfile];
+          try { localStorage.setItem(PROFILES_CACHE_KEY, JSON.stringify(updated)); } catch {}
+          return updated;
+        });
+
+        if (unitNumber) {
+          fetch('/api/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-tesdh-session': authData.user.id },
+            body: JSON.stringify({
+              action: 'REGISTER_PROPERTY_ADDRESS',
+              payload: {
+                userId: authData.user.id,
+                unitNumber,
+                precinct,
+                fullName: derivedName,
+              },
+            }),
+          }).catch(() => {});
+        }
+
         if (typeof window !== 'undefined') {
           try {
             localStorage.removeItem(DEMO_MODE_CACHE_KEY);
@@ -1288,8 +1400,59 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return { success: true, requiresEmailConfirmation: false };
       }
 
-      // Supabase sent verification link
-      return { success: true, requiresEmailConfirmation: true };
+      // If user is created, attempt immediate sign-in with password (instant access)
+      if (authData.user) {
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+          email: data.email,
+          password: data.password,
+        });
+
+        if (signInData?.session && signInData?.user) {
+          setSupabaseUser(signInData.user);
+          setIsDemoMode(false);
+          const authedProfile: UserProfile = { ...userProfile, id: signInData.user.id };
+          setCurrentUser(authedProfile);
+          setProfiles((prev) => {
+            const updated = [...prev.filter((p) => p.id !== authedProfile.id), authedProfile];
+            try { localStorage.setItem(PROFILES_CACHE_KEY, JSON.stringify(updated)); } catch {}
+            return updated;
+          });
+
+          if (unitNumber) {
+            fetch('/api/sync', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'x-tesdh-session': signInData.user.id },
+              body: JSON.stringify({
+                action: 'REGISTER_PROPERTY_ADDRESS',
+                payload: {
+                  userId: signInData.user.id,
+                  unitNumber,
+                  precinct,
+                  fullName: derivedName,
+                },
+              }),
+            }).catch(() => {});
+          }
+
+          if (typeof window !== 'undefined') {
+            try {
+              localStorage.removeItem(DEMO_MODE_CACHE_KEY);
+            } catch {}
+          }
+          await refreshSupabaseData();
+          return { success: true, requiresEmailConfirmation: false };
+        }
+
+        // If Supabase rejected signIn due to email confirmation setting still active on hosted server
+        if (signInError && signInError.message.toLowerCase().includes('email not confirmed')) {
+          return { 
+            success: false, 
+            error: 'Account registered! However, email confirmation is currently active in your Supabase project settings. Please turn OFF "Confirm Email" in Supabase Dashboard -> Authentication -> Providers -> Email to allow direct instant login.' 
+          };
+        }
+      }
+
+      return { success: true, requiresEmailConfirmation: false };
     } catch (err: any) {
       return { success: false, error: err.message || 'Sign up failed.' };
     }
@@ -2593,23 +2756,121 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   // Private Property Messaging & Privacy Shield
-  const searchProperties = async (query: string) => {
+  const searchProperties = async (query: string): Promise<{ targetId: string; precinct: string; maskedProperty: string; residenceType?: string }[]> => {
     const clean = query.trim().toLowerCase();
     if (clean.length < 2) return [];
 
-    return profiles
-      .filter((p) => p.id !== currentUser.id && p.verificationStatus === 'verified')
-      .filter((p) => {
-        const matchesUnit = p.unitNumber && p.unitNumber.toLowerCase().includes(clean);
-        const matchesPrecinct = p.townshipPrecinct.toLowerCase().includes(clean);
-        return matchesUnit || matchesPrecinct;
-      })
-      .map((p) => ({
-        targetId: p.id,
-        precinct: p.townshipPrecinct,
-        maskedProperty: p.unitNumber || `Residence ${p.townshipPrecinct}`,
-      }))
-      .slice(0, 8);
+    // 1. Query remote registered properties from /api/sync
+    let remoteMatches: Array<{ targetId: string; precinct: string; maskedProperty: string; residenceType?: string }> = [];
+    try {
+      const res = await fetch('/api/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tesdh-session': currentUser.id,
+        },
+        body: JSON.stringify({
+          action: 'SEARCH_PROPERTIES',
+          payload: { query: clean },
+          user: currentUser,
+        }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json?.success) {
+          const list = Array.isArray(json?.data?.results)
+            ? json.data.results
+            : Array.isArray(json?.data)
+              ? json.data
+              : [];
+          if (list.length > 0) {
+            remoteMatches = list;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[searchProperties] Remote lookup fallback:', e);
+    }
+
+    // 2. Normalization helper: strips common punctuation, normalizes street and unit abbreviations
+    const norm = (str: string) =>
+      str
+        .toLowerCase()
+        .replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, ' ')
+        .replace(/\b(no|nomor|unit|jln|jalan|lorong)\b/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    const normalizedQuery = norm(clean);
+    const queryTokens = normalizedQuery.split(' ').filter(Boolean);
+
+    // 3. Search local verified address registrations ONLY (Pending or rejected are strictly excluded)
+    const localVerifiedMatches: Array<{ targetId: string; precinct: string; maskedProperty: string; residenceType?: string }> = [];
+
+    (addressRegistrations || []).forEach((reg) => {
+      // Must be verified only!
+      if (reg.status !== 'verified') return;
+      // Exclude self
+      if (reg.userId === currentUser.id || toDatabaseUserId(reg.userId) === toDatabaseUserId(currentUser.id)) return;
+
+      const normUnit = norm(reg.unitNumber || '');
+      const normPrecinct = norm(reg.precinct || '');
+      const normStreet = norm(reg.streetName || '');
+      const combined = `${normUnit} ${normPrecinct} ${normStreet}`;
+
+      if (combined.includes(normalizedQuery) || (normUnit && normUnit.includes(normalizedQuery))) {
+        localVerifiedMatches.push({
+          targetId: reg.userId,
+          precinct: reg.precinct,
+          maskedProperty: reg.unitNumber,
+          residenceType: reg.residenceType,
+        });
+      } else if (queryTokens.length > 0 && queryTokens.every((token) => combined.includes(token))) {
+        localVerifiedMatches.push({
+          targetId: reg.userId,
+          precinct: reg.precinct,
+          maskedProperty: reg.unitNumber,
+          residenceType: reg.residenceType,
+        });
+      }
+    });
+
+    // Also include verified profiles that have a registered unitNumber
+    profiles
+      .filter((p) => p.id !== currentUser.id && p.verificationStatus === 'verified' && Boolean(p.unitNumber))
+      .forEach((p) => {
+        if (localVerifiedMatches.some((m) => m.targetId === p.id)) return;
+        const unit = p.unitNumber ? norm(p.unitNumber) : '';
+        const precinct = norm(p.townshipPrecinct || '');
+        const combined = `${unit} ${precinct}`;
+
+        if (combined.includes(normalizedQuery) || (unit && unit.includes(normalizedQuery))) {
+          localVerifiedMatches.push({
+            targetId: p.id,
+            precinct: p.townshipPrecinct,
+            maskedProperty: p.unitNumber || `Residence ${p.townshipPrecinct}`,
+            residenceType: 'owner',
+          });
+        } else if (queryTokens.length > 0 && queryTokens.every((token) => combined.includes(token))) {
+          localVerifiedMatches.push({
+            targetId: p.id,
+            precinct: p.townshipPrecinct,
+            maskedProperty: p.unitNumber || `Residence ${p.townshipPrecinct}`,
+            residenceType: 'owner',
+          });
+        }
+      });
+
+    // 4. Merge remote and local matches without dropping multiple residents at same property
+    // We uniquely key by targetId (each resident has unique user ID)
+    const combined: Array<{ targetId: string; precinct: string; maskedProperty: string; residenceType?: string }> = [...remoteMatches];
+    localVerifiedMatches.forEach((lm) => {
+      if (!combined.some((c) => c.targetId === lm.targetId)) {
+        combined.push(lm);
+      }
+    });
+
+    return combined.slice(0, 10);
   };
 
   const sendPropertyMessageRequest = async (data: {
@@ -2654,7 +2915,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       createdAt: new Date().toISOString(),
     };
 
-    setMessageRequests((prev) => [newRequest, ...prev]);
+    setMessageRequests((prev) => {
+      const updated = [newRequest, ...prev];
+      try { localStorage.setItem(MESSAGE_REQUESTS_CACHE_KEY, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
 
     // Send notification to recipient
     addNotification({
@@ -2673,72 +2938,472 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       isAnonymous: data.isAnonymous,
     });
 
+    // Sync message request to database & shared state
+    fetch('/api/sync', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-tesdh-session': currentUser.id,
+      },
+      body: JSON.stringify({
+        action: 'SEND_MESSAGE_REQUEST',
+        payload: { request: newRequest },
+        user: currentUser,
+      }),
+    }).catch((err) => console.warn('[Sync] /api/sync SEND_MESSAGE_REQUEST fallback:', err));
+
     return { success: true };
   };
 
-  const acceptMessageRequest = async (requestId: string) => {
-    const req = messageRequests.find((r) => r.id === requestId);
-    if (!req) return;
+  const acceptMessageRequest = async (requestId: string): Promise<string | null> => {
+    let resolvedConvId: string | null = null;
+    let resolvedConv: Conversation | null = null;
+    let resolvedMsg: Message | null = null;
+    const targetReq = messageRequests.find((r) => r.id === requestId);
+    try {
+      const syncRes = await fetch('/api/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tesdh-session': currentUser.id,
+        },
+        body: JSON.stringify({
+          action: 'ACCEPT_MESSAGE_REQUEST',
+          payload: { requestId, request: targetReq },
+          user: currentUser,
+        }),
+      });
 
-    const newConvId = `conv-${Date.now()}`;
-    const newConv: Conversation = {
-      id: newConvId,
-      participantOneId: req.senderId,
-      participantOneName: req.senderDisplayName || 'Resident Neighbour',
+      if (syncRes.ok) {
+        const syncJson = await syncRes.json();
+        if (syncJson?.success && syncJson?.data?.conversationId) {
+          resolvedConvId = syncJson.data.conversationId;
+          resolvedConv = syncJson.data.conversation;
+          resolvedMsg = syncJson.data.initialMessage;
+        }
+      }
+    } catch (syncErr) {
+      console.warn('[Sync] /api/sync ACCEPT_MESSAGE_REQUEST fallback:', syncErr);
+    }
+
+    const req = messageRequests.find((r) => r.id === requestId);
+    if (!req && !resolvedConvId) return null;
+
+    const convId = resolvedConvId || `conv-${Date.now()}`;
+    const newConv: Conversation = resolvedConv || {
+      id: convId,
+      participantOneId: req!.senderId,
+      participantOneName: req!.senderDisplayName || 'Resident Neighbour',
       participantTwoId: currentUser.id,
       participantTwoName: currentUser.displayName,
-      subject: req.subject,
+      subject: req!.subject,
       contextType: 'property_messaging',
       status: 'accepted',
-      lastMessage: req.initialMessage,
+      lastMessage: req!.initialMessage,
       lastMessageTime: new Date().toISOString(),
       unreadCount: 0,
     };
 
     // Add initial message
-    const initialMsg: Message = {
+    const initialMsg: Message = resolvedMsg || {
       id: `msg-${Date.now()}`,
-      conversationId: newConvId,
-      senderId: req.senderId,
-      senderName: req.senderDisplayName || 'Neighbour',
-      isAnonymous: req.isAnonymous,
-      content: req.initialMessage,
-      createdAt: req.createdAt,
+      conversationId: convId,
+      senderId: req!.senderId,
+      senderName: req!.senderDisplayName || 'Neighbour',
+      isAnonymous: req!.isAnonymous,
+      content: req!.initialMessage,
+      createdAt: req!.createdAt,
     };
 
-    setMessageRequests((prev) =>
-      prev.map((r) => (r.id === requestId ? { ...r, status: 'accepted', conversationId: newConvId } : r))
-    );
-    setConversations((prev) => [newConv, ...prev]);
-    setMessages((prev) => [...prev, initialMsg]);
+    setMessageRequests((prev) => {
+      const updated = prev.map((r) => (r.id === requestId ? { ...r, status: 'accepted' as const, conversationId: convId } : r));
+      try { localStorage.setItem(MESSAGE_REQUESTS_CACHE_KEY, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+    setConversations((prev) => {
+      const updated = [newConv, ...prev.filter((c) => c.id !== newConv.id)];
+      try { localStorage.setItem(CONVERSATIONS_CACHE_KEY, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+    setMessages((prev) => {
+      const updated = [...prev.filter((m) => m.id !== initialMsg.id), initialMsg];
+      try { localStorage.setItem(MESSAGES_CACHE_KEY, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+    navigateToItem({ tab: 'messages', conversationId: convId });
 
     // Notify sender that request was accepted
-    addNotification({
-      recipientId: req.senderId,
-      senderId: currentUser.id,
-      type: 'message_reply',
-      title: 'Message Request Accepted',
-      content: `The resident at ${req.propertyAddress} has accepted your conversation request. You can now exchange messages securely.`,
-      priority: 'normal',
-      targetTab: 'messages',
-      targetId: newConvId,
-    });
+    if (req) {
+      addNotification({
+        recipientId: req.senderId,
+        senderId: currentUser.id,
+        type: 'message_reply',
+        title: 'Message Request Accepted',
+        content: `The resident at ${req.propertyAddress} has accepted your conversation request. You can now exchange messages securely.`,
+        priority: 'normal',
+        targetTab: 'messages',
+        targetId: convId,
+      });
+    }
 
-    logAudit('ACCEPT_MESSAGE_REQUEST', 'property_message_requests', requestId);
+    logAudit('ACCEPT_MESSAGE_REQUEST', 'property_message_requests', requestId, { conversationId: convId });
+    return convId;
   };
 
   const rejectMessageRequest = async (requestId: string) => {
-    setMessageRequests((prev) =>
-      prev.map((r) => (r.id === requestId ? { ...r, status: 'rejected' } : r))
-    );
+    setMessageRequests((prev) => {
+      const updated = prev.map((r) => (r.id === requestId ? { ...r, status: 'rejected' as const } : r));
+      try { localStorage.setItem(MESSAGE_REQUESTS_CACHE_KEY, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+    fetch('/api/sync', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-tesdh-session': currentUser.id,
+      },
+      body: JSON.stringify({
+        action: 'REJECT_MESSAGE_REQUEST',
+        payload: { requestId },
+        user: currentUser,
+      }),
+    }).catch(() => {});
     logAudit('REJECT_MESSAGE_REQUEST', 'property_message_requests', requestId);
   };
 
   const blockPropertySender = async (requestId: string) => {
-    setMessageRequests((prev) =>
-      prev.map((r) => (r.id === requestId ? { ...r, status: 'blocked' } : r))
-    );
+    setMessageRequests((prev) => {
+      const updated = prev.map((r) => (r.id === requestId ? { ...r, status: 'blocked' as const } : r));
+      try { localStorage.setItem(MESSAGE_REQUESTS_CACHE_KEY, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
     logAudit('BLOCK_PROPERTY_SENDER', 'property_message_requests', requestId);
+  };
+
+  // Resident Address Registration & JMB Approval System
+  const submitAddressRegistration = async (data: {
+    precinct: string;
+    unitNumber: string;
+    streetName?: string;
+    residenceType: ResidenceType;
+    proofDocumentName?: string;
+    proofDocumentUrl?: string;
+  }): Promise<{ success: boolean; error?: string; registration?: ResidentAddressRecord }> => {
+    // Check if resident already has a verified address
+    const existing = addressRegistrations.find(
+      (r) => (r.userId === currentUser.id || toDatabaseUserId(r.userId) === toDatabaseUserId(currentUser.id))
+    );
+
+    if (existing && existing.status === 'verified' && currentUser.role !== 'management') {
+      return {
+        success: false,
+        error: 'Your residential address is already verified by JMB. Unauthorized alterations are locked. Please contact JMB for relocation.',
+      };
+    }
+
+    const regId = existing?.id || `addr-${Date.now()}`;
+    const newRecord: ResidentAddressRecord = {
+      id: regId,
+      userId: currentUser.id,
+      fullName: currentUser.fullName,
+      precinct: data.precinct,
+      unitNumber: data.unitNumber,
+      streetName: data.streetName || '',
+      residenceType: data.residenceType,
+      proofDocumentName: data.proofDocumentName || 'Proof_Document.pdf',
+      proofDocumentUrl: data.proofDocumentUrl,
+      status: 'pending',
+      rejectionReason: undefined,
+      createdAt: existing?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    let savedRecord = newRecord;
+
+    try {
+      const syncRes = await fetch('/api/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tesdh-session': currentUser.id,
+        },
+        body: JSON.stringify({
+          action: 'SUBMIT_ADDRESS_REGISTRATION',
+          payload: {
+            ...data,
+            fullName: currentUser.fullName,
+          },
+          user: currentUser,
+        }),
+      });
+
+      if (syncRes.ok) {
+        const syncJson = await syncRes.json();
+        if (syncJson?.success && syncJson?.data?.registration) {
+          savedRecord = syncJson.data.registration;
+        } else if (!syncJson?.success && syncJson?.error) {
+          return { success: false, error: syncJson.error };
+        }
+      }
+    } catch (syncErr) {
+      console.warn('[Sync] /api/sync SUBMIT_ADDRESS_REGISTRATION fallback:', syncErr);
+    }
+
+    setAddressRegistrations((prev) => {
+      const updated = [savedRecord, ...prev.filter((r) => r.id !== savedRecord.id && r.userId !== currentUser.id)];
+      try {
+        localStorage.setItem(ADDRESS_REGISTRATIONS_CACHE_KEY, JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    // Update current profile unit and precinct
+    setCurrentUser((prev) => ({
+      ...prev,
+      unitNumber: data.unitNumber,
+      townshipPrecinct: data.precinct,
+      verificationStatus: 'pending',
+    }));
+
+    setProfiles((prev) =>
+      prev.map((p) =>
+        p.id === currentUser.id
+          ? { ...p, unitNumber: data.unitNumber, townshipPrecinct: data.precinct, verificationStatus: 'pending' as const }
+          : p
+      )
+    );
+
+    addNotification({
+      recipientId: currentUser.id,
+      type: 'official_announcement',
+      title: 'Residential Address Registered',
+      content: `Your address at ${data.unitNumber} (${data.precinct}) has been submitted and is currently Pending JMB Approval.`,
+      priority: 'normal',
+    });
+
+    logAudit('SUBMIT_ADDRESS_REGISTRATION', 'resident_address_registrations', savedRecord.id, {
+      precinct: data.precinct,
+      unitNumber: data.unitNumber,
+      residenceType: data.residenceType,
+    });
+
+    return { success: true, registration: savedRecord };
+  };
+
+  const approveAddressRegistration = async (registrationId: string): Promise<{ success: boolean; error?: string }> => {
+    const reg = addressRegistrations.find((r) => r.id === registrationId);
+    if (!reg) return { success: false, error: 'Registration record not found' };
+
+    const reviewerName = currentUser.fullName || 'Capt (B) Azman Salleh (JMB)';
+    const nowIso = new Date().toISOString();
+
+    const approvedRecord: ResidentAddressRecord = {
+      ...reg,
+      status: 'verified',
+      rejectionReason: undefined,
+      reviewedBy: currentUser.id,
+      reviewedByName: reviewerName,
+      reviewedAt: nowIso,
+      updatedAt: nowIso,
+    };
+
+    try {
+      await fetch('/api/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tesdh-session': currentUser.id,
+        },
+        body: JSON.stringify({
+          action: 'APPROVE_ADDRESS_REGISTRATION',
+          payload: { registrationId, registration: approvedRecord },
+          user: currentUser,
+        }),
+      });
+    } catch (syncErr) {
+      console.warn('[Sync] /api/sync APPROVE_ADDRESS_REGISTRATION fallback:', syncErr);
+    }
+
+    setAddressRegistrations((prev) => {
+      const updated = prev.map((r) => (r.id === registrationId ? approvedRecord : r));
+      try {
+        localStorage.setItem(ADDRESS_REGISTRATIONS_CACHE_KEY, JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    // Update target profile verification status and unit details
+    setProfiles((prev) =>
+      prev.map((p) =>
+        p.id === reg.userId || toDatabaseUserId(p.id) === toDatabaseUserId(reg.userId)
+          ? { ...p, verificationStatus: 'verified' as const, unitNumber: reg.unitNumber, townshipPrecinct: reg.precinct }
+          : p
+      )
+    );
+
+    if (currentUser.id === reg.userId || toDatabaseUserId(currentUser.id) === toDatabaseUserId(reg.userId)) {
+      setCurrentUser((prev) => ({
+        ...prev,
+        verificationStatus: 'verified',
+        unitNumber: reg.unitNumber,
+        townshipPrecinct: reg.precinct,
+      }));
+    }
+
+    addNotification({
+      recipientId: reg.userId,
+      senderId: currentUser.id,
+      type: 'official_announcement',
+      title: 'Residential Address Approved',
+      content: `Congratulations! Your address at ${reg.unitNumber} (${reg.precinct}) has been officially verified by JMB.`,
+      priority: 'urgent',
+    });
+
+    logAudit('APPROVE_ADDRESS_REGISTRATION', 'resident_address_registrations', registrationId, {
+      userId: reg.userId,
+      unitNumber: reg.unitNumber,
+    });
+
+    return { success: true };
+  };
+
+  const rejectAddressRegistration = async (registrationId: string, reason: string): Promise<{ success: boolean; error?: string }> => {
+    const reg = addressRegistrations.find((r) => r.id === registrationId);
+    if (!reg) return { success: false, error: 'Registration record not found' };
+
+    const reviewerName = currentUser.fullName || 'Capt (B) Azman Salleh (JMB)';
+    const nowIso = new Date().toISOString();
+
+    const rejectedRecord: ResidentAddressRecord = {
+      ...reg,
+      status: 'rejected',
+      rejectionReason: reason || 'Submitted documents do not match township municipal records.',
+      reviewedBy: currentUser.id,
+      reviewedByName: reviewerName,
+      reviewedAt: nowIso,
+      updatedAt: nowIso,
+    };
+
+    try {
+      await fetch('/api/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tesdh-session': currentUser.id,
+        },
+        body: JSON.stringify({
+          action: 'REJECT_ADDRESS_REGISTRATION',
+          payload: { registrationId, reason, registration: rejectedRecord },
+          user: currentUser,
+        }),
+      });
+    } catch (syncErr) {
+      console.warn('[Sync] /api/sync REJECT_ADDRESS_REGISTRATION fallback:', syncErr);
+    }
+
+    setAddressRegistrations((prev) => {
+      const updated = prev.map((r) => (r.id === registrationId ? rejectedRecord : r));
+      try {
+        localStorage.setItem(ADDRESS_REGISTRATIONS_CACHE_KEY, JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    setProfiles((prev) =>
+      prev.map((p) =>
+        p.id === reg.userId || toDatabaseUserId(p.id) === toDatabaseUserId(reg.userId)
+          ? { ...p, verificationStatus: 'rejected' as const }
+          : p
+      )
+    );
+
+    if (currentUser.id === reg.userId || toDatabaseUserId(currentUser.id) === toDatabaseUserId(reg.userId)) {
+      setCurrentUser((prev) => ({
+        ...prev,
+        verificationStatus: 'rejected',
+      }));
+    }
+
+    addNotification({
+      recipientId: reg.userId,
+      senderId: currentUser.id,
+      type: 'official_announcement',
+      title: 'Address Verification Requires Action',
+      content: `Your address application for ${reg.unitNumber} was not approved: "${reason}". You may update and resubmit.`,
+      priority: 'urgent',
+    });
+
+    logAudit('REJECT_ADDRESS_REGISTRATION', 'resident_address_registrations', registrationId, {
+      userId: reg.userId,
+      reason,
+    });
+
+    return { success: true };
+  };
+
+  const revokeAddressRegistration = async (registrationId: string, reason?: string): Promise<{ success: boolean; error?: string }> => {
+    const reg = addressRegistrations.find((r) => r.id === registrationId);
+    if (!reg) return { success: false, error: 'Registration record not found' };
+
+    const reviewerName = currentUser.fullName || 'Capt (B) Azman Salleh (JMB)';
+    const nowIso = new Date().toISOString();
+
+    const revokedRecord: ResidentAddressRecord = {
+      ...reg,
+      status: 'revoked',
+      rejectionReason: reason || 'Address verification revoked by JMB administration.',
+      reviewedBy: currentUser.id,
+      reviewedByName: reviewerName,
+      reviewedAt: nowIso,
+      updatedAt: nowIso,
+    };
+
+    try {
+      await fetch('/api/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tesdh-session': currentUser.id,
+        },
+        body: JSON.stringify({
+          action: 'REVOKE_ADDRESS_REGISTRATION',
+          payload: { registrationId, reason },
+          user: currentUser,
+        }),
+      });
+    } catch (syncErr) {
+      console.warn('[Sync] /api/sync REVOKE_ADDRESS_REGISTRATION fallback:', syncErr);
+    }
+
+    setAddressRegistrations((prev) => {
+      const updated = prev.map((r) => (r.id === registrationId ? revokedRecord : r));
+      try {
+        localStorage.setItem(ADDRESS_REGISTRATIONS_CACHE_KEY, JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    setProfiles((prev) =>
+      prev.map((p) =>
+        p.id === reg.userId || toDatabaseUserId(p.id) === toDatabaseUserId(reg.userId)
+          ? { ...p, verificationStatus: 'unverified' as const }
+          : p
+      )
+    );
+
+    if (currentUser.id === reg.userId || toDatabaseUserId(currentUser.id) === toDatabaseUserId(reg.userId)) {
+      setCurrentUser((prev) => ({
+        ...prev,
+        verificationStatus: 'unverified',
+      }));
+    }
+
+    logAudit('REVOKE_ADDRESS_REGISTRATION', 'resident_address_registrations', registrationId, {
+      userId: reg.userId,
+      reason,
+    });
+
+    return { success: true };
   };
 
   const sendMessage = (conversationId: string, content: string, isAnonymous = false, imageUrl?: string) => {
@@ -2760,9 +3425,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       createdAt: new Date().toISOString(),
     };
 
-    setMessages((prev) => [...prev.filter((m) => m.id !== newMsg.id), newMsg]);
-    setConversations((prev) =>
-      prev.map((c) =>
+    setMessages((prev) => {
+      const updated = [...prev.filter((m) => m.id !== newMsg.id), newMsg];
+      try { localStorage.setItem(MESSAGES_CACHE_KEY, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+    setConversations((prev) => {
+      const updated = prev.map((c) =>
         c.id === conversationId
           ? { 
               ...c, 
@@ -2770,8 +3439,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               lastMessageTime: new Date().toISOString() 
             }
           : c
-      )
-    );
+      );
+      try { localStorage.setItem(CONVERSATIONS_CACHE_KEY, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
 
     // Notify other participant if conversation exists
     const conv = conversations.find((c) => c.id === conversationId);
@@ -3550,6 +4221,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         acceptMessageRequest,
         rejectMessageRequest,
         blockPropertySender,
+        addressRegistrations,
+        submitAddressRegistration,
+        approveAddressRegistration,
+        rejectAddressRegistration,
+        revokeAddressRegistration,
         notifications,
         unreadNotificationCount,
         isNotificationCenterOpen,

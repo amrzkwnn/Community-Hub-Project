@@ -9,6 +9,7 @@ import {
   updateMemoryStore
 } from '@/lib/server/dbSync';
 import { INITIAL_RESILIENCE_INCIDENTS, INITIAL_POSTS, INITIAL_EXCHANGE_ITEMS, INITIAL_SERVICES } from '@/lib/data/mockData';
+import { ResidentAddressRecord } from '@/types';
 
 /**
  * GET /api/sync
@@ -25,6 +26,8 @@ export async function GET(request: NextRequest) {
   let dbServices: any[] = [];
   let dbConversations: any[] = [];
   let dbMessages: any[] = [];
+  let dbMessageRequests: any[] = [];
+  let dbAddressRegistrations: any[] = [];
   let fromDatabase = false;
 
   if (supabase) {
@@ -182,49 +185,120 @@ export async function GET(request: NextRequest) {
         fromDatabase = true;
       }
 
-      // 6. Fetch conversations (Mediated Private Messaging)
-      const { data: convs, error: convErr } = await supabase
-        .from('conversations')
-        .select('*, p1:public_profiles!participant_one(full_name, avatar_url, township_precinct), p2:public_profiles!participant_two(full_name, avatar_url, township_precinct)')
-        .order('last_message_time', { ascending: false });
-
-      if (!convErr && convs && convs.length > 0) {
-        dbConversations = convs.map((c: any) => ({
-          id: c.id,
-          participantOneId: fromDatabaseUserId(c.participant_one),
-          participantOneName: c.p1?.full_name || 'Resident',
-          participantTwoId: fromDatabaseUserId(c.participant_two),
-          participantTwoName: c.p2?.full_name || 'Resident',
-          subject: c.subject || 'Direct Message',
-          contextType: c.context_type || 'general',
-          status: c.status || 'accepted',
-          lastMessage: c.last_message || '',
-          lastMessageTime: c.last_message_time || c.updated_at || c.created_at,
-          unreadCount: c.unread_count || 0,
-        }));
-        fromDatabase = true;
+      // 6. Look up participant display names from public_profiles
+      const { data: profs } = await supabase.from('public_profiles').select('id, full_name, display_name');
+      const profMap: Record<string, string> = {};
+      if (profs) {
+        profs.forEach((p: any) => {
+          profMap[p.id] = p.display_name || p.full_name || 'Resident';
+        });
       }
 
-      // 7. Fetch messages
+      // 7. Fetch messages (ordered by created_at)
       const { data: msgs, error: msgErr } = await supabase
         .from('messages')
-        .select('*, sender:public_profiles!sender_id(full_name, avatar_url)')
+        .select('*')
         .order('created_at', { ascending: true });
 
+      const msgMap: Record<string, any[]> = {};
       if (!msgErr && msgs && msgs.length > 0) {
         dbMessages = msgs.map((m: any) => ({
           id: m.id,
           conversationId: m.conversation_id,
           senderId: fromDatabaseUserId(m.sender_id),
-          senderName: m.is_anonymous ? 'Elmina Neighbour (Anonymous)' : (m.sender?.full_name || m.sender_name || 'Resident'),
-          senderAvatar: m.is_anonymous ? undefined : m.sender?.avatar_url,
-          isAnonymous: Boolean(m.is_anonymous),
-          content: m.content,
-          imageUrl: m.image_url,
+          senderName: profMap[m.sender_id] || 'Resident',
+          isAnonymous: false,
+          content: m.content || '',
           createdAt: m.created_at,
         }));
+        msgs.forEach((m: any) => {
+          if (!msgMap[m.conversation_id]) msgMap[m.conversation_id] = [];
+          msgMap[m.conversation_id].push(m);
+        });
         fromDatabase = true;
       }
+
+      // 8. Fetch conversations (ordered by updated_at)
+      const { data: convs, error: convErr } = await supabase
+        .from('conversations')
+        .select('*')
+        .order('updated_at', { ascending: false });
+
+      if (!convErr && convs && convs.length > 0) {
+        dbConversations = convs.map((c: any) => {
+          const cMsgs = msgMap[c.id] || [];
+          const lastMsg = cMsgs[cMsgs.length - 1];
+          return {
+            id: c.id,
+            participantOneId: fromDatabaseUserId(c.participant_one),
+            participantOneName: profMap[c.participant_one] || 'Resident',
+            participantTwoId: fromDatabaseUserId(c.participant_two),
+            participantTwoName: profMap[c.participant_two] || 'Resident',
+            subject: c.subject || 'Direct Message',
+            contextType: c.context_type || 'general',
+            status: 'accepted',
+            lastMessage: lastMsg?.content || '',
+            lastMessageTime: lastMsg?.created_at || c.updated_at || c.created_at,
+            unreadCount: 0,
+          };
+        });
+        fromDatabase = true;
+      }
+
+      // 9. Fetch property_message_requests (if table exists)
+      try {
+        const { data: msgRequests, error: msgReqErr } = await supabase
+          .from('property_message_requests')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (!msgReqErr && msgRequests && msgRequests.length > 0) {
+          dbMessageRequests = msgRequests.map((r: any) => ({
+            id: r.id,
+            senderId: fromDatabaseUserId(r.sender_id),
+            recipientId: fromDatabaseUserId(r.recipient_id),
+            propertyAddress: r.property_address,
+            subject: r.subject,
+            initialMessage: r.initial_message,
+            isAnonymous: Boolean(r.is_anonymous),
+            senderDisplayName: r.sender_display_name,
+            status: r.status,
+            conversationId: r.conversation_id,
+            createdAt: r.created_at,
+          }));
+          fromDatabase = true;
+        }
+      } catch {}
+
+      // 10. Fetch resident_address_registrations (if table exists)
+      try {
+        const { data: addrRegs, error: addrErr } = await supabase
+          .from('resident_address_registrations')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (!addrErr && addrRegs && addrRegs.length > 0) {
+          dbAddressRegistrations = addrRegs.map((r: any) => ({
+            id: r.id,
+            userId: fromDatabaseUserId(r.user_id),
+            fullName: r.full_name,
+            precinct: r.precinct,
+            unitNumber: r.unit_number,
+            streetName: r.street_name,
+            residenceType: r.residence_type || 'owner',
+            proofDocumentUrl: r.proof_doc_url,
+            proofDocumentName: r.proof_doc_name,
+            status: r.status,
+            rejectionReason: r.rejection_reason,
+            reviewedBy: r.reviewed_by ? fromDatabaseUserId(r.reviewed_by) : undefined,
+            reviewedByName: r.reviewed_by_name,
+            reviewedAt: r.reviewed_at,
+            createdAt: r.created_at,
+            updatedAt: r.updated_at || r.created_at,
+          }));
+          fromDatabase = true;
+        }
+      } catch {}
     } catch (e) {
       console.warn('[Sync API] Database query warning:', e);
     }
@@ -302,6 +376,23 @@ export async function GET(request: NextRequest) {
     ? [...dbMessages, ...memory.messages.filter((m) => !dbMessages.some((d) => d.id === m.id))]
     : memory.messages;
 
+  const finalMessageRequests = dbMessageRequests.length > 0
+    ? [...dbMessageRequests, ...memory.messageRequests.filter((m) => !dbMessageRequests.some((d) => d.id === m.id))]
+    : memory.messageRequests;
+
+  const rawAddressRegistrations = dbAddressRegistrations.length > 0
+    ? [...dbAddressRegistrations, ...(memory.addressRegistrations || []).filter((m) => !dbAddressRegistrations.some((d) => d.id === m.id))]
+    : (memory.addressRegistrations || []);
+
+  const finalAddressRegistrations = rawAddressRegistrations.filter((reg) => {
+    if (isManagement) return true;
+    if (requestingUserId) {
+      const uUuid = toDatabaseUserId(requestingUserId);
+      if (reg.userId === requestingUserId || reg.userId === uUuid) return true;
+    }
+    return reg.status === 'verified';
+  });
+
   return NextResponse.json({
     success: true,
     fromDatabase,
@@ -313,6 +404,8 @@ export async function GET(request: NextRequest) {
       services: finalServices,
       conversations: finalConversations,
       messages: finalMessages,
+      messageRequests: finalMessageRequests,
+      addressRegistrations: finalAddressRegistrations,
     },
     timestamp: new Date().toISOString(),
   });
@@ -338,6 +431,10 @@ export async function POST(request: NextRequest) {
 
   const supabase = getSupabaseAdmin();
   const memory = getMemoryStore();
+
+  const sessionHeader = request.headers.get('x-tesdh-session') || request.headers.get('authorization')?.replace('Bearer ', '');
+  const requestingUserId = user?.id || sessionHeader || '';
+  const isManagement = user?.role === 'management' || user?.id === 'user-azman' || user?.id === '33333333-3333-4333-8333-333333333333' || sessionHeader === 'user-azman' || sessionHeader === '33333333-3333-4333-8333-333333333333';
 
   let resultRecord: any = null;
 
@@ -898,7 +995,7 @@ export async function POST(request: NextRequest) {
           senderName,
           senderAvatar: isAnonymous ? undefined : user?.avatarUrl,
           isAnonymous: Boolean(isAnonymous),
-          content,
+          content: content || '',
           imageUrl,
           createdAt: new Date().toISOString(),
         };
@@ -914,10 +1011,8 @@ export async function POST(request: NextRequest) {
                 .insert({
                   conversation_id: conversationId,
                   sender_id: senderUuid,
-                  content: content || '',
-                  image_url: imageUrl || null,
-                  is_anonymous: Boolean(isAnonymous),
-                  sender_name: senderName,
+                  content: content || (imageUrl ? '📷 Photo attached' : ''),
+                  is_read: false,
                 })
                 .select()
                 .single();
@@ -930,8 +1025,6 @@ export async function POST(request: NextRequest) {
               await supabase
                 .from('conversations')
                 .update({
-                  last_message: content || (imageUrl ? '📷 Photo attached' : ''),
-                  last_message_time: new Date().toISOString(),
                   updated_at: new Date().toISOString(),
                 })
                 .eq('id', conversationId);
@@ -976,9 +1069,9 @@ export async function POST(request: NextRequest) {
               savedConv = {
                 ...conversation,
                 id: existing.id,
-                status: existing.status || 'accepted',
-                lastMessage: existing.last_message || conversation.lastMessage || initialMessage || '',
-                lastMessageTime: existing.last_message_time || existing.updated_at,
+                status: 'accepted',
+                lastMessage: conversation.lastMessage || initialMessage || '',
+                lastMessageTime: existing.updated_at || new Date().toISOString(),
               };
             } else {
               const { data: inserted, error: insertErr } = await supabase
@@ -987,10 +1080,8 @@ export async function POST(request: NextRequest) {
                   participant_one: pOneUuid,
                   participant_two: pTwoUuid,
                   subject: conversation.subject || 'Direct Message',
-                  context_type: conversation.contextType || 'general',
-                  status: conversation.status || 'accepted',
-                  last_message: conversation.lastMessage || initialMessage || '',
-                  last_message_time: new Date().toISOString(),
+                  context_type: 'general',
+                  updated_at: new Date().toISOString(),
                 })
                 .select()
                 .single();
@@ -999,7 +1090,7 @@ export async function POST(request: NextRequest) {
                 savedConv = {
                   ...conversation,
                   id: inserted.id,
-                  status: inserted.status || 'accepted',
+                  status: 'accepted',
                 };
               }
             }
@@ -1013,12 +1104,10 @@ export async function POST(request: NextRequest) {
                   conversation_id: savedConv.id,
                   sender_id: senderUuid,
                   content: initialMessage.trim(),
-                  is_anonymous: Boolean(payload.isAnonymous),
-                  sender_name: payload.isAnonymous ? 'Elmina Neighbour (Anonymous)' : (user?.displayName || user?.fullName || 'Resident'),
+                  is_read: false,
                 });
                 await supabase.from('conversations').update({
-                  last_message: initialMessage.trim(),
-                  last_message_time: new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
                 }).eq('id', savedConv.id);
               }
             }
@@ -1049,6 +1138,510 @@ export async function POST(request: NextRequest) {
 
         updateMemoryStore({ conversations: updatedConversations, messages: updatedMessages });
         resultRecord = { conversation: savedConv };
+        break;
+      }
+
+      case 'REGISTER_PROPERTY_ADDRESS':
+      case 'SUBMIT_ADDRESS_REGISTRATION': {
+        const { targetId, userId, precinct, unitNumber, streetName, residenceType, proofDocumentName, proofDocumentUrl, fullName, displayName, maskedProperty } = payload;
+        const resolvedTargetId = targetId || userId || user?.id || requestingUserId;
+        const resolvedUuid = toDatabaseUserId(resolvedTargetId);
+        const resolvedPrecinct = precinct || user?.townshipPrecinct || 'Bandar Elmina';
+        const resolvedUnitNumber = unitNumber || user?.unitNumber || '';
+        const resolvedFullName = fullName || displayName || user?.fullName || user?.displayName || 'Resident';
+        const resolvedResidenceType = residenceType || 'owner';
+
+        // Check if user already has an active verified address
+        const existingReg = (memory.addressRegistrations || []).find(
+          (r) => r.userId === resolvedTargetId || r.userId === resolvedUuid
+        );
+
+        if (existingReg && existingReg.status === 'verified' && !isManagement) {
+          return NextResponse.json({
+            success: false,
+            error: 'Your residential address is already verified by JMB. To prevent unauthorized alteration of verified addresses, please contact the JMB Management office for relocation requests.',
+          }, { status: 400 });
+        }
+
+        const regId = existingReg?.id || `addr-${Date.now()}`;
+        const newRecord: ResidentAddressRecord = {
+          id: regId,
+          userId: resolvedTargetId,
+          fullName: resolvedFullName,
+          precinct: resolvedPrecinct,
+          unitNumber: resolvedUnitNumber,
+          streetName: streetName || '',
+          residenceType: resolvedResidenceType,
+          proofDocumentName: proofDocumentName || 'Proof_Document.pdf',
+          proofDocumentUrl: proofDocumentUrl || undefined,
+          status: 'pending',
+          rejectionReason: undefined,
+          createdAt: existingReg?.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
+        if (supabase) {
+          try {
+            await supabase.from('resident_address_registrations').upsert({
+              id: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(regId) ? regId : undefined,
+              user_id: resolvedUuid,
+              full_name: newRecord.fullName,
+              precinct: newRecord.precinct,
+              unit_number: newRecord.unitNumber,
+              street_name: newRecord.streetName,
+              residence_type: newRecord.residenceType,
+              proof_doc_name: newRecord.proofDocumentName,
+              proof_doc_url: newRecord.proofDocumentUrl,
+              status: 'pending',
+              updated_at: new Date().toISOString(),
+            });
+
+            await supabase.from('profiles').update({
+              unit_number: newRecord.unitNumber,
+              township_precinct: newRecord.precinct,
+              verification_status: 'pending',
+              updated_at: new Date().toISOString(),
+            }).eq('id', resolvedUuid);
+          } catch (dbErr) {
+            console.warn('[Sync API] DB write address registration fallback:', dbErr);
+          }
+        }
+
+        const currentRegs = memory.addressRegistrations || [];
+        const updatedRegs = [
+          ...currentRegs.filter((r) => r.id !== regId && r.userId !== resolvedTargetId),
+          newRecord,
+        ];
+        updateMemoryStore({ addressRegistrations: updatedRegs });
+        resultRecord = { success: true, registration: newRecord };
+        break;
+      }
+
+      case 'APPROVE_ADDRESS_REGISTRATION': {
+        const { registrationId, registration } = payload;
+        const currentRegs = memory.addressRegistrations || [];
+        const reg = currentRegs.find((r) => r.id === registrationId) || registration;
+        if (!reg) {
+          return NextResponse.json({ success: false, error: 'Address registration application not found.' }, { status: 404 });
+        }
+
+        const targetUuid = toDatabaseUserId(reg.userId);
+        const reviewerUuid = toDatabaseUserId(user?.id);
+        const reviewerName = user?.fullName || 'Capt (B) Azman Salleh (JMB)';
+        const nowIso = new Date().toISOString();
+
+        const approvedReg: ResidentAddressRecord = {
+          ...reg,
+          status: 'verified',
+          rejectionReason: undefined,
+          reviewedBy: user?.id || 'user-azman',
+          reviewedByName: reviewerName,
+          reviewedAt: nowIso,
+          updatedAt: nowIso,
+        };
+
+        if (supabase) {
+          try {
+            await supabase.from('resident_address_registrations').update({
+              status: 'verified',
+              rejection_reason: null,
+              reviewed_by: reviewerUuid,
+              reviewed_by_name: reviewerName,
+              reviewed_at: nowIso,
+              updated_at: nowIso,
+            }).eq('id', registrationId);
+
+            await supabase.from('profiles').update({
+              verification_status: 'verified',
+              unit_number: approvedReg.unitNumber,
+              township_precinct: approvedReg.precinct,
+              updated_at: nowIso,
+            }).eq('id', targetUuid);
+          } catch (dbErr) {
+            console.warn('[Sync API] DB approve address fallback:', dbErr);
+          }
+        }
+
+        const updatedRegs = currentRegs.map((r) => (r.id === registrationId ? approvedReg : r));
+        if (!updatedRegs.some((r) => r.id === registrationId)) {
+          updatedRegs.push(approvedReg);
+        }
+
+        // Add to immediately searchable properties index
+        const newProp = {
+          targetId: approvedReg.userId,
+          precinct: approvedReg.precinct,
+          unitNumber: approvedReg.unitNumber,
+          maskedProperty: approvedReg.unitNumber || `Residence ${approvedReg.precinct}`,
+          displayName: approvedReg.fullName,
+          residenceType: approvedReg.residenceType,
+        };
+        const updatedProps = [
+          ...memory.registeredProperties.filter((p) => p.targetId !== approvedReg.userId),
+          newProp,
+        ];
+
+        updateMemoryStore({
+          addressRegistrations: updatedRegs,
+          registeredProperties: updatedProps,
+        });
+
+        resultRecord = { success: true, registration: approvedReg };
+        break;
+      }
+
+      case 'REJECT_ADDRESS_REGISTRATION': {
+        const { registrationId, reason, registration } = payload;
+        const currentRegs = memory.addressRegistrations || [];
+        const reg = currentRegs.find((r) => r.id === registrationId) || registration;
+        if (!reg) {
+          return NextResponse.json({ success: false, error: 'Address registration application not found.' }, { status: 404 });
+        }
+
+        const targetUuid = toDatabaseUserId(reg.userId);
+        const reviewerUuid = toDatabaseUserId(user?.id);
+        const reviewerName = user?.fullName || 'Capt (B) Azman Salleh (JMB)';
+        const nowIso = new Date().toISOString();
+
+        const rejectedReg: ResidentAddressRecord = {
+          ...reg,
+          status: 'rejected',
+          rejectionReason: reason || 'Submitted documents do not match township municipal records.',
+          reviewedBy: user?.id || 'user-azman',
+          reviewedByName: reviewerName,
+          reviewedAt: nowIso,
+          updatedAt: nowIso,
+        };
+
+        if (supabase) {
+          try {
+            await supabase.from('resident_address_registrations').update({
+              status: 'rejected',
+              rejection_reason: rejectedReg.rejectionReason,
+              reviewed_by: reviewerUuid,
+              reviewed_by_name: reviewerName,
+              reviewed_at: nowIso,
+              updated_at: nowIso,
+            }).eq('id', registrationId);
+
+            await supabase.from('profiles').update({
+              verification_status: 'rejected',
+              updated_at: nowIso,
+            }).eq('id', targetUuid);
+          } catch (dbErr) {
+            console.warn('[Sync API] DB reject address fallback:', dbErr);
+          }
+        }
+
+        const updatedRegs = currentRegs.map((r) => (r.id === registrationId ? rejectedReg : r));
+        if (!updatedRegs.some((r) => r.id === registrationId)) {
+          updatedRegs.push(rejectedReg);
+        }
+        const updatedProps = memory.registeredProperties.filter((p) => p.targetId !== reg.userId);
+
+        updateMemoryStore({
+          addressRegistrations: updatedRegs,
+          registeredProperties: updatedProps,
+        });
+
+        resultRecord = { success: true, registration: rejectedReg };
+        break;
+      }
+
+      case 'REVOKE_ADDRESS_REGISTRATION': {
+        const { registrationId, reason } = payload;
+        const currentRegs = memory.addressRegistrations || [];
+        const reg = currentRegs.find((r) => r.id === registrationId);
+        if (!reg) {
+          return NextResponse.json({ success: false, error: 'Address registration record not found.' }, { status: 404 });
+        }
+
+        const targetUuid = toDatabaseUserId(reg.userId);
+        const reviewerUuid = toDatabaseUserId(user?.id);
+        const reviewerName = user?.fullName || 'Capt (B) Azman Salleh (JMB)';
+        const nowIso = new Date().toISOString();
+
+        const revokedReg: ResidentAddressRecord = {
+          ...reg,
+          status: 'revoked',
+          rejectionReason: reason || 'Address verification revoked by JMB.',
+          reviewedBy: user?.id || 'user-azman',
+          reviewedByName: reviewerName,
+          reviewedAt: nowIso,
+          updatedAt: nowIso,
+        };
+
+        if (supabase) {
+          try {
+            await supabase.from('resident_address_registrations').update({
+              status: 'revoked',
+              rejection_reason: revokedReg.rejectionReason,
+              reviewed_by: reviewerUuid,
+              reviewed_by_name: reviewerName,
+              reviewed_at: nowIso,
+              updated_at: nowIso,
+            }).eq('id', registrationId);
+
+            await supabase.from('profiles').update({
+              verification_status: 'unverified',
+              updated_at: nowIso,
+            }).eq('id', targetUuid);
+          } catch (dbErr) {
+            console.warn('[Sync API] DB revoke address fallback:', dbErr);
+          }
+        }
+
+        const updatedRegs = currentRegs.map((r) => (r.id === registrationId ? revokedReg : r));
+        const updatedProps = memory.registeredProperties.filter((p) => p.targetId !== reg.userId);
+
+        updateMemoryStore({
+          addressRegistrations: updatedRegs,
+          registeredProperties: updatedProps,
+        });
+
+        resultRecord = { success: true, registration: revokedReg };
+        break;
+      }
+
+      case 'SEARCH_PROPERTIES': {
+        const { query } = payload;
+        const clean = (query || '').toLowerCase().trim();
+        const norm = (str: string) =>
+          str
+            .toLowerCase()
+            .replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, ' ')
+            .replace(/\b(no|nomor|unit|jln|jalan|lorong)\b/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+        const normClean = norm(clean);
+        const queryTokens = normClean.split(' ').filter(Boolean);
+
+        // Collect all verified properties from both memory.registeredProperties and verified addressRegistrations
+        const allVerifiedProperties = [...memory.registeredProperties];
+        (memory.addressRegistrations || []).forEach((vr) => {
+          if (vr.status === 'verified' && !allVerifiedProperties.some((p) => p.targetId === vr.userId)) {
+            allVerifiedProperties.push({
+              targetId: vr.userId,
+              precinct: vr.precinct,
+              unitNumber: vr.unitNumber,
+              maskedProperty: vr.unitNumber,
+              displayName: vr.fullName,
+              residenceType: vr.residenceType,
+            });
+          }
+        });
+
+        const results = allVerifiedProperties.filter((p) => {
+          if (user?.id && (p.targetId === user.id || toDatabaseUserId(p.targetId) === toDatabaseUserId(user.id))) {
+            return false;
+          }
+          const normUnit = norm(p.unitNumber || '');
+          const normPrecinct = norm(p.precinct || '');
+          const normMasked = norm(p.maskedProperty || '');
+          const combined = `${normUnit} ${normPrecinct} ${normMasked}`;
+
+          if (combined.includes(normClean) || (normUnit && normUnit.includes(normClean))) {
+            return true;
+          }
+          return queryTokens.length > 0 && queryTokens.every((t) => combined.includes(t));
+        }).map((p) => ({
+          targetId: p.targetId,
+          precinct: p.precinct,
+          maskedProperty: p.maskedProperty,
+          residenceType: p.residenceType || 'owner',
+        }));
+        resultRecord = { results: results.slice(0, 10) };
+        break;
+      }
+
+      case 'SEND_MESSAGE_REQUEST': {
+        const { request: msgReq } = payload;
+        const senderUuid = toDatabaseUserId(user?.id || msgReq.senderId);
+        const recipientUuid = toDatabaseUserId(msgReq.recipientId);
+
+        let savedReq = {
+          ...msgReq,
+          id: msgReq.id || `req-${Date.now()}`,
+          senderId: user?.id || msgReq.senderId,
+          recipientId: msgReq.recipientId,
+          status: 'pending' as const,
+          createdAt: new Date().toISOString(),
+        };
+
+        if (supabase && senderUuid !== recipientUuid) {
+          try {
+            const { data: inserted, error: insErr } = await supabase
+              .from('property_message_requests')
+              .insert({
+                sender_id: senderUuid,
+                recipient_id: recipientUuid,
+                property_address: msgReq.propertyAddress,
+                subject: msgReq.subject,
+                initial_message: msgReq.initialMessage,
+                is_anonymous: Boolean(msgReq.isAnonymous),
+                sender_display_name: msgReq.isAnonymous ? 'Elmina Neighbour (Anonymous)' : (msgReq.senderDisplayName || user?.displayName || 'Resident'),
+                status: 'pending',
+              })
+              .select()
+              .single();
+
+            if (!insErr && inserted) {
+              savedReq.id = inserted.id;
+              savedReq.createdAt = inserted.created_at;
+            }
+          } catch (reqErr) {
+            console.warn('[Sync API] Error writing message request to Supabase:', reqErr);
+          }
+        }
+
+        const updatedRequests = [savedReq, ...memory.messageRequests.filter((r) => r.id !== savedReq.id)];
+        updateMemoryStore({ messageRequests: updatedRequests });
+        resultRecord = savedReq;
+        break;
+      }
+
+      case 'ACCEPT_MESSAGE_REQUEST': {
+        const { requestId } = payload;
+        const req = memory.messageRequests.find((r) => r.id === requestId) || payload.request;
+        const senderId = req?.senderId || payload.senderId || payload.request?.senderId;
+        const recipientId = user?.id || req?.recipientId || payload.recipientId;
+
+        const senderUuid = toDatabaseUserId(senderId);
+        const recipientUuid = toDatabaseUserId(recipientId);
+
+        let convId = req?.conversationId || `conv-${Date.now()}`;
+        let savedConv = {
+          id: convId,
+          participantOneId: senderId,
+          participantOneName: req?.senderDisplayName || 'Resident Neighbour',
+          participantTwoId: recipientId,
+          participantTwoName: user?.displayName || user?.fullName || 'Resident',
+          subject: req?.subject || 'Property Message',
+          contextType: 'general' as const,
+          status: 'accepted' as const,
+          lastMessage: req?.initialMessage || '',
+          lastMessageTime: new Date().toISOString(),
+          unreadCount: 0,
+        };
+
+        let savedMsg = {
+          id: `msg-${Date.now()}`,
+          conversationId: convId,
+          senderId: senderId,
+          senderName: req?.senderDisplayName || 'Neighbour',
+          isAnonymous: Boolean(req?.isAnonymous),
+          content: req?.initialMessage || '',
+          createdAt: req?.createdAt || new Date().toISOString(),
+        };
+
+        if (supabase) {
+          try {
+            // Check if canonical conversation already exists in database
+            const { data: existingConv } = await supabase
+              .from('conversations')
+              .select('*')
+              .or(`and(participant_one.eq.${senderUuid},participant_two.eq.${recipientUuid}),and(participant_one.eq.${recipientUuid},participant_two.eq.${senderUuid})`)
+              .maybeSingle();
+
+            if (existingConv) {
+              convId = existingConv.id;
+              savedConv.id = convId;
+              savedConv.subject = existingConv.subject || savedConv.subject;
+              await supabase.from('conversations').update({
+                updated_at: new Date().toISOString(),
+              }).eq('id', convId);
+            } else {
+              const { data: newDbConv, error: newDbConvErr } = await supabase
+                .from('conversations')
+                .insert({
+                  participant_one: senderUuid,
+                  participant_two: recipientUuid,
+                  subject: req?.subject || 'Property Message',
+                  context_type: 'general',
+                  updated_at: new Date().toISOString(),
+                })
+                .select()
+                .single();
+
+              if (!newDbConvErr && newDbConv) {
+                convId = newDbConv.id;
+                savedConv.id = convId;
+              }
+            }
+
+            savedMsg.conversationId = convId;
+
+            if (req?.initialMessage) {
+              const { data: newDbMsg, error: newDbMsgErr } = await supabase
+                .from('messages')
+                .insert({
+                  conversation_id: convId,
+                  sender_id: senderUuid,
+                  content: req.initialMessage,
+                  is_read: false,
+                })
+                .select()
+                .single();
+
+              if (!newDbMsgErr && newDbMsg) {
+                savedMsg.id = newDbMsg.id;
+                savedMsg.createdAt = newDbMsg.created_at;
+              }
+            }
+
+            const isReqUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestId);
+            if (isReqUuid) {
+              await supabase
+                .from('property_message_requests')
+                .update({
+                  status: 'accepted',
+                  conversation_id: convId,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', requestId);
+            }
+          } catch (accErr) {
+            console.warn('[Sync API] Error in accept_message_request Supabase persistence:', accErr);
+          }
+        }
+
+        const updatedRequests = memory.messageRequests.map((r) =>
+          r.id === requestId ? { ...r, status: 'accepted' as const, conversationId: convId } : r
+        );
+        const updatedConvs = [savedConv, ...memory.conversations.filter((c) => c.id !== convId)];
+        const updatedMsgs = [savedMsg, ...memory.messages.filter((m) => m.id !== savedMsg.id)];
+
+        updateMemoryStore({
+          messageRequests: updatedRequests,
+          conversations: updatedConvs,
+          messages: updatedMsgs,
+        });
+
+        resultRecord = {
+          conversationId: convId,
+          conversation: savedConv,
+          initialMessage: savedMsg,
+          requestId,
+        };
+        break;
+      }
+
+      case 'REJECT_MESSAGE_REQUEST': {
+        const { requestId } = payload;
+        if (supabase) {
+          const isReqUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestId);
+          if (isReqUuid) {
+            await supabase
+              .from('property_message_requests')
+              .update({ status: 'rejected', updated_at: new Date().toISOString() })
+              .eq('id', requestId);
+          }
+        }
+        const updatedRequests = memory.messageRequests.map((r) =>
+          r.id === requestId ? { ...r, status: 'rejected' as const } : r
+        );
+        updateMemoryStore({ messageRequests: updatedRequests });
+        resultRecord = { requestId, status: 'rejected' };
         break;
       }
 

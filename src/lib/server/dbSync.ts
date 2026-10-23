@@ -6,8 +6,11 @@ import {
   INITIAL_EXCHANGE_ITEMS,
   INITIAL_PROFILES,
   INITIAL_CONVERSATIONS,
-  INITIAL_MESSAGES
+  INITIAL_MESSAGES,
+  INITIAL_MESSAGE_REQUESTS,
+  INITIAL_ADDRESS_REGISTRATIONS
 } from '@/lib/data/mockData';
+export { INITIAL_ADDRESS_REGISTRATIONS };
 
 // Map persona IDs to canonical Supabase UUIDs
 export const PERSONA_TO_UUID: Record<string, string> = {
@@ -70,13 +73,11 @@ export function getSupabaseAdmin() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
   const serviceKey = 
     process.env.SUPABASE_SERVICE_ROLE_KEY || 
-    process.env.SUPABASE_SECRET_KEY || 
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 
-    process.env.SUPABASE_ANON_KEY;
+    process.env.SUPABASE_SECRET_KEY;
 
   if (!supabaseUrl || !serviceKey || serviceKey === '[SENSITIVE]') {
-    // If service key is not available, try anon key
-    const fallbackKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
+    // If service role key is not available, use SUPABASE_ANON_KEY (canonical JWT)
+    const fallbackKey = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     if (!supabaseUrl || !fallbackKey) return null;
     return createClient(supabaseUrl, fallbackKey, {
       auth: { autoRefreshToken: false, persistSession: false },
@@ -96,6 +97,20 @@ let memoryExchange = [...INITIAL_EXCHANGE_ITEMS];
 let memoryServices = [...INITIAL_SERVICES];
 let memoryConversations = [...INITIAL_CONVERSATIONS];
 let memoryMessages = [...INITIAL_MESSAGES];
+let memoryMessageRequests = [...INITIAL_MESSAGE_REQUESTS];
+let memoryAddressRegistrations = [...INITIAL_ADDRESS_REGISTRATIONS];
+let memoryRegisteredProperties: {
+  targetId: string;
+  precinct: string;
+  unitNumber: string;
+  maskedProperty: string;
+  displayName?: string;
+  residenceType?: string;
+}[] = [
+  { targetId: '11111111-1111-4111-8111-111111111111', precinct: 'Elmina West (EV1)', unitNumber: 'No. 12, Jalan EV 1/3', maskedProperty: 'No. 12, Jalan EV 1/3', residenceType: 'owner' },
+  { targetId: '33333333-3333-4333-8333-333333333333', precinct: 'Elmina East (EE2)', unitNumber: 'No. 8, Jalan EE 2/1', maskedProperty: 'No. 8, Jalan EE 2/1', residenceType: 'owner' },
+  { targetId: '44444444-4444-4444-8444-444444444444', precinct: 'Elmina West (EV1)', unitNumber: 'Guardhouse Central', maskedProperty: 'Guardhouse Central', residenceType: 'household_member' },
+];
 
 export async function bootstrapDatabaseIfEmpty(supabase: any) {
   if (!supabase) return;
@@ -150,6 +165,9 @@ export function getMemoryStore() {
     services: memoryServices,
     conversations: memoryConversations,
     messages: memoryMessages,
+    messageRequests: memoryMessageRequests,
+    registeredProperties: memoryRegisteredProperties,
+    addressRegistrations: memoryAddressRegistrations,
   };
 }
 
@@ -161,6 +179,9 @@ export function updateMemoryStore(updates: {
   services?: any[];
   conversations?: any[];
   messages?: any[];
+  messageRequests?: any[];
+  registeredProperties?: any[];
+  addressRegistrations?: any[];
 }) {
   if (updates.incidents) memoryIncidents = updates.incidents;
   if (updates.posts) memoryPosts = updates.posts;
@@ -169,4 +190,7 @@ export function updateMemoryStore(updates: {
   if (updates.services) memoryServices = updates.services;
   if (updates.conversations) memoryConversations = updates.conversations;
   if (updates.messages) memoryMessages = updates.messages;
+  if (updates.messageRequests) memoryMessageRequests = updates.messageRequests;
+  if (updates.registeredProperties) memoryRegisteredProperties = updates.registeredProperties;
+  if (updates.addressRegistrations) memoryAddressRegistrations = updates.addressRegistrations;
 }

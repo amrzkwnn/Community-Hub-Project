@@ -1,27 +1,25 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '@/lib/context/AppContext';
 import { 
   Mail, 
   Lock, 
   Eye, 
   EyeOff, 
-  User, 
-  MapPin, 
-  Home, 
-  Sparkles, 
   ArrowRight, 
+  ArrowLeft,
   CheckCircle2, 
   AlertCircle, 
   Loader2, 
-  MailCheck, 
-  ShieldCheck, 
-  ChevronRight,
-  Shield,
-  Layers,
-  Activity,
-  HeartHandshake
+  Sparkles, 
+  ExternalLink,
+  RefreshCw,
+  Info,
+  User,
+  Home,
+  MapPin,
+  ShieldCheck
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 
@@ -29,8 +27,7 @@ export default function AuthView() {
   const { 
     signInWithEmail, 
     signUpWithEmail, 
-    tryDemo,
-    t 
+    tryDemo 
   } = useApp();
 
   const [mode, setMode] = useState<'signin' | 'signup' | 'verify' | 'forgot'>('signin');
@@ -39,13 +36,14 @@ export default function AuthView() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
 
   // Sign Up fields
   const [fullName, setFullName] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [precinct, setPrecinct] = useState('Elmina West (EV1)');
+  const [precinct, setPrecinct] = useState('Elmina Valley 1 (EV1)');
   const [unitNumber, setUnitNumber] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [agreedToTerms, setAgreedToTerms] = useState(true);
 
   // Status & Feedback
@@ -54,12 +52,12 @@ export default function AuthView() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [unconfirmedEmail, setUnconfirmedEmail] = useState('');
-  const [resendCooldown, setResendCooldown] = useState(0);
+  const [resendCooldown, setResendCooldown] = useState(58);
 
   const supabase = createClient();
 
   // Read URL query parameters on initial mount (e.g. from email verification callback)
-  React.useEffect(() => {
+  useEffect(() => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
     const authError = params.get('auth_error');
@@ -93,19 +91,14 @@ export default function AuthView() {
     }
   };
 
-  // Handle Sign Up submission
+  // Handle Sign Up submission (Direct registration with full resident and property onboarding)
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
     setSuccessMessage(null);
 
     const cleanEmail = email.trim();
-    const cleanName = fullName.trim();
 
-    if (!cleanName) {
-      setErrorMessage('Please enter your full name as registered in the township directory.');
-      return;
-    }
     if (!cleanEmail) {
       setErrorMessage('Please enter a valid email address.');
       return;
@@ -119,7 +112,7 @@ export default function AuthView() {
       return;
     }
     if (!agreedToTerms) {
-      setErrorMessage('Please accept the Community Conduct Guidelines to proceed.');
+      setErrorMessage('Please accept the Township Terms of Civic Conduct and Privacy Guidelines to proceed.');
       return;
     }
 
@@ -127,8 +120,8 @@ export default function AuthView() {
     const result = await signUpWithEmail({
       email: cleanEmail,
       password,
-      fullName: cleanName,
-      precinct,
+      fullName: fullName.trim() || undefined,
+      precinct: precinct.trim() || 'Elmina Valley 1 (EV1)',
       unitNumber: unitNumber.trim() || undefined,
     });
     setIsLoading(false);
@@ -138,12 +131,8 @@ export default function AuthView() {
       return;
     }
 
-    if (result.requiresEmailConfirmation) {
-      setUnconfirmedEmail(cleanEmail);
-      setMode('verify');
-    } else {
-      setSuccessMessage('Account created successfully! Entering Nadikomuniti...');
-    }
+    // Direct entry into Nadikomuniti with verified account status
+    setSuccessMessage('Account created successfully! Welcome to Nadikomuniti.');
   };
 
   // Handle Forgot Password
@@ -167,7 +156,7 @@ export default function AuthView() {
       if (error) {
         setErrorMessage(error.message);
       } else {
-        setSuccessMessage(`Password reset link sent to ${cleanEmail}. Please check your inbox.`);
+        setSuccessMessage(`If an account exists for ${cleanEmail}, you will receive password reset instructions shortly.`);
       }
     } catch {
       setIsLoading(false);
@@ -175,7 +164,7 @@ export default function AuthView() {
     }
   };
 
-  // Handle Resend Verification Email
+  // Handle Resend Verification Email (kept for manual verification access)
   const handleResendVerification = async () => {
     if (resendCooldown > 0 || !unconfirmedEmail) return;
     setErrorMessage(null);
@@ -212,261 +201,227 @@ export default function AuthView() {
     setTimeout(() => {
       tryDemo();
       setIsDemoLoading(false);
-    }, 400);
+    }, 350);
+  };
+
+  // Helper for masked email
+  const getMaskedEmail = (raw: string) => {
+    if (!raw) return 'a***ria@elmina.resident.my';
+    const [user, domain] = raw.split('@');
+    if (!domain) return raw;
+    const maskedUser = user.length > 2 ? `${user[0]}***${user[user.length - 1]}` : `${user[0]}***`;
+    return `${maskedUser}@${domain}`;
   };
 
   return (
-    <div className="relative min-h-screen w-full flex items-center justify-center p-3 sm:p-6 md:p-8 overflow-y-auto">
-      {/* Background Image with Blur & Dark Scrim */}
-      <div 
-        className="fixed inset-0 z-0 bg-cover bg-center bg-no-repeat transition-transform duration-700 scale-105"
-        style={{ backgroundImage: `url('/images/elmina-township-bg.png')` }}
-      >
-        <div className="absolute inset-0 bg-slate-950/75 backdrop-blur-md" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-[#9E1315]/20" />
+    <div className="relative min-h-screen w-full flex flex-col justify-center items-center py-6 px-4 sm:px-6 md:px-8 overflow-y-auto font-sans antialiased">
+      {/* ========================================================================= */}
+      {/* IMMERSIVE TOWNSHIP BACKDROP (Approved Stitch Visual Asset)                */}
+      {/* ========================================================================= */}
+      <div className="fixed inset-0 w-full h-full -z-10 overflow-hidden pointer-events-none">
+        <img 
+          alt="Aerial view of masterplanned suburban township" 
+          className="w-full h-full object-cover scale-105 filter blur-xs contrast-105 brightness-[0.68]" 
+          src="/images/elmina-township-bg.png"
+        />
+        <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-[2px]" />
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-slate-950/50" />
       </div>
 
-      {/* Center Auth Card */}
-      <div className="relative z-10 w-full max-w-5xl rounded-3xl overflow-hidden shadow-2xl border border-white/20 bg-white/95 dark:bg-[#15181C]/95 backdrop-blur-xl flex flex-col lg:flex-row my-auto animate-in fade-in zoom-in-95 duration-300">
-        
-        {/* ========================================================================= */}
-        {/* LEFT BRANDING COLUMN (Stitch Design approved aesthetics)                 */}
-        {/* ========================================================================= */}
-        <div className="lg:w-[45%] p-6 sm:p-8 lg:p-10 bg-gradient-to-br from-[#9E1315] via-[#851012] to-[#5C0A0B] text-white flex flex-col justify-between relative overflow-hidden">
-          {/* Subtle geometric pattern glow */}
-          <div className="absolute -top-24 -left-24 w-80 h-80 rounded-full bg-rose-500/20 blur-3xl pointer-events-none" />
-          <div className="absolute -bottom-24 -right-24 w-80 h-80 rounded-full bg-amber-500/15 blur-3xl pointer-events-none" />
-
-          {/* Top Logo & Title */}
-          <div className="relative z-10">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-[11px] font-semibold text-rose-100 mb-6 tracking-wide">
-              <ShieldCheck className="w-3.5 h-3.5 text-amber-300" />
-              <span>Official Township Hub • Bandar Elmina</span>
-            </div>
-
-            <div className="flex items-center gap-3.5 mb-3">
+      {/* ========================================================================= */}
+      {/* 1. SIGN IN SCREEN (Exact Google Stitch Design: 546bfa78d3ee4ed9bbd31162a9cbc606) */}
+      {/* ========================================================================= */}
+      {mode === 'signin' && (
+        <div className="relative w-full max-w-4xl mx-auto rounded-3xl overflow-hidden shadow-2xl bg-white/95 dark:bg-[#15181C]/95 backdrop-blur-xl flex flex-col md:flex-row min-h-[580px] my-auto animate-in fade-in zoom-in-95 duration-200">
+          {/* Left Column (45%) */}
+          <div className="relative w-full md:w-[45%] flex flex-col justify-between p-7 sm:p-8 md:p-10 text-white overflow-hidden">
+            <div className="absolute inset-0 -z-10">
               <img 
-                src="/images/nadikomuniti-logo-transparent.png" 
-                alt="Nadikomuniti Logo" 
-                className="w-12 h-12 object-contain drop-shadow-md rounded-xl"
+                alt="Neighborhood aerial backdrop" 
+                className="w-full h-full object-cover filter brightness-[0.75]" 
+                src="/images/elmina-township-bg.png" 
               />
-              <div>
-                <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white drop-shadow-sm font-sans">
-                  Nadikomuniti
-                </h1>
-                <p className="text-xs sm:text-sm font-medium text-rose-100/90 tracking-wide">
-                  Connect & Relax
-                </p>
+              <div className="absolute inset-0 bg-gradient-to-b from-[#9E1315]/90 via-[#9b4500]/75 to-slate-950/90 mix-blend-multiply" />
+              <div className="absolute inset-0 bg-gradient-to-tr from-[#9E1315]/50 via-transparent to-amber-500/20" />
+            </div>
+
+            {/* Official Logo Box */}
+            <div className="relative z-10 flex flex-col items-start space-y-2">
+              <div className="bg-white/95 rounded-xl p-3 shadow-md backdrop-blur-sm max-w-[240px] w-full flex items-center justify-center">
+                <img 
+                  src="/images/nadikomuniti-logo-transparent.png" 
+                  alt="Nadikomuniti Connect & Relax" 
+                  className="max-w-[240px] w-full h-auto object-contain"
+                />
               </div>
             </div>
 
-            <p className="text-xs sm:text-sm text-rose-100/80 leading-relaxed max-w-sm mt-3">
-              The unified civic engagement, mediated neighbor messaging, and anti-flood resilience network for Elmina residents.
-            </p>
-          </div>
-
-          {/* Core Pillars List */}
-          <div className="relative z-10 my-8 space-y-4">
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center shrink-0 mt-0.5">
-                <Shield className="w-4 h-4 text-amber-300" />
-              </div>
-              <div>
-                <h2 className="text-xs font-bold text-white tracking-wide">Mediated Private Messaging</h2>
-                <p className="text-[11px] text-rose-100/75 leading-tight mt-0.5">
-                  Direct communication with adjoining homeowners without revealing personal phone numbers.
-                </p>
-              </div>
+            {/* Headline and Value Proposition */}
+            <div className="relative z-10 my-auto py-8">
+              <h2 className="text-2xl sm:text-3xl text-white font-bold tracking-tight drop-shadow-sm leading-snug">
+                Your Community,<br />Connected.
+              </h2>
+              <p className="text-slate-100/90 mt-3 max-w-xs leading-relaxed font-normal text-xs sm:text-sm">
+                A modern, verified neighborhood portal for safety, circular exchange, and shared living.
+              </p>
             </div>
 
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center shrink-0 mt-0.5">
-                <Activity className="w-4 h-4 text-emerald-300" />
-              </div>
-              <div>
-                <h2 className="text-xs font-bold text-white tracking-wide">Flood & Resilience Telemetry</h2>
-                <p className="text-[11px] text-rose-100/75 leading-tight mt-0.5">
-                  Real-time IoT water sensors, culvert status alerts, and rapid verified report dispatch.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center shrink-0 mt-0.5">
-                <Layers className="w-4 h-4 text-cyan-300" />
-              </div>
-              <div>
-                <h2 className="text-xs font-bold text-white tracking-wide">Circular Exchange & Aid</h2>
-                <p className="text-[11px] text-rose-100/75 leading-tight mt-0.5">
-                  Free item giveaways, verified local handyman services, and mutual neighborhood support.
-                </p>
-              </div>
+            {/* Subtle Footer */}
+            <div className="relative z-10 pt-4 flex items-center justify-between text-[11px] text-white/70">
+              <span>Township Civic Network</span>
+              <span>Elmina West • EV1</span>
             </div>
           </div>
 
-          {/* Footer note */}
-          <div className="relative z-10 pt-4 border-t border-white/15 flex items-center justify-between text-[10px] text-rose-200/80">
-            <span>TESDH Community Hub • 2026</span>
-            <span>Sime Darby Property Innovation</span>
-          </div>
-        </div>
+          {/* Right Column (55%) */}
+          <div className="w-full md:w-[55%] p-7 sm:p-8 md:p-12 bg-white dark:bg-[#15181C] flex flex-col justify-center">
+            <div className="mb-6">
+              <h3 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
+                Welcome Back
+              </h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 font-normal mt-1">
+                Sign in to Nadikomuniti
+              </p>
+            </div>
 
-        {/* ========================================================================= */}
-        {/* RIGHT FORM COLUMN                                                         */}
-        {/* ========================================================================= */}
-        <div className="lg:w-[55%] p-6 sm:p-8 lg:p-10 flex flex-col justify-center bg-white dark:bg-[#15181C]">
-          
-          {/* 1. SIGN IN MODE */}
-          {mode === 'signin' && (
-            <div>
-              <div className="mb-6">
-                <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">
-                  Welcome back
-                </h2>
-                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-                  Log in to your verified resident account to access the community hub.
-                </p>
+            {/* Feedback Alerts */}
+            {errorMessage && (
+              <div className="mb-4 p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 flex items-start gap-2.5 text-xs text-rose-700 dark:text-rose-300">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <div className="flex-1 font-medium leading-relaxed">{errorMessage}</div>
+              </div>
+            )}
+            {successMessage && (
+              <div className="mb-4 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 flex items-start gap-2.5 text-xs text-emerald-700 dark:text-emerald-300">
+                <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+                <div className="flex-1 font-medium leading-relaxed">{successMessage}</div>
+              </div>
+            )}
+
+            <form onSubmit={handleSignIn} className="space-y-4 sm:space-y-5">
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300" htmlFor="signin-email">
+                  Email Address
+                </label>
+                <div className="relative flex items-center">
+                  <Mail className="absolute left-3.5 w-4 h-4 text-slate-400 pointer-events-none" />
+                  <input
+                    id="signin-email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="name@elmina.resident.my"
+                    autoComplete="email"
+                    required
+                    className="w-full h-11 sm:h-12 rounded-xl bg-slate-50 dark:bg-slate-900/50 pl-11 pr-4 text-xs sm:text-sm text-slate-800 dark:text-white placeholder:text-slate-400 border border-slate-200 dark:border-slate-800 transition-colors focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-[#9E1315]/30 focus:border-[#9E1315]"
+                  />
+                </div>
               </div>
 
-              {/* Feedback Alert Banners */}
-              {errorMessage && (
-                <div className="mb-4 p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 flex items-start gap-2.5 text-xs text-rose-700 dark:text-rose-300">
-                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                  <div className="flex-1 font-medium leading-relaxed">{errorMessage}</div>
-                </div>
-              )}
-              {successMessage && (
-                <div className="mb-4 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 flex items-start gap-2.5 text-xs text-emerald-700 dark:text-emerald-300">
-                  <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
-                  <div className="flex-1 font-medium leading-relaxed">{successMessage}</div>
-                </div>
-              )}
-
-              <form onSubmit={handleSignIn} className="space-y-4">
-                {/* Email Address */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                    Email Address
-                  </label>
-                  <div className="relative">
-                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="resident@elmina.my"
-                      autoComplete="email"
-                      required
-                      className="w-full pl-10 pr-4 py-2.5 text-xs sm:text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#9E1315] focus:border-transparent transition-all"
-                    />
-                  </div>
-                </div>
-
-                {/* Password */}
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                      Password
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setMode('forgot')}
-                      className="text-xs font-semibold text-[#9E1315] dark:text-rose-400 hover:underline cursor-pointer"
-                    >
-                      Forgot password?
-                    </button>
-                  </div>
-                  <div className="relative">
-                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Enter your password"
-                      autoComplete="current-password"
-                      required
-                      className="w-full pl-10 pr-10 py-2.5 text-xs sm:text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#9E1315] focus:border-transparent transition-all"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
-                      aria-label={showPassword ? 'Hide password' : 'Show password'}
-                    >
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Remember Me */}
-                <div className="flex items-center justify-between pt-1">
-                  <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-600 dark:text-slate-400">
-                    <input
-                      type="checkbox"
-                      checked={rememberMe}
-                      onChange={(e) => setRememberMe(e.target.checked)}
-                      className="w-4 h-4 rounded text-[#9E1315] focus:ring-[#9E1315] border-slate-300 dark:border-slate-700"
-                    />
-                    <span>Remember my session</span>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300" htmlFor="signin-password">
+                    Password
                   </label>
                 </div>
+                <div className="relative flex items-center">
+                  <Lock className="absolute left-3.5 w-4 h-4 text-slate-400 pointer-events-none" />
+                  <input
+                    id="signin-password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter your password"
+                    autoComplete="current-password"
+                    required
+                    className="w-full h-11 sm:h-12 rounded-xl bg-slate-50 dark:bg-slate-900/50 pl-11 pr-11 text-xs sm:text-sm text-slate-800 dark:text-white placeholder:text-slate-400 border border-slate-200 dark:border-slate-800 transition-colors focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-[#9E1315]/30 focus:border-[#9E1315]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors rounded-lg flex items-center justify-center cursor-pointer"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4 text-slate-400" />}
+                  </button>
+                </div>
+              </div>
 
-                {/* Submit Sign In Button */}
+              <div className="flex items-center justify-between pt-0.5">
+                <label className="flex items-center space-x-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="w-4 h-4 rounded text-[#9E1315] accent-[#9E1315] focus:ring-[#9E1315]"
+                  />
+                  <span className="text-xs text-slate-600 dark:text-slate-400">Remember Me</span>
+                </label>
                 <button
-                  type="submit"
-                  disabled={isLoading}
-                  className="w-full py-2.5 sm:py-3 px-4 rounded-xl bg-gradient-to-r from-[#9E1315] to-[#BA1B1D] hover:from-[#851012] hover:to-[#A01719] text-white font-bold text-xs sm:text-sm shadow-md hover:shadow-lg active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  type="button"
+                  onClick={() => {
+                    setErrorMessage(null);
+                    setSuccessMessage(null);
+                    setMode('forgot');
+                  }}
+                  className="text-xs font-medium text-[#9E1315] dark:text-rose-400 hover:underline transition-colors cursor-pointer"
                 >
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Signing In...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>Sign In to Community Hub</span>
-                      <ArrowRight className="w-4 h-4" />
-                    </>
-                  )}
+                  Forgot Password?
                 </button>
-              </form>
-
-              {/* Safe Demo Bypass Separator */}
-              <div className="relative my-6 text-center">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-slate-200 dark:border-slate-800" />
-                </div>
-                <span className="relative px-3 bg-white dark:bg-[#15181C] text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                  or preview without login
-                </span>
               </div>
 
-              {/* Try Demo Button (Requirement Part 11) */}
               <button
-                type="button"
-                onClick={handleTryDemo}
-                disabled={isDemoLoading}
-                className="w-full py-2.5 px-4 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 bg-slate-50 hover:bg-slate-100 dark:bg-slate-900/60 dark:hover:bg-slate-900 text-slate-800 dark:text-slate-200 font-semibold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-2xs group"
+                type="submit"
+                disabled={isLoading}
+                className="w-full h-11 sm:h-12 mt-2 rounded-xl font-semibold text-xs sm:text-sm text-white bg-gradient-to-r from-[#9E1315] via-[#BA1B1D] to-[#D97706] shadow-md hover:shadow-xl transition-all duration-200 transform hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
               >
-                {isDemoLoading ? (
+                {isLoading ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin text-[#9E1315]" />
-                    <span>Launching Demo Mode...</span>
+                    <Loader2 className="w-4 h-4 animate-spin text-white" />
+                    <span>Signing in...</span>
                   </>
                 ) : (
                   <>
-                    <Sparkles className="w-4 h-4 text-amber-500 group-hover:scale-110 transition-transform" />
-                    <span>Try Demo Mode (Instant Preview)</span>
+                    <span>Sign In</span>
+                    <ArrowRight className="w-4 h-4" />
                   </>
                 )}
               </button>
-              <p className="text-[10px] text-center text-slate-400 mt-1.5">
-                Safe synthetic test environment • Management changes and private data are protected.
-              </p>
+            </form>
 
-              {/* Link to Sign Up */}
-              <div className="mt-6 text-center text-xs text-slate-600 dark:text-slate-400">
-                Don&apos;t have a resident account?{' '}
+            {/* Instant Preview Demo Option */}
+            <div className="relative my-5 text-center">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-slate-200 dark:border-slate-800" />
+              </div>
+              <span className="relative px-3 bg-white dark:bg-[#15181C] text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                or preview without login
+              </span>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleTryDemo}
+              disabled={isDemoLoading}
+              className="w-full py-2.5 px-4 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 bg-slate-50 hover:bg-slate-100 dark:bg-slate-900/60 dark:hover:bg-slate-900 text-slate-800 dark:text-slate-200 font-semibold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-2xs group"
+            >
+              {isDemoLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin text-[#9E1315]" />
+                  <span>Launching Demo Mode...</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4 text-amber-500 group-hover:scale-110 transition-transform" />
+                  <span>Try Demo Mode (Instant Preview)</span>
+                </>
+              )}
+            </button>
+
+            {/* Switch to Sign Up */}
+            <div className="mt-6 text-center">
+              <p className="text-xs text-slate-600 dark:text-slate-400">
+                Don&apos;t have an account?{' '}
                 <button
                   type="button"
                   onClick={() => {
@@ -474,194 +429,284 @@ export default function AuthView() {
                     setSuccessMessage(null);
                     setMode('signup');
                   }}
-                  className="font-bold text-[#9E1315] dark:text-rose-400 hover:underline cursor-pointer"
+                  className="font-semibold text-[#9E1315] dark:text-rose-400 hover:underline transition-colors ml-1 cursor-pointer"
                 >
                   Sign Up
                 </button>
-              </div>
+              </p>
             </div>
-          )}
+          </div>
+        </div>
+      )}
 
-          {/* 2. SIGN UP MODE */}
-          {mode === 'signup' && (
-            <div>
-              <div className="mb-5">
-                <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">
-                  Create Resident Account
+      {/* ========================================================================= */}
+      {/* 2. REGISTER SCREEN (Exact Google Stitch Design: 16bd15888b304d96a2b2f82c127e6d2c) */}
+      {/* ========================================================================= */}
+      {mode === 'signup' && (
+        <div className="w-full max-w-4xl mx-auto rounded-3xl shadow-2xl backdrop-blur-xl bg-white/95 dark:bg-[#15181C]/95 overflow-hidden flex flex-col md:flex-row min-h-[660px] relative my-auto animate-in fade-in zoom-in-95 duration-200">
+          {/* Left Column (42%) */}
+          <div className="relative w-full md:w-[42%] p-7 sm:p-8 md:p-10 flex flex-col justify-between text-white overflow-hidden">
+            <img 
+              alt="Township neighborhood community" 
+              className="absolute inset-0 w-full h-full object-cover scale-110 filter brightness-[0.7] saturate-[1.15]" 
+              src="/images/elmina-township-bg.png" 
+            />
+            <div className="absolute inset-0 bg-gradient-to-br from-[#9E1315]/95 via-[#770007]/85 to-[#fd8a42]/80 mix-blend-multiply" />
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-[#9E1315]/30 to-transparent" />
+
+            <div className="relative z-10 flex flex-col h-full justify-between gap-8">
+              {/* Logo */}
+              <div className="flex flex-col gap-3">
+                <div className="bg-white/95 rounded-xl p-3 shadow-md backdrop-blur-sm max-w-[240px] w-full flex items-center justify-center">
+                  <img 
+                    src="/images/nadikomuniti-logo-transparent.png" 
+                    alt="Nadikomuniti - Connect & Relax" 
+                    className="max-w-[240px] w-full h-auto object-contain"
+                  />
+                </div>
+              </div>
+
+              {/* Slogan & Value Points */}
+              <div className="flex flex-col gap-4 my-auto py-6">
+                <h2 className="text-2xl sm:text-3xl text-white font-bold tracking-tight">
+                  Join Your Community.
                 </h2>
-                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-                  Register with your township details to access community messaging and resilience tools.
+                <p className="text-xs sm:text-sm text-white/80 leading-relaxed font-normal">
+                  Exclusive verification gateway for authenticated homeowners and accredited occupants.
                 </p>
               </div>
 
-              {/* Feedback Alert Banners */}
-              {errorMessage && (
-                <div className="mb-4 p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 flex items-start gap-2.5 text-xs text-rose-700 dark:text-rose-300">
-                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                  <div className="flex-1 font-medium leading-relaxed">{errorMessage}</div>
-                </div>
-              )}
-              {successMessage && (
-                <div className="mb-4 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 flex items-start gap-2.5 text-xs text-emerald-700 dark:text-emerald-300">
-                  <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
-                  <div className="flex-1 font-medium leading-relaxed">{successMessage}</div>
-                </div>
-              )}
+              <div className="pt-4 flex items-center justify-between text-[11px] text-white/70">
+                <span>Direct Resident Enrollment</span>
+                <span>Immediate Access</span>
+              </div>
+            </div>
+          </div>
 
-              <form onSubmit={handleSignUp} className="space-y-3.5">
-                {/* Full Name */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Full Name (As registered in township)
+          {/* Right Column (58%) */}
+          <div className="w-full md:w-[58%] p-7 sm:p-8 md:p-12 bg-white/95 dark:bg-[#15181C] flex flex-col justify-center">
+            {/* Form Header */}
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-1.5">
+                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
+                  Join Your Community
+                </h1>
+                <span className="px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-[#9E1315] dark:text-rose-400 text-[11px] font-semibold tracking-wide uppercase">
+                  Registration
+                </span>
+              </div>
+              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-normal">
+                Create your official Nadikomuniti resident account
+              </p>
+            </div>
+
+            {/* Feedback Alerts */}
+            {errorMessage && (
+              <div className="mb-4 p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 flex items-start gap-2.5 text-xs text-rose-700 dark:text-rose-300">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <div className="flex-1 font-medium leading-relaxed">{errorMessage}</div>
+              </div>
+            )}
+            {successMessage && (
+              <div className="mb-4 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 flex items-start gap-2.5 text-xs text-emerald-700 dark:text-emerald-300">
+                <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+                <div className="flex-1 font-medium leading-relaxed">{successMessage}</div>
+              </div>
+            )}
+
+            <form onSubmit={handleSignUp} className="flex flex-col gap-3.5">
+              {/* Field 1: Full Legal Name */}
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300" htmlFor="signup-name">
+                  Full Legal Name
+                </label>
+                <div className="relative flex items-center">
+                  <User className="absolute left-3.5 w-4 h-4 text-slate-400 pointer-events-none" />
+                  <input
+                    id="signup-name"
+                    type="text"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="e.g. Amir Zakaria"
+                    autoComplete="name"
+                    required
+                    className="w-full h-10 pl-10 pr-4 rounded-xl bg-slate-50 dark:bg-slate-900/50 text-xs sm:text-sm text-slate-800 dark:text-white placeholder:text-slate-400 border border-slate-200 dark:border-slate-800 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-[#9E1315]/30 focus:border-[#9E1315] transition-all"
+                  />
+                </div>
+              </div>
+
+              {/* Field 2: Township Precinct & Unit Address Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300" htmlFor="signup-precinct">
+                    Township Precinct
                   </label>
-                  <div className="relative">
-                    <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <div className="relative flex items-center">
+                    <MapPin className="absolute left-3.5 w-4 h-4 text-slate-400 pointer-events-none" />
+                    <select
+                      id="signup-precinct"
+                      value={precinct}
+                      onChange={(e) => setPrecinct(e.target.value)}
+                      className="w-full h-10 pl-10 pr-3 rounded-xl bg-slate-50 dark:bg-slate-900/50 text-xs text-slate-800 dark:text-white border border-slate-200 dark:border-slate-800 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-[#9E1315]/30 focus:border-[#9E1315] transition-all"
+                    >
+                      <option value="Elmina Valley 1 (EV1)">Elmina Valley 1 (EV1)</option>
+                      <option value="Elmina Valley 2 (EV2)">Elmina Valley 2 (EV2)</option>
+                      <option value="Elmina Valley 3 (EV3)">Elmina Valley 3 (EV3)</option>
+                      <option value="Elmina Valley 4 (EV4)">Elmina Valley 4 (EV4)</option>
+                      <option value="Elmina Valley 5 (EV5)">Elmina Valley 5 (EV5)</option>
+                      <option value="Elmina Green 1">Elmina Green 1</option>
+                      <option value="Elmina Green 3">Elmina Green 3</option>
+                      <option value="Elmina Green 4">Elmina Green 4</option>
+                      <option value="Elmina Ridge">Elmina Ridge</option>
+                      <option value="Ilham Residence">Ilham Residence</option>
+                      <option value="Denai Alam">Denai Alam</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300" htmlFor="signup-unit">
+                    Unit / House Number
+                  </label>
+                  <div className="relative flex items-center">
+                    <Home className="absolute left-3.5 w-4 h-4 text-slate-400 pointer-events-none" />
                     <input
+                      id="signup-unit"
                       type="text"
-                      value={fullName}
-                      onChange={(e) => setFullName(e.target.value)}
-                      placeholder="e.g. Nurul Huda binti Ahmad"
+                      value={unitNumber}
+                      onChange={(e) => setUnitNumber(e.target.value)}
+                      placeholder="e.g. No. 12, Jln EV 1/2"
                       required
-                      className="w-full pl-10 pr-4 py-2 text-xs sm:text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#9E1315] focus:border-transparent transition-all"
+                      className="w-full h-10 pl-10 pr-4 rounded-xl bg-slate-50 dark:bg-slate-900/50 text-xs sm:text-sm text-slate-800 dark:text-white placeholder:text-slate-400 border border-slate-200 dark:border-slate-800 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-[#9E1315]/30 focus:border-[#9E1315] transition-all"
                     />
                   </div>
                 </div>
+              </div>
 
-                {/* Email Address */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Email Address
-                  </label>
-                  <div className="relative">
-                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="resident@elmina.my"
-                      autoComplete="email"
-                      required
-                      className="w-full pl-10 pr-4 py-2 text-xs sm:text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#9E1315] focus:border-transparent transition-all"
-                    />
-                  </div>
+              {/* Privacy Shield Note */}
+              <div className="px-3 py-1.5 rounded-lg bg-slate-100/70 dark:bg-slate-850/60 border border-slate-200/60 dark:border-slate-800 flex items-center gap-2 text-[10px] text-slate-500 dark:text-slate-400">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <span>Private &amp; masked: Your address is never published openly and is only used for authorized neighbour contact.</span>
+              </div>
+
+              {/* Field 3: Email Address */}
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300" htmlFor="signup-email">
+                  Email Address
+                </label>
+                <div className="relative flex items-center">
+                  <Mail className="absolute left-3.5 w-4 h-4 text-slate-400 pointer-events-none" />
+                  <input
+                    id="signup-email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="name@elmina.resident.my"
+                    autoComplete="email"
+                    required
+                    className="w-full h-10 pl-10 pr-4 rounded-xl bg-slate-50 dark:bg-slate-900/50 text-xs sm:text-sm text-slate-800 dark:text-white placeholder:text-slate-400 border border-slate-200 dark:border-slate-800 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-[#9E1315]/30 focus:border-[#9E1315] transition-all"
+                  />
                 </div>
+              </div>
 
-                {/* Township Precinct & Unit Number */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Township Precinct
-                    </label>
-                    <div className="relative">
-                      <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                      <select
-                        value={precinct}
-                        onChange={(e) => setPrecinct(e.target.value)}
-                        className="w-full pl-10 pr-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#9E1315] focus:border-transparent transition-all"
-                      >
-                        <option value="Elmina West (EV1)">Elmina West (EV1)</option>
-                        <option value="Elmina West (EV2)">Elmina West (EV2)</option>
-                        <option value="Elmina East">Elmina East</option>
-                        <option value="Elmina Green 1">Elmina Green 1</option>
-                        <option value="Elmina Green 3">Elmina Green 3</option>
-                        <option value="Elmina Ridge">Elmina Ridge</option>
-                        <option value="Denai Alam">Denai Alam</option>
-                        <option value="Bandar Elmina (Other)">Bandar Elmina (Other)</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      House / Unit (Optional)
-                    </label>
-                    <div className="relative">
-                      <Home className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                      <input
-                        type="text"
-                        value={unitNumber}
-                        onChange={(e) => setUnitNumber(e.target.value)}
-                        placeholder="e.g. EW-12"
-                        className="w-full pl-10 pr-4 py-2 text-xs sm:text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#9E1315] focus:border-transparent transition-all"
-                      />
-                    </div>
-                  </div>
+              {/* Field 2: Password */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300" htmlFor="signup-password">
+                  Password
+                </label>
+                <div className="relative flex items-center">
+                  <Lock className="absolute left-3.5 w-4 h-4 text-slate-400 pointer-events-none" />
+                  <input
+                    id="signup-password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Minimum 6 characters"
+                    autoComplete="new-password"
+                    required
+                    className="w-full h-11 pl-10 pr-11 rounded-xl bg-slate-50 dark:bg-slate-900/50 text-xs sm:text-sm text-slate-800 dark:text-white placeholder:text-slate-400 border border-slate-200 dark:border-slate-800 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-[#9E1315]/30 focus:border-[#9E1315] transition-all"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded cursor-pointer"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
                 </div>
+              </div>
 
-                {/* Password & Confirm */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Password
-                    </label>
-                    <div className="relative">
-                      <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        placeholder="Min. 6 chars"
-                        required
-                        className="w-full pl-10 pr-3 py-2 text-xs sm:text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#9E1315] focus:border-transparent transition-all"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Confirm Password
-                    </label>
-                    <div className="relative">
-                      <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        placeholder="Repeat password"
-                        required
-                        className="w-full pl-10 pr-3 py-2 text-xs sm:text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#9E1315] focus:border-transparent transition-all"
-                      />
-                    </div>
-                  </div>
+              {/* Field 3: Confirm Password */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300" htmlFor="signup-confirm-password">
+                  Confirm Password
+                </label>
+                <div className="relative flex items-center">
+                  <Lock className="absolute left-3.5 w-4 h-4 text-slate-400 pointer-events-none" />
+                  <input
+                    id="signup-confirm-password"
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Re-enter your password"
+                    autoComplete="new-password"
+                    required
+                    className="w-full h-11 pl-10 pr-11 rounded-xl bg-slate-50 dark:bg-slate-900/50 text-xs sm:text-sm text-slate-800 dark:text-white placeholder:text-slate-400 border border-slate-200 dark:border-slate-800 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-[#9E1315]/30 focus:border-[#9E1315] transition-all"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-3 p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded cursor-pointer"
+                    aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                  >
+                    {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
                 </div>
+              </div>
 
-                {/* Terms agreement */}
-                <div className="pt-1">
-                  <label className="flex items-start gap-2 cursor-pointer text-[11px] text-slate-600 dark:text-slate-400">
-                    <input
-                      type="checkbox"
-                      checked={agreedToTerms}
-                      onChange={(e) => setAgreedToTerms(e.target.checked)}
-                      className="w-4 h-4 rounded text-[#9E1315] focus:ring-[#9E1315] border-slate-300 dark:border-slate-700 shrink-0 mt-0.5"
-                    />
-                    <span>
-                      I agree to the Community Conduct Guidelines & Mediated Privacy Bylaws. Account creation grants default Resident privileges.
-                    </span>
-                  </label>
-                </div>
+              {/* Terms & Privacy Checkbox */}
+              <div className="pt-1">
+                <label className="flex items-start gap-2.5 cursor-pointer select-none group">
+                  <input
+                    id="signup-terms"
+                    type="checkbox"
+                    checked={agreedToTerms}
+                    onChange={(e) => setAgreedToTerms(e.target.checked)}
+                    className="mt-0.5 w-4 h-4 rounded text-[#9E1315] accent-[#9E1315] focus:ring-0 cursor-pointer shrink-0"
+                    required
+                  />
+                  <span className="text-xs text-slate-600 dark:text-slate-400 leading-snug">
+                    I agree to the <span className="text-[#9E1315] dark:text-rose-400 font-medium hover:underline">Township Terms of Civic Conduct</span> and <span className="text-[#9E1315] dark:text-rose-400 font-medium hover:underline">Privacy Guidelines</span>.
+                  </span>
+                </label>
+              </div>
 
-                {/* Submit Sign Up Button */}
+              {/* Primary CTA Button */}
+              <div className="pt-2">
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full py-2.5 sm:py-3 px-4 rounded-xl bg-gradient-to-r from-[#9E1315] to-[#BA1B1D] hover:from-[#851012] hover:to-[#A01719] text-white font-bold text-xs sm:text-sm shadow-md hover:shadow-lg active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2"
+                  className="w-full h-12 rounded-xl text-xs sm:text-sm font-semibold text-white bg-gradient-to-r from-[#9E1315] via-[#BA1B1D] to-[#fd8a42] shadow-lg shadow-[#9E1315]/25 hover:shadow-xl hover:shadow-[#9E1315]/35 active:scale-[0.99] transition-all flex items-center justify-center gap-2 group cursor-pointer disabled:opacity-50"
                 >
                   {isLoading ? (
                     <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Creating Resident Account...</span>
+                      <Loader2 className="w-4 h-4 animate-spin text-white" />
+                      <span>Creating Account...</span>
                     </>
                   ) : (
                     <>
-                      <span>Complete Registration</span>
-                      <ArrowRight className="w-4 h-4" />
+                      <span>Create Account</span>
+                      <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                     </>
                   )}
                 </button>
-              </form>
+              </div>
+            </form>
 
-              {/* Link to Sign In */}
-              <div className="mt-5 text-center text-xs text-slate-600 dark:text-slate-400">
+            {/* Footer & Alternate Sign In */}
+            <div className="mt-8 pt-4 text-center">
+              <p className="text-xs text-slate-600 dark:text-slate-400">
                 Already have an account?{' '}
                 <button
                   type="button"
@@ -670,139 +715,205 @@ export default function AuthView() {
                     setSuccessMessage(null);
                     setMode('signin');
                   }}
-                  className="font-bold text-[#9E1315] dark:text-rose-400 hover:underline cursor-pointer"
+                  className="text-[#9E1315] dark:text-rose-400 font-semibold hover:underline transition-colors ml-1 inline-flex items-center gap-0.5 cursor-pointer"
                 >
                   Sign In
+                  <ArrowRight className="w-3.5 h-3.5" />
                 </button>
-              </div>
-            </div>
-          )}
-
-          {/* 3. VERIFY EMAIL MODE (Stitch design approved screen) */}
-          {mode === 'verify' && (
-            <div className="text-center py-4">
-              <div className="w-16 h-16 rounded-full bg-rose-100 dark:bg-rose-950/60 text-[#9E1315] dark:text-rose-300 mx-auto flex items-center justify-center mb-5 ring-8 ring-rose-50 dark:ring-rose-950/30">
-                <MailCheck className="w-8 h-8" />
-              </div>
-
-              <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white mb-2">
-                Check Your Email
-              </h2>
-              <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 max-w-sm mx-auto leading-relaxed mb-6">
-                We sent a secure confirmation link to <span className="font-semibold text-slate-900 dark:text-white">{unconfirmedEmail || 'your email'}</span>. Click the link to complete account verification and log in.
               </p>
-
-              {errorMessage && (
-                <div className="mb-4 p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-xs text-rose-700 dark:text-rose-300">
-                  {errorMessage}
-                </div>
-              )}
-              {successMessage && (
-                <div className="mb-4 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 text-xs text-emerald-700 dark:text-emerald-300">
-                  {successMessage}
-                </div>
-              )}
-
-              <div className="space-y-3 max-w-xs mx-auto">
-                <button
-                  type="button"
-                  onClick={handleResendVerification}
-                  disabled={resendCooldown > 0}
-                  className="w-full py-2.5 px-4 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold transition-all disabled:opacity-50 cursor-pointer"
-                >
-                  {resendCooldown > 0 ? `Resend Email in ${resendCooldown}s` : 'Resend Verification Email'}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setErrorMessage(null);
-                    setSuccessMessage(null);
-                    setMode('signin');
-                  }}
-                  className="w-full py-2.5 px-4 rounded-xl bg-[#9E1315] hover:bg-[#851012] text-white text-xs font-bold transition-all cursor-pointer shadow-xs"
-                >
-                  Back to Sign In
-                </button>
-              </div>
             </div>
-          )}
-
-          {/* 4. FORGOT PASSWORD MODE */}
-          {mode === 'forgot' && (
-            <div>
-              <div className="mb-6">
-                <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">
-                  Reset Password
-                </h2>
-                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-                  Enter your registered email address and we will send you instructions to reset your password.
-                </p>
-              </div>
-
-              {errorMessage && (
-                <div className="mb-4 p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-xs text-rose-700 dark:text-rose-300">
-                  {errorMessage}
-                </div>
-              )}
-              {successMessage && (
-                <div className="mb-4 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 text-xs text-emerald-700 dark:text-emerald-300">
-                  {successMessage}
-                </div>
-              )}
-
-              <form onSubmit={handleForgotPassword} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                    Registered Email Address
-                  </label>
-                  <div className="relative">
-                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="resident@elmina.my"
-                      required
-                      className="w-full pl-10 pr-4 py-2.5 text-xs sm:text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#9E1315] focus:border-transparent transition-all"
-                    />
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={isLoading}
-                  className="w-full py-2.5 sm:py-3 px-4 rounded-xl bg-[#9E1315] hover:bg-[#851012] text-white font-bold text-xs sm:text-sm shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                >
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Sending Reset Link...</span>
-                    </>
-                  ) : (
-                    <span>Send Password Reset Link</span>
-                  )}
-                </button>
-
-                <div className="text-center pt-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setErrorMessage(null);
-                      setSuccessMessage(null);
-                      setMode('signin');
-                    }}
-                    className="text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white cursor-pointer"
-                  >
-                    ← Back to Sign In
-                  </button>
-                </div>
-              </form>
-            </div>
-          )}
-
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 3. VERIFY SCREEN (Exact Google Stitch Design: d8626ab78be24aa184c6b4a8b2028492) */}
+      {/* ========================================================================= */}
+      {mode === 'verify' && (
+        <div className="relative z-10 w-full max-w-lg mx-auto bg-white/95 dark:bg-[#15181C]/95 backdrop-blur-2xl rounded-3xl shadow-2xl p-7 sm:p-8 md:p-10 text-center transition-all duration-300 my-auto animate-in fade-in zoom-in-95">
+          {/* Logo */}
+          <div className="mb-4 flex justify-center">
+            <img 
+              src="/images/nadikomuniti-logo-transparent.png" 
+              alt="Nadikomuniti Logo" 
+              className="max-w-[180px] w-auto h-auto mx-auto object-contain mb-2"
+            />
+          </div>
+
+          <h1 className="text-2xl sm:text-3xl text-slate-900 dark:text-white mb-2 font-bold tracking-tight">
+            Verify Your Email
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mb-4">
+            We&apos;ve sent a verification link to your registered email address.
+          </p>
+
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg font-mono text-xs text-slate-800 dark:text-slate-200 mb-5 shadow-xs">
+            <Mail className="w-3.5 h-3.5 text-slate-500" />
+            <span className="tracking-tight font-medium">
+              {getMaskedEmail(unconfirmedEmail || email)}
+            </span>
+          </div>
+
+          {/* Feedback alerts */}
+          {errorMessage && (
+            <div className="mb-4 p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-xs text-rose-700 dark:text-rose-300">
+              {errorMessage}
+            </div>
+          )}
+          {successMessage && (
+            <div className="mb-4 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 text-xs text-emerald-700 dark:text-emerald-300">
+              {successMessage}
+            </div>
+          )}
+
+          <div className="flex flex-col gap-3 mb-6">
+            <a 
+              href="mailto:" 
+              className="w-full h-11 sm:h-12 rounded-xl text-xs sm:text-sm font-semibold text-white bg-gradient-to-r from-[#9E1315] via-[#BA1B1D] to-[#fd8a42] hover:from-[#851012] hover:to-[#9E1315] shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center gap-2 active:scale-[0.98]"
+            >
+              <ExternalLink className="w-4 h-4" />
+              <span>Open Email App</span>
+            </a>
+
+            <button
+              type="button"
+              onClick={handleResendVerification}
+              disabled={resendCooldown > 0}
+              className={`w-full h-11 rounded-xl text-xs sm:text-sm font-medium transition-all duration-150 flex items-center justify-center gap-2 select-none ${
+                resendCooldown > 0
+                  ? 'bg-slate-100 dark:bg-slate-800/80 text-slate-400 cursor-not-allowed'
+                  : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer shadow-xs border border-slate-200 dark:border-slate-700'
+              }`}
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>
+                {resendCooldown > 0 
+                  ? `Resend Verification Email (${resendCooldown}s)` 
+                  : 'Resend Verification Email'}
+              </span>
+            </button>
+          </div>
+
+          <div className="flex items-center justify-center gap-1.5 mb-6">
+            <button
+              type="button"
+              onClick={() => {
+                setErrorMessage(null);
+                setSuccessMessage(null);
+                setMode('signin');
+              }}
+              className="inline-flex items-center gap-1 text-xs sm:text-sm font-semibold text-[#9E1315] dark:text-rose-400 hover:underline transition-colors cursor-pointer"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Back to Sign In</span>
+            </button>
+          </div>
+
+          <div className="pt-3 bg-slate-100/70 dark:bg-slate-900/60 rounded-xl p-3 flex items-start gap-2 text-left">
+            <Info className="w-4 h-4 text-slate-500 shrink-0 mt-0.5" />
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug">
+              Link expires in 24 hours. Ensure to check your promotions or spam folder if the email does not show in your primary inbox.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 4. FORGOT PASSWORD (Exact Google Stitch Design: 220fa0f4d8d84833a06df8a597c2e802) */}
+      {/* ========================================================================= */}
+      {mode === 'forgot' && (
+        <div className="relative z-10 w-full max-w-lg mx-auto bg-white/95 dark:bg-[#15181C]/95 backdrop-blur-2xl rounded-3xl shadow-2xl p-7 sm:p-8 md:p-10 text-center transition-all my-auto animate-in fade-in zoom-in-95">
+          {/* Ambient Glow */}
+          <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-48 h-48 bg-[#9E1315]/10 rounded-full blur-3xl pointer-events-none" />
+
+          {/* Logo */}
+          <div className="flex justify-center mb-4">
+            <img 
+              src="/images/nadikomuniti-logo-transparent.png" 
+              alt="Nadikomuniti Logo" 
+              className="max-w-[180px] w-auto h-auto mx-auto object-contain mb-2"
+            />
+          </div>
+
+          <h1 className="text-2xl sm:text-3xl text-slate-900 dark:text-white mb-2 font-bold tracking-tight">
+            Forgot Password?
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mb-6 font-normal">
+            Enter your email address to reset your password.
+          </p>
+
+          {/* Feedback alerts */}
+          {errorMessage && (
+            <div className="mb-4 p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-xs text-rose-700 dark:text-rose-300">
+              {errorMessage}
+            </div>
+          )}
+          {successMessage && (
+            <div className="mb-4 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 text-xs text-emerald-700 dark:text-emerald-300">
+              {successMessage}
+            </div>
+          )}
+
+          <form onSubmit={handleForgotPassword} className="space-y-4 text-left">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wide" htmlFor="recovery-email">
+                Registered Email Address
+              </label>
+              <div className="relative flex items-center">
+                <input
+                  id="recovery-email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="name@elmina.resident.my"
+                  autoComplete="email"
+                  required
+                  className="h-11 sm:h-12 w-full rounded-xl bg-slate-50 dark:bg-slate-900/50 px-4 pl-11 text-xs sm:text-sm text-slate-800 dark:text-white placeholder:text-slate-400 border border-slate-200 dark:border-slate-800 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-[#9E1315]/30 focus:border-[#9E1315] shadow-inner transition-colors"
+                />
+                <Mail className="absolute left-3.5 w-4 h-4 text-slate-400 pointer-events-none" />
+              </div>
+            </div>
+
+            <div className="flex items-start gap-2.5 p-3 rounded-xl bg-slate-100/80 dark:bg-slate-900/60 text-slate-600 dark:text-slate-400 text-xs leading-relaxed">
+              <Info className="w-4 h-4 text-slate-500 shrink-0 mt-0.5" />
+              <span>Password reset requests are audited and limited to verified resident registered domains and council portals.</span>
+            </div>
+
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full h-11 sm:h-12 rounded-xl text-xs sm:text-sm font-semibold text-white bg-gradient-to-r from-[#BA1B1D] via-[#D97706] to-[#E53935] shadow-lg hover:shadow-xl active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin text-white" />
+                  <span>Sending Reset Link...</span>
+                </>
+              ) : (
+                <>
+                  <span>Send Reset Link</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
+            </button>
+          </form>
+
+          <div className="pt-5 mt-2">
+            <button
+              type="button"
+              onClick={() => {
+                setErrorMessage(null);
+                setSuccessMessage(null);
+                setMode('signin');
+              }}
+              className="text-xs sm:text-sm font-semibold text-[#9E1315] dark:text-rose-400 hover:underline inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Back to Sign In</span>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -23,6 +23,32 @@ export interface UserProfile {
   createdAt: string;
 }
 
+export type AddressVerificationStatus = 'unsubmitted' | 'pending' | 'verified' | 'rejected' | 'revoked';
+
+export type ResidenceType = 'owner' | 'tenant' | 'household_member';
+
+export interface ResidentAddressRecord {
+  id: string;
+  userId: string;
+  fullName: string;
+  userName?: string;
+  userAvatar?: string;
+  precinct: string;
+  unitNumber: string;
+  streetName?: string;
+  residenceType: ResidenceType;
+  proofDocumentUrl?: string;
+  proofDocumentName?: string;
+  status: AddressVerificationStatus;
+  rejectionReason?: string;
+  reviewedBy?: string;
+  reviewedByName?: string;
+  reviewedAt?: string;
+  reviewerNotes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type PostCategory = 
   | 'announcement'      // Official Announcement (Management only)
   | 'security_alert'    // Security Alert (Security/Management)

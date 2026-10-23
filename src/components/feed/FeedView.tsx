@@ -791,6 +791,12 @@ export default function FeedView() {
                                 {post.authorPrecinct || 'Elmina West'}
                               </span>
                             )}
+                            {!post.isAnonymous && post.authorVerified && !isOfficial && (
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/80 text-[10px] font-semibold" title="Registered account">
+                                <span className="material-symbols-outlined text-xs text-emerald-600 dark:text-emerald-400" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+                                <span>Verified</span>
+                              </span>
+                            )}
                           </div>
                           <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 text-[11px]">
                             <TimeAgo date={post.createdAt} />
@@ -1517,6 +1523,12 @@ export default function FeedView() {
                             <span className="material-symbols-outlined text-[12px] text-slate-400 dark:text-slate-500">verified</span>
                             {post.authorRole === 'management' ? 'Management' : 'Resident'}
                           </span>
+                          {!post.isAnonymous && post.authorVerified && post.authorRole !== 'management' && (
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/80 text-[10px] font-semibold" title="Registered account">
+                              <span className="material-symbols-outlined text-xs text-emerald-600 dark:text-emerald-400" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+                              <span>Verified</span>
+                            </span>
+                          )}
                         </div>
                         <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 text-[12px] mt-0.5">
                           <span>{post.authorPrecinct || 'City of Elmina'}</span>
