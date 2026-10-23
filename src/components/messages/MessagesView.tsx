@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useApp } from '@/lib/context/AppContext';
-import { Conversation, Message, PropertyMessageRequest } from '@/types';
+import { Conversation, Message, PropertyMessageRequest, UserProfile } from '@/types';
 import PropertySearchModal from '@/components/messages/PropertySearchModal';
 import KeyAuditModal from '@/components/messages/KeyAuditModal';
 import PhotoLightboxModal from '@/components/messages/PhotoLightboxModal';
@@ -49,12 +49,14 @@ import {
 } from 'lucide-react';
 import TimeAgo from '@/components/common/TimeAgo';
 import { uploadMedia } from '@/lib/storage/uploadMedia';
+import { toDatabaseUserId, fromDatabaseUserId } from '@/lib/utils/idMapping';
 
 export default function MessagesView() {
   const { 
     conversations, 
     messages, 
     messageRequests,
+    availableProfiles: profiles,
     sendMessage, 
     startConversation, 
     acceptMessageRequest,
@@ -90,19 +92,44 @@ export default function MessagesView() {
   const [isAnonymousReply, setIsAnonymousReply] = useState(false);
   const [feedbackToast, setFeedbackToast] = useState<string | null>(null);
 
-  // Filter conversations where current user is a participant
+  const currentDbUserId = toDatabaseUserId(currentUser.id);
+  const currentPersonaId = fromDatabaseUserId(currentUser.id);
+
+  // Determine whether an identifier belongs to the current active user
+  const isCurrentResident = useCallback((id?: string | null) => {
+    if (!id) return false;
+    if (id === currentUser.id) return true;
+    if (id === currentDbUserId) return true;
+    if (id === currentPersonaId) return true;
+    if (fromDatabaseUserId(id) === currentPersonaId) return true;
+    if (toDatabaseUserId(id) === currentDbUserId) return true;
+    return false;
+  }, [currentUser.id, currentDbUserId, currentPersonaId]);
+
+  const isUserParticipant = useCallback((p1: string, p2: string) => {
+    return isCurrentResident(p1) || isCurrentResident(p2);
+  }, [isCurrentResident]);
+
+  // Filter conversations where current user is a participant (supports persona IDs and Supabase UUIDs)
   const userConversations = conversations.filter(
-    (c) => c.participantOneId === currentUser.id || c.participantTwoId === currentUser.id
+    (c) => isUserParticipant(c.participantOneId, c.participantTwoId)
   );
 
   // Filter incoming property requests for this user
   const incomingRequests = messageRequests.filter(
-    (r) => r.recipientId === currentUser.id && r.status === 'pending'
+    (r) => r.status === 'pending' && isCurrentResident(r.recipientId)
   );
 
   const [activeConversationId, setActiveConversationId] = useState<string>(
     navigationTarget?.conversationId || ''
   );
+
+  // Auto-lock active conversation on initial load without jumping on message updates
+  useEffect(() => {
+    if (!activeConversationId && userConversations.length > 0) {
+      setActiveConversationId(userConversations[0].id);
+    }
+  }, [activeConversationId, userConversations]);
 
   const prevUserIdRef = useRef(currentUser.id);
 
@@ -231,10 +258,21 @@ export default function MessagesView() {
   };
 
   const getRecipientName = useCallback((conv: Conversation) => {
-    return conv.participantOneId === currentUser.id 
-      ? conv.participantTwoName 
-      : conv.participantOneName;
-  }, [currentUser.id]);
+    const isP1Current = isCurrentResident(conv.participantOneId);
+    const targetName = isP1Current ? conv.participantTwoName : conv.participantOneName;
+    const targetId = isP1Current ? conv.participantTwoId : conv.participantOneId;
+
+    if (targetName && targetName.trim().length > 0 && targetName !== 'Resident Neighbour') {
+      return targetName;
+    }
+
+    const prof = profiles.find((p: UserProfile) => p.id === targetId || toDatabaseUserId(p.id) === targetId || p.id === fromDatabaseUserId(targetId));
+    if (prof) {
+      return prof.displayName || prof.fullName;
+    }
+
+    return targetName || 'Resident Neighbour';
+  }, [isCurrentResident, profiles]);
 
   const getMaskedId = (conv: Conversation) => {
     if (conv.id === 'conv-harith') return '#EW-9821';
@@ -244,13 +282,19 @@ export default function MessagesView() {
     return `#${conv.id.slice(-6).toUpperCase()}`;
   };
 
-  const getPrecinctZone = (conv: Conversation) => {
+  const getPrecinctZone = useCallback((conv: Conversation) => {
+    const isP1Current = isCurrentResident(conv.participantOneId);
+    const targetId = isP1Current ? conv.participantTwoId : conv.participantOneId;
+    const prof = profiles.find((p: UserProfile) => p.id === targetId || toDatabaseUserId(p.id) === targetId || p.id === fromDatabaseUserId(targetId));
+    if (prof && prof.townshipPrecinct) {
+      return prof.townshipPrecinct;
+    }
     if (conv.id === 'conv-harith') return 'Elmina West (EV1)';
     if (conv.id === 'conv-guardhouse') return 'Ilham Residence Perimeter';
     if (conv.id === 'conv-nurul-izzati') return 'Elmina Ridge';
     if (conv.id === 'conv-anonymous-neighbour') return 'Elmina Valley 2';
     return 'City of Elmina';
-  };
+  }, [isCurrentResident, profiles]);
 
   // Scroll to bottom smoothly
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
@@ -566,7 +610,7 @@ export default function MessagesView() {
                       <div className="relative w-9 h-9 rounded-full bg-[#ffdad6] dark:bg-[#ba1b1d]/30 text-[#410002] dark:text-[#ffb4ab] flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
                         {initials}
                         <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-white dark:bg-[#15181C] flex items-center justify-center">
-                          <CheckCircle2 className="w-3 h-3 text-[#00468f] dark:text-[#aac7ff]" />
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
                         </span>
                       </div>
 
@@ -721,7 +765,7 @@ export default function MessagesView() {
                     <div className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#ffdad6] dark:bg-[#ba1b1d]/30 text-[#410002] dark:text-[#ffb4ab] flex items-center justify-center font-bold text-xs sm:text-sm shrink-0">
                       {getRecipientName(activeConv).slice(0, 2).toUpperCase()}
                       <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-white dark:bg-[#15181C] flex items-center justify-center">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-[#00468f] dark:text-[#aac7ff]" />
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                       </span>
                     </div>
 
@@ -730,9 +774,9 @@ export default function MessagesView() {
                         <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white truncate">
                           {getRecipientName(activeConv)}
                         </h2>
-                        <span className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-[#d7e3ff] text-[#00468f] dark:bg-[#00468f]/25 dark:text-[#aac7ff] text-[10px] font-semibold">
-                          <CheckCircle2 className="w-3 h-3" />
-                          Township Verified
+                        <span className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800 text-[10px] font-semibold" title="Registered account">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                          Verified
                         </span>
                       </div>
                       <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mt-0.5">

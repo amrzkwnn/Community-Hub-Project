@@ -1238,7 +1238,10 @@ export default function ExchangeView() {
                         {displayedDrawerItem.authorName}
                       </span>
                       {displayedDrawerItem.authorVerified && (
-                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.2 rounded-full border border-emerald-200 dark:border-emerald-800" title="Registered account">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                          <span>Verified</span>
+                        </span>
                       )}
                     </div>
                     <span className="text-[11px] text-slate-400">

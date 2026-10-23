@@ -15,7 +15,11 @@ import {
   Sparkles, 
   ExternalLink,
   RefreshCw,
-  Info
+  Info,
+  User,
+  Home,
+  MapPin,
+  ShieldCheck
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 
@@ -36,6 +40,9 @@ export default function AuthView() {
   const [rememberMe, setRememberMe] = useState(true);
 
   // Sign Up fields
+  const [fullName, setFullName] = useState('');
+  const [precinct, setPrecinct] = useState('Elmina Valley 1 (EV1)');
+  const [unitNumber, setUnitNumber] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [agreedToTerms, setAgreedToTerms] = useState(true);
 
@@ -84,7 +91,7 @@ export default function AuthView() {
     }
   };
 
-  // Handle Sign Up submission (Direct registration without email verification)
+  // Handle Sign Up submission (Direct registration with full resident and property onboarding)
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
@@ -113,6 +120,9 @@ export default function AuthView() {
     const result = await signUpWithEmail({
       email: cleanEmail,
       password,
+      fullName: fullName.trim() || undefined,
+      precinct: precinct.trim() || 'Elmina Valley 1 (EV1)',
+      unitNumber: unitNumber.trim() || undefined,
     });
     setIsLoading(false);
 
@@ -121,8 +131,8 @@ export default function AuthView() {
       return;
     }
 
-    // Direct entry into Nadikomuniti without email verification
-    setSuccessMessage('Account created successfully! Entering Nadikomuniti...');
+    // Direct entry into Nadikomuniti with verified account status
+    setSuccessMessage('Account created successfully! Welcome to Nadikomuniti.');
   };
 
   // Handle Forgot Password
@@ -504,9 +514,83 @@ export default function AuthView() {
               </div>
             )}
 
-            <form onSubmit={handleSignUp} className="flex flex-col gap-4">
-              {/* Field 1: Email Address */}
-              <div className="flex flex-col gap-1.5">
+            <form onSubmit={handleSignUp} className="flex flex-col gap-3.5">
+              {/* Field 1: Full Legal Name */}
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300" htmlFor="signup-name">
+                  Full Legal Name
+                </label>
+                <div className="relative flex items-center">
+                  <User className="absolute left-3.5 w-4 h-4 text-slate-400 pointer-events-none" />
+                  <input
+                    id="signup-name"
+                    type="text"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="e.g. Amir Zakaria"
+                    autoComplete="name"
+                    required
+                    className="w-full h-10 pl-10 pr-4 rounded-xl bg-slate-50 dark:bg-slate-900/50 text-xs sm:text-sm text-slate-800 dark:text-white placeholder:text-slate-400 border border-slate-200 dark:border-slate-800 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-[#9E1315]/30 focus:border-[#9E1315] transition-all"
+                  />
+                </div>
+              </div>
+
+              {/* Field 2: Township Precinct & Unit Address Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300" htmlFor="signup-precinct">
+                    Township Precinct
+                  </label>
+                  <div className="relative flex items-center">
+                    <MapPin className="absolute left-3.5 w-4 h-4 text-slate-400 pointer-events-none" />
+                    <select
+                      id="signup-precinct"
+                      value={precinct}
+                      onChange={(e) => setPrecinct(e.target.value)}
+                      className="w-full h-10 pl-10 pr-3 rounded-xl bg-slate-50 dark:bg-slate-900/50 text-xs text-slate-800 dark:text-white border border-slate-200 dark:border-slate-800 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-[#9E1315]/30 focus:border-[#9E1315] transition-all"
+                    >
+                      <option value="Elmina Valley 1 (EV1)">Elmina Valley 1 (EV1)</option>
+                      <option value="Elmina Valley 2 (EV2)">Elmina Valley 2 (EV2)</option>
+                      <option value="Elmina Valley 3 (EV3)">Elmina Valley 3 (EV3)</option>
+                      <option value="Elmina Valley 4 (EV4)">Elmina Valley 4 (EV4)</option>
+                      <option value="Elmina Valley 5 (EV5)">Elmina Valley 5 (EV5)</option>
+                      <option value="Elmina Green 1">Elmina Green 1</option>
+                      <option value="Elmina Green 3">Elmina Green 3</option>
+                      <option value="Elmina Green 4">Elmina Green 4</option>
+                      <option value="Elmina Ridge">Elmina Ridge</option>
+                      <option value="Ilham Residence">Ilham Residence</option>
+                      <option value="Denai Alam">Denai Alam</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300" htmlFor="signup-unit">
+                    Unit / House Number
+                  </label>
+                  <div className="relative flex items-center">
+                    <Home className="absolute left-3.5 w-4 h-4 text-slate-400 pointer-events-none" />
+                    <input
+                      id="signup-unit"
+                      type="text"
+                      value={unitNumber}
+                      onChange={(e) => setUnitNumber(e.target.value)}
+                      placeholder="e.g. No. 12, Jln EV 1/2"
+                      required
+                      className="w-full h-10 pl-10 pr-4 rounded-xl bg-slate-50 dark:bg-slate-900/50 text-xs sm:text-sm text-slate-800 dark:text-white placeholder:text-slate-400 border border-slate-200 dark:border-slate-800 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-[#9E1315]/30 focus:border-[#9E1315] transition-all"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Privacy Shield Note */}
+              <div className="px-3 py-1.5 rounded-lg bg-slate-100/70 dark:bg-slate-850/60 border border-slate-200/60 dark:border-slate-800 flex items-center gap-2 text-[10px] text-slate-500 dark:text-slate-400">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <span>Private &amp; masked: Your address is never published openly and is only used for authorized neighbour contact.</span>
+              </div>
+
+              {/* Field 3: Email Address */}
+              <div className="flex flex-col gap-1">
                 <label className="text-xs font-semibold text-slate-700 dark:text-slate-300" htmlFor="signup-email">
                   Email Address
                 </label>
@@ -520,7 +604,7 @@ export default function AuthView() {
                     placeholder="name@elmina.resident.my"
                     autoComplete="email"
                     required
-                    className="w-full h-11 pl-10 pr-4 rounded-xl bg-slate-50 dark:bg-slate-900/50 text-xs sm:text-sm text-slate-800 dark:text-white placeholder:text-slate-400 border border-slate-200 dark:border-slate-800 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-[#9E1315]/30 focus:border-[#9E1315] transition-all"
+                    className="w-full h-10 pl-10 pr-4 rounded-xl bg-slate-50 dark:bg-slate-900/50 text-xs sm:text-sm text-slate-800 dark:text-white placeholder:text-slate-400 border border-slate-200 dark:border-slate-800 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-[#9E1315]/30 focus:border-[#9E1315] transition-all"
                   />
                 </div>
               </div>

@@ -560,6 +560,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const INCIDENTS_CACHE_KEY = 'tesdh-persisted-incidents';
   const EXCHANGE_CACHE_KEY = 'tesdh-persisted-exchange';
   const SERVICES_CACHE_KEY = 'tesdh-persisted-services';
+  const CONVERSATIONS_CACHE_KEY = 'tesdh-persisted-conversations';
+  const MESSAGES_CACHE_KEY = 'tesdh-persisted-messages';
+  const MESSAGE_REQUESTS_CACHE_KEY = 'tesdh-persisted-message-requests';
+  const PROFILES_CACHE_KEY = 'tesdh-persisted-profiles';
   const ACTIVE_PROFILE_CACHE_KEY = 'tesdh-active-profile-id';
 
   function getPersistedCache<T>(key: string, fallback: T): T {
@@ -579,7 +583,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return fallback;
   }
 
-  const [profiles, setProfiles] = useState<UserProfile[]>(INITIAL_PROFILES);
+  const [profiles, setProfiles] = useState<UserProfile[]>(() =>
+    getPersistedCache<UserProfile[]>(PROFILES_CACHE_KEY, INITIAL_PROFILES)
+  );
   const [currentUser, setCurrentUser] = useState<UserProfile>(INITIAL_PROFILES[0]);
   const isSwitchingProfileRef = useRef(false);
 
@@ -621,9 +627,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [services, setServices] = useState<LocalService[]>(() =>
     getPersistedCache<LocalService[]>(SERVICES_CACHE_KEY, INITIAL_SERVICES)
   );
-  const [conversations, setConversations] = useState<Conversation[]>(INITIAL_CONVERSATIONS);
-  const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES);
-  const [messageRequests, setMessageRequests] = useState<PropertyMessageRequest[]>(INITIAL_MESSAGE_REQUESTS);
+  const [conversations, setConversations] = useState<Conversation[]>(() =>
+    getPersistedCache<Conversation[]>(CONVERSATIONS_CACHE_KEY, INITIAL_CONVERSATIONS)
+  );
+  const [messages, setMessages] = useState<Message[]>(() =>
+    getPersistedCache<Message[]>(MESSAGES_CACHE_KEY, INITIAL_MESSAGES)
+  );
+  const [messageRequests, setMessageRequests] = useState<PropertyMessageRequest[]>(() =>
+    getPersistedCache<PropertyMessageRequest[]>(MESSAGE_REQUESTS_CACHE_KEY, INITIAL_MESSAGE_REQUESTS)
+  );
   const [notifications, setNotifications] = useState<CommunityNotification[]>(INITIAL_NOTIFICATIONS);
   const [moderationReports, setModerationReports] = useState<ModerationReport[]>(INITIAL_MODERATION_REPORTS);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(INITIAL_AUDIT_LOGS);
@@ -828,10 +840,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const mappedProfiles: UserProfile[] = profilesData.map((p) => ({
           id: p.id,
           fullName: p.full_name,
-          displayName: p.display_name || p.full_name.split(' ')[0],
+          displayName: p.display_name || p.full_name?.split(' ')[0] || 'Resident',
           role: p.role,
           townshipPrecinct: p.township_precinct,
-          verificationStatus: p.verification_status,
+          unitNumber: p.unit_number,
+          verificationStatus: p.verification_status === 'rejected' ? 'rejected' : 'verified',
           avatarUrl: p.avatar_url,
           createdAt: p.created_at,
         }));
@@ -847,11 +860,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 ...sp,
                 displayName: sp.displayName || merged[idx].displayName,
                 avatarUrl: sp.avatarUrl || merged[idx].avatarUrl,
+                unitNumber: sp.unitNumber || merged[idx].unitNumber,
               };
             } else {
               merged.push(sp);
             }
           }
+          try {
+            localStorage.setItem(PROFILES_CACHE_KEY, JSON.stringify(merged));
+          } catch {}
           return merged;
         });
       }
@@ -1062,13 +1079,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               try { localStorage.setItem(SERVICES_CACHE_KEY, JSON.stringify(sServ)); } catch {}
             }
             if (sConv && sConv.length > 0) {
-              setConversations(sConv);
+              setConversations((prev) => {
+                const map = new Map<string, Conversation>();
+                prev.forEach((c) => map.set(c.id, c));
+                sConv.forEach((c: Conversation) => map.set(c.id, c));
+                const merged = Array.from(map.values());
+                try { localStorage.setItem(CONVERSATIONS_CACHE_KEY, JSON.stringify(merged)); } catch {}
+                return merged;
+              });
             }
             if (sMsg && sMsg.length > 0) {
-              setMessages(sMsg);
+              setMessages((prev) => {
+                const map = new Map<string, Message>();
+                prev.forEach((m) => map.set(m.id, m));
+                sMsg.forEach((m: Message) => map.set(m.id, m));
+                const merged = Array.from(map.values());
+                try { localStorage.setItem(MESSAGES_CACHE_KEY, JSON.stringify(merged)); } catch {}
+                return merged;
+              });
             }
             if (sMsgReq && sMsgReq.length > 0) {
-              setMessageRequests(sMsgReq);
+              setMessageRequests((prev) => {
+                const map = new Map<string, PropertyMessageRequest>();
+                prev.forEach((r) => map.set(r.id, r));
+                sMsgReq.forEach((r: PropertyMessageRequest) => map.set(r.id, r));
+                const merged = Array.from(map.values());
+                try { localStorage.setItem(MESSAGE_REQUESTS_CACHE_KEY, JSON.stringify(merged)); } catch {}
+                return merged;
+              });
             }
           }
         }
@@ -1090,12 +1128,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const userProfile: UserProfile = {
           id: data.user.id,
           fullName: meta.full_name || 'Verified Resident',
-          displayName: meta.display_name || 'Resident',
+          displayName: meta.display_name || meta.full_name?.split(' ')[0] || 'Resident',
           role: meta.role || 'resident',
           townshipPrecinct: meta.township_precinct || 'Bandar Elmina',
           unitNumber: meta.unit_number,
           phone: meta.phone,
-          verificationStatus: 'unverified',
+          verificationStatus: 'verified', // Registered account basic status
           createdAt: data.user.created_at,
         };
         setCurrentUser(userProfile);
@@ -1113,12 +1151,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const userProfile: UserProfile = {
             id: session.user.id,
             fullName: meta.full_name || 'Verified Resident',
-            displayName: meta.display_name || 'Resident',
+            displayName: meta.display_name || meta.full_name?.split(' ')[0] || 'Resident',
             role: meta.role || 'resident',
             townshipPrecinct: meta.township_precinct || 'Bandar Elmina',
             unitNumber: meta.unit_number,
             phone: meta.phone,
-            verificationStatus: 'unverified',
+            verificationStatus: 'verified', // Registered account basic status
             createdAt: session.user.created_at,
           };
           setCurrentUser(userProfile);
@@ -1279,10 +1317,48 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return { success: false, error: error.message };
       }
 
+      const precinct = data.precinct || 'Elmina Valley 1 (EV1)';
+      const unitNumber = data.unitNumber?.trim() || null;
+      const effectiveUser = authData.session?.user || authData.user;
+
+      const userProfile: UserProfile = {
+        id: effectiveUser?.id || `user-${Date.now()}`,
+        fullName: derivedName,
+        displayName: derivedName.split(' ')[0],
+        role: 'resident',
+        townshipPrecinct: precinct,
+        unitNumber: unitNumber || undefined,
+        verificationStatus: 'verified',
+        createdAt: effectiveUser?.created_at || new Date().toISOString(),
+      };
+
       // Check if session was returned directly (e.g. email confirmation disabled / direct registration)
       if (authData.session && authData.user) {
         setSupabaseUser(authData.user);
         setIsDemoMode(false);
+        setCurrentUser(userProfile);
+        setProfiles((prev) => {
+          const updated = [...prev.filter((p) => p.id !== userProfile.id), userProfile];
+          try { localStorage.setItem(PROFILES_CACHE_KEY, JSON.stringify(updated)); } catch {}
+          return updated;
+        });
+
+        if (unitNumber) {
+          fetch('/api/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-tesdh-session': authData.user.id },
+            body: JSON.stringify({
+              action: 'REGISTER_PROPERTY_ADDRESS',
+              payload: {
+                userId: authData.user.id,
+                unitNumber,
+                precinct,
+                fullName: derivedName,
+              },
+            }),
+          }).catch(() => {});
+        }
+
         if (typeof window !== 'undefined') {
           try {
             localStorage.removeItem(DEMO_MODE_CACHE_KEY);
@@ -1302,6 +1378,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (signInData?.session && signInData?.user) {
           setSupabaseUser(signInData.user);
           setIsDemoMode(false);
+          const authedProfile: UserProfile = { ...userProfile, id: signInData.user.id };
+          setCurrentUser(authedProfile);
+          setProfiles((prev) => {
+            const updated = [...prev.filter((p) => p.id !== authedProfile.id), authedProfile];
+            try { localStorage.setItem(PROFILES_CACHE_KEY, JSON.stringify(updated)); } catch {}
+            return updated;
+          });
+
+          if (unitNumber) {
+            fetch('/api/sync', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'x-tesdh-session': signInData.user.id },
+              body: JSON.stringify({
+                action: 'REGISTER_PROPERTY_ADDRESS',
+                payload: {
+                  userId: signInData.user.id,
+                  unitNumber,
+                  precinct,
+                  fullName: derivedName,
+                },
+              }),
+            }).catch(() => {});
+          }
+
           if (typeof window !== 'undefined') {
             try {
               localStorage.removeItem(DEMO_MODE_CACHE_KEY);
@@ -2628,19 +2728,71 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const clean = query.trim().toLowerCase();
     if (clean.length < 2) return [];
 
-    return profiles
-      .filter((p) => p.id !== currentUser.id && p.verificationStatus === 'verified')
+    // 1. Query remote registered properties from /api/sync
+    let remoteMatches: Array<{ targetId: string; precinct: string; maskedProperty: string }> = [];
+    try {
+      const res = await fetch('/api/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tesdh-session': currentUser.id,
+        },
+        body: JSON.stringify({
+          action: 'SEARCH_PROPERTIES',
+          payload: { query: clean },
+          user: currentUser,
+        }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json?.success && Array.isArray(json?.data)) {
+          remoteMatches = json.data;
+        }
+      }
+    } catch (e) {
+      console.warn('[searchProperties] Remote lookup fallback:', e);
+    }
+
+    // 2. Normalization helper: strips common punctuation, normalizes street and unit abbreviations
+    const norm = (str: string) =>
+      str
+        .toLowerCase()
+        .replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, ' ')
+        .replace(/\b(no|nomor|unit|jln|jalan|lorong)\b/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    const normalizedQuery = norm(clean);
+    const queryTokens = normalizedQuery.split(' ').filter(Boolean);
+
+    // 3. Search local profiles
+    const localMatches = profiles
+      .filter((p) => p.id !== currentUser.id)
       .filter((p) => {
-        const matchesUnit = p.unitNumber && p.unitNumber.toLowerCase().includes(clean);
-        const matchesPrecinct = p.townshipPrecinct.toLowerCase().includes(clean);
-        return matchesUnit || matchesPrecinct;
+        const unit = p.unitNumber ? norm(p.unitNumber) : '';
+        const precinct = norm(p.townshipPrecinct || '');
+        const combined = `${unit} ${precinct}`;
+
+        if (combined.includes(normalizedQuery) || (unit && unit.includes(normalizedQuery))) {
+          return true;
+        }
+        return queryTokens.length > 0 && queryTokens.every((token) => combined.includes(token));
       })
       .map((p) => ({
         targetId: p.id,
         precinct: p.townshipPrecinct,
         maskedProperty: p.unitNumber || `Residence ${p.townshipPrecinct}`,
-      }))
-      .slice(0, 8);
+      }));
+
+    // 4. Merge remote and local matches without duplicates
+    const combined = [...remoteMatches];
+    localMatches.forEach((lm) => {
+      if (!combined.some((c) => c.targetId === lm.targetId)) {
+        combined.push(lm);
+      }
+    });
+
+    return combined.slice(0, 8);
   };
 
   const sendPropertyMessageRequest = async (data: {
@@ -2685,7 +2837,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       createdAt: new Date().toISOString(),
     };
 
-    setMessageRequests((prev) => [newRequest, ...prev]);
+    setMessageRequests((prev) => {
+      const updated = [newRequest, ...prev];
+      try { localStorage.setItem(MESSAGE_REQUESTS_CACHE_KEY, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
 
     // Send notification to recipient
     addNotification({
@@ -2781,11 +2937,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       createdAt: req!.createdAt,
     };
 
-    setMessageRequests((prev) =>
-      prev.map((r) => (r.id === requestId ? { ...r, status: 'accepted', conversationId: convId } : r))
-    );
-    setConversations((prev) => [newConv, ...prev.filter((c) => c.id !== newConv.id)]);
-    setMessages((prev) => [...prev.filter((m) => m.id !== initialMsg.id), initialMsg]);
+    setMessageRequests((prev) => {
+      const updated = prev.map((r) => (r.id === requestId ? { ...r, status: 'accepted' as const, conversationId: convId } : r));
+      try { localStorage.setItem(MESSAGE_REQUESTS_CACHE_KEY, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+    setConversations((prev) => {
+      const updated = [newConv, ...prev.filter((c) => c.id !== newConv.id)];
+      try { localStorage.setItem(CONVERSATIONS_CACHE_KEY, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+    setMessages((prev) => {
+      const updated = [...prev.filter((m) => m.id !== initialMsg.id), initialMsg];
+      try { localStorage.setItem(MESSAGES_CACHE_KEY, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
     navigateToItem({ tab: 'messages', conversationId: convId });
 
     // Notify sender that request was accepted
@@ -2807,9 +2973,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   const rejectMessageRequest = async (requestId: string) => {
-    setMessageRequests((prev) =>
-      prev.map((r) => (r.id === requestId ? { ...r, status: 'rejected' } : r))
-    );
+    setMessageRequests((prev) => {
+      const updated = prev.map((r) => (r.id === requestId ? { ...r, status: 'rejected' as const } : r));
+      try { localStorage.setItem(MESSAGE_REQUESTS_CACHE_KEY, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
     fetch('/api/sync', {
       method: 'POST',
       headers: {
@@ -2826,9 +2994,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   const blockPropertySender = async (requestId: string) => {
-    setMessageRequests((prev) =>
-      prev.map((r) => (r.id === requestId ? { ...r, status: 'blocked' } : r))
-    );
+    setMessageRequests((prev) => {
+      const updated = prev.map((r) => (r.id === requestId ? { ...r, status: 'blocked' as const } : r));
+      try { localStorage.setItem(MESSAGE_REQUESTS_CACHE_KEY, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
     logAudit('BLOCK_PROPERTY_SENDER', 'property_message_requests', requestId);
   };
 
@@ -2851,9 +3021,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       createdAt: new Date().toISOString(),
     };
 
-    setMessages((prev) => [...prev.filter((m) => m.id !== newMsg.id), newMsg]);
-    setConversations((prev) =>
-      prev.map((c) =>
+    setMessages((prev) => {
+      const updated = [...prev.filter((m) => m.id !== newMsg.id), newMsg];
+      try { localStorage.setItem(MESSAGES_CACHE_KEY, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+    setConversations((prev) => {
+      const updated = prev.map((c) =>
         c.id === conversationId
           ? { 
               ...c, 
@@ -2861,8 +3035,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               lastMessageTime: new Date().toISOString() 
             }
           : c
-      )
-    );
+      );
+      try { localStorage.setItem(CONVERSATIONS_CACHE_KEY, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
 
     // Notify other participant if conversation exists
     const conv = conversations.find((c) => c.id === conversationId);
