@@ -1,13 +1,16 @@
 import { createBrowserClient } from '@supabase/ssr';
 
 export function createClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey = 
+  let supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  let supabaseKey = 
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || 
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  if (!supabaseUrl || !supabaseKey) {
-    throw new Error('Supabase environment variables (NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) are missing in .env.local');
+  if (!supabaseUrl || supabaseUrl === '[SENSITIVE]' || !supabaseUrl.startsWith('http')) {
+    supabaseUrl = 'https://jtgehvobgezbrwohelry.supabase.co';
+  }
+  if (!supabaseKey || supabaseKey === '[SENSITIVE]') {
+    supabaseKey = 'sb_publishable_beFqZsLvjGIypNn-7Zvtyw_CvGhNFvu';
   }
 
   return createBrowserClient(supabaseUrl, supabaseKey);

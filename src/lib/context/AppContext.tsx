@@ -992,6 +992,45 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           localStorage.setItem(SERVICES_CACHE_KEY, JSON.stringify(mappedServices));
         } catch {}
       }
+
+      // 7. Synchronize unified database state across all connected devices via /api/sync
+      try {
+        const apiRes = await fetch('/api/sync');
+        if (apiRes.ok) {
+          const apiJson = await apiRes.json();
+          if (apiJson?.success && apiJson?.data) {
+            const { incidents: sInc, posts: sPosts, comments: sComm, exchange: sEx, services: sServ, conversations: sConv, messages: sMsg } = apiJson.data;
+            if (sInc && sInc.length > 0) {
+              setIncidents(sInc);
+              try { localStorage.setItem(INCIDENTS_CACHE_KEY, JSON.stringify(sInc)); } catch {}
+            }
+            if (sPosts && sPosts.length > 0) {
+              setPosts(sPosts);
+              try { localStorage.setItem(POSTS_CACHE_KEY, JSON.stringify(sPosts)); } catch {}
+            }
+            if (sComm && Object.keys(sComm).length > 0) {
+              setComments(sComm);
+              try { localStorage.setItem(COMMENTS_CACHE_KEY, JSON.stringify(sComm)); } catch {}
+            }
+            if (sEx && sEx.length > 0) {
+              setExchangeItems(sEx);
+              try { localStorage.setItem(EXCHANGE_CACHE_KEY, JSON.stringify(sEx)); } catch {}
+            }
+            if (sServ && sServ.length > 0) {
+              setServices(sServ);
+              try { localStorage.setItem(SERVICES_CACHE_KEY, JSON.stringify(sServ)); } catch {}
+            }
+            if (sConv && sConv.length > 0) {
+              setConversations(sConv);
+            }
+            if (sMsg && sMsg.length > 0) {
+              setMessages(sMsg);
+            }
+          }
+        }
+      } catch (apiErr) {
+        // Fallback to local cache if offline
+      }
     } catch (err: unknown) {
       setSchemaErrorMessage(err instanceof Error ? err.message : 'Error syncing Supabase.');
     }
@@ -1045,9 +1084,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     );
 
-    // Supabase Realtime synchronization channel
+    // Supabase Realtime synchronization channel (Postgres Changes + Multi-device Broadcast)
     const realtimeChannel = supabase
       .channel('tesdh-live-sync')
+      .on('broadcast', { event: 'tesdh-sync' }, (event) => {
+        console.log('[Realtime] Live cross-device sync event received:', event);
+        refreshSupabaseData();
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'community_posts' }, () => {
         refreshSupabaseData();
       })
@@ -1117,6 +1160,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       // Clear search navigation targets
       setNavigationTarget(null);
+
+      // Refresh data and permissions for the newly active persona
+      try {
+        await refreshSupabaseData();
+      } catch (e) {
+        console.warn('[switchProfile] Refresh warning:', e);
+      }
 
       // Log audit trail
       logAudit('DEMO_ACCOUNT_SWITCH', 'profiles', selected.id, {
@@ -1260,26 +1310,37 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       createdAt: new Date().toISOString(),
     };
 
-    if (schemaReady && supabaseUser) {
-      const { error } = await supabase.from('comments').insert({
-        post_id: postId,
-        author_id: supabaseUser.id,
-        content: content.trim(),
-        is_official_response: isOfficial,
+    let savedReply = newReply;
+    try {
+      const syncRes = await fetch('/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'ADD_COMMENT',
+          payload: {
+            postId,
+            content: content.trim(),
+            isOfficialResponse: isOfficial,
+          },
+          user: currentUser,
+        }),
       });
-
-      if (error) {
-        throw new Error(`Failed to post comment to database: ${error.message}`);
+      if (syncRes.ok) {
+        const syncJson = await syncRes.json();
+        if (syncJson?.success && syncJson?.data) {
+          savedReply = { ...newReply, ...syncJson.data };
+        }
       }
-      await refreshSupabaseData();
-      return;
+    } catch (syncErr) {
+      console.warn('[Sync] /api/sync ADD_COMMENT fallback:', syncErr);
     }
 
-    // Demo/offline optimistic update with persistence
+    // Update comments with persistence
     setComments((prev) => {
+      const existing = prev[postId] || [];
       const next = {
         ...prev,
-        [postId]: [...(prev[postId] || []), newReply],
+        [postId]: [...existing.filter((r) => r.id !== savedReply.id), savedReply],
       };
       try {
         localStorage.setItem(COMMENTS_CACHE_KEY, JSON.stringify(next));
@@ -1409,30 +1470,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }) => {
     const isAnonymous = Boolean(data.isAnonymous && data.category === 'complaint');
 
-    if (schemaReady && supabaseUser) {
-      const validCategory = (data.category === 'announcement' || data.category === 'security_alert')
-        ? 'general'
-        : data.category;
-
-      const { data: insertedPost, error } = await supabase.from('community_posts').insert({
-        author_id: supabaseUser.id,
-        category: validCategory,
-        title: data.title,
-        content: data.content,
-        image_url: data.imageUrl || null,
-        is_anonymous: isAnonymous,
-      }).select('id').single();
-
-      if (error) {
-        throw new Error(`Database write failed: ${error.message}`);
-      }
-
-      await refreshSupabaseData();
-      const actualId = insertedPost?.id || `post-${Date.now()}`;
-      moderateContent('post', actualId, data.title, data.content).catch(() => {});
-      return;
-    }
-
     const newPost: CommunityPost = {
       id: `post-${Date.now()}`,
       authorId: currentUser.id,
@@ -1460,20 +1497,56 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       eventVenue: data.eventVenue,
     };
 
+    let savedPost = newPost;
+    try {
+      const syncRes = await fetch('/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'CREATE_POST',
+          payload: {
+            ...data,
+            isAnonymous,
+          },
+          user: currentUser,
+        }),
+      });
+      if (syncRes.ok) {
+        const syncJson = await syncRes.json();
+        if (syncJson?.success && syncJson?.data) {
+          savedPost = {
+            ...newPost,
+            ...syncJson.data,
+            authorName: newPost.authorName,
+            authorPrecinct: newPost.authorPrecinct,
+            authorRole: newPost.authorRole,
+            authorAvatar: newPost.authorAvatar,
+            authorVerified: newPost.authorVerified,
+            eventDate: data.eventDate,
+            eventEndDate: data.eventEndDate,
+            eventTime: data.eventTime,
+            eventVenue: data.eventVenue,
+          };
+        }
+      }
+    } catch (syncErr) {
+      console.warn('[Sync] /api/sync CREATE_POST fallback:', syncErr);
+    }
+
     setPosts((prev) => {
-      const next = [newPost, ...prev];
+      const next = [savedPost, ...prev.filter((p) => p.id !== savedPost.id)];
       try {
         localStorage.setItem(POSTS_CACHE_KEY, JSON.stringify(next));
       } catch {}
       return next;
     });
 
-    logAudit('CREATE_POST', 'community_posts', newPost.id, { 
+    logAudit('CREATE_POST', 'community_posts', savedPost.id, { 
       category: data.category, 
       isAnonymous 
     });
 
-    moderateContent('post', newPost.id, data.title, data.content).catch(() => {});
+    moderateContent('post', savedPost.id, data.title, data.content).catch(() => {});
   };
 
   // Delete Post (Owner or Management)
@@ -1517,13 +1590,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return next;
     });
 
-    // Supabase sync
-    if (schemaReady && supabaseUser) {
-      try {
-        await supabase.from('community_posts').delete().eq('id', postId);
-      } catch (err) {
-        console.error('Error syncing post deletion to Supabase:', err);
-      }
+    // Sync to Supabase via /api/sync
+    try {
+      await fetch('/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'DELETE_POST',
+          payload: { postId },
+          user: currentUser,
+        }),
+      });
+    } catch (syncErr) {
+      console.warn('[Sync] /api/sync DELETE_POST fallback:', syncErr);
     }
 
     // Audit log
@@ -1616,12 +1695,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return next;
     });
 
-    if (schemaReady && supabaseUser) {
-      try {
-        await supabase.from('community_posts').update({ upvotes_count: nextCount }).eq('id', postId);
-      } catch (err) {
-        console.error('Error syncing upvote to Supabase:', err);
-      }
+    // Sync upvote via /api/sync
+    try {
+      await fetch('/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'UPVOTE_POST',
+          payload: { postId },
+          user: currentUser,
+        }),
+      });
+    } catch (syncErr) {
+      console.warn('[Sync] /api/sync UPVOTE_POST fallback:', syncErr);
     }
   };
 
@@ -1714,44 +1800,50 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       updatedAt: new Date().toISOString(),
     };
 
-    if (schemaReady && supabaseUser) {
-      const dbType = mapToSupabaseReportType(data.incidentType);
-      const { error } = await supabase.from('community_reports').insert({
-        reporter_id: supabaseUser.id,
-        report_type: dbType,
-        title: data.title,
-        description: data.description,
-        location_name: newIncident.locationName,
-        latitude: data.latitude,
-        longitude: data.longitude,
-        severity: data.severity,
-        status: 'pending',
-        is_anonymous: Boolean(data.isAnonymous),
+    let savedIncident = newIncident;
+    try {
+      const syncRes = await fetch('/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'REPORT_INCIDENT',
+          payload: {
+            ...data,
+            locationName: newIncident.locationName,
+            isAnonymous: Boolean(data.isAnonymous),
+          },
+          user: currentUser,
+        }),
       });
-
-      if (error) {
-        return { isDuplicate: false, error: `Database write failed: ${error.message}` };
+      if (syncRes.ok) {
+        const syncJson = await syncRes.json();
+        if (syncJson?.success && syncJson?.data) {
+          savedIncident = {
+            ...newIncident,
+            ...syncJson.data,
+            updates: newIncident.updates,
+          };
+        }
       }
-
-      await refreshSupabaseData();
-      return { isDuplicate, duplicateOf, incident: newIncident };
+    } catch (syncErr) {
+      console.warn('[Sync] /api/sync REPORT_INCIDENT fallback:', syncErr);
     }
 
     setIncidents((prev) => {
-      const next = [newIncident, ...prev];
+      const next = [savedIncident, ...prev.filter((i) => i.id !== savedIncident.id)];
       try {
         localStorage.setItem(INCIDENTS_CACHE_KEY, JSON.stringify(next));
       } catch {}
       return next;
     });
 
-    logAudit('REPORT_INCIDENT', 'community_reports', newIncident.id, {
+    logAudit('REPORT_INCIDENT', 'community_reports', savedIncident.id, {
       type: data.incidentType,
       severity: data.severity,
       isDuplicate,
     });
 
-    return { isDuplicate, duplicateOf, incident: newIncident };
+    return { isDuplicate, duplicateOf, incident: savedIncident };
   };
 
   // Incident Verification (Strictly Management Role)
@@ -1808,15 +1900,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       });
     }
 
-    if (schemaReady && supabaseUser) {
-      try {
-        await supabase.from('community_reports').update({
-          status: 'under_review',
-          management_notes: notes,
-        }).eq('id', incidentId);
-      } catch (err) {
-        console.error('Error syncing incident verification to Supabase:', err);
-      }
+    // Sync to Supabase via /api/sync
+    try {
+      await fetch('/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'VERIFY_INCIDENT',
+          payload: { incidentId, notes, verifiedBy: currentUser.fullName },
+          user: currentUser,
+        }),
+      });
+    } catch (syncErr) {
+      console.warn('[Sync] /api/sync VERIFY_INCIDENT fallback:', syncErr);
     }
 
     logAudit('VERIFY_INCIDENT', 'community_reports', incidentId, {
@@ -1838,15 +1934,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return next;
     });
 
-    if (schemaReady && supabaseUser) {
-      try {
-        await supabase.from('community_reports').update({
-          status: 'dismissed',
-          management_notes: `Rejected: ${reason}`,
-        }).eq('id', incidentId);
-      } catch (err) {
-        console.error('Error syncing incident rejection to Supabase:', err);
-      }
+    // Sync to Supabase via /api/sync
+    try {
+      await fetch('/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'REJECT_INCIDENT',
+          payload: { incidentId, reason },
+          user: currentUser,
+        }),
+      });
+    } catch (syncErr) {
+      console.warn('[Sync] /api/sync REJECT_INCIDENT fallback:', syncErr);
     }
 
     logAudit('REJECT_INCIDENT', 'community_reports', incidentId, { reason });
@@ -1908,19 +2008,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return next;
     });
 
-    // Sync to Supabase
-    if (schemaReady && supabaseUser) {
-      try {
-        await supabase
-          .from('community_reports')
-          .update({
-            status: 'dismissed',
-            management_notes: 'Archived by management',
-          })
-          .eq('id', incidentId);
-      } catch (err) {
-        console.error('Error syncing incident archive to Supabase:', err);
-      }
+    // Sync to Supabase via /api/sync
+    try {
+      await fetch('/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'RESOLVE_INCIDENT',
+          payload: { incidentId, notes: 'Archived by management' },
+          user: currentUser,
+        }),
+      });
+    } catch (syncErr) {
+      console.warn('[Sync] /api/sync archiveIncident fallback:', syncErr);
     }
 
     // Audit logging
@@ -1941,17 +2041,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   ) => {
     const timestamp = new Date().toISOString();
 
-    if (schemaReady && supabaseUser) {
-      try {
-        const dbStatus = status === 'resolved' ? 'resolved' : (status === 'dispatched' ? 'dispatched' : 'under_review');
-        await supabase.from('community_reports').update({
-          status: dbStatus,
-          management_notes: note,
-          assigned_team: assignedTeam,
-        }).eq('id', incidentId);
-      } catch (err) {
-        console.error('Error updating incident status in Supabase:', err);
-      }
+    // Sync to Supabase via /api/sync
+    try {
+      await fetch('/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'UPDATE_INCIDENT_STATUS',
+          payload: { incidentId, status, note, assignedTeam },
+          user: currentUser,
+        }),
+      });
+    } catch (syncErr) {
+      console.warn('[Sync] /api/sync updateIncidentStatus fallback:', syncErr);
     }
 
     setIncidents((prev) => {
@@ -2029,59 +2131,68 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       createdAt: new Date().toISOString(),
     };
 
-    if (schemaReady && supabaseUser) {
-      const validConditions = ['brand_new', 'like_new', 'good', 'fair'];
-      const dbCondition = validConditions.includes(data.condition) ? data.condition : 'good';
-      const validCategories = ['furniture', 'baby_kids', 'appliances', 'books_study', 'plants_garden', 'sports_leisure', 'others'];
-      const dbCategory = validCategories.includes(data.category) ? data.category : 'others';
-
-      const { error } = await supabase.from('exchange_listings').insert({
-        author_id: supabaseUser.id,
-        listing_type: data.listingType,
-        category: dbCategory,
-        title: data.title,
-        description: data.description,
-        condition: dbCondition,
-        image_url: primaryImage,
-        precinct: newItem.precinct,
-        status: 'available',
+    let savedItem = newItem;
+    try {
+      const syncRes = await fetch('/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'CREATE_EXCHANGE',
+          payload: {
+            ...data,
+            imageUrl: primaryImage,
+            imageUrls: resolvedImageUrls,
+          },
+          user: currentUser,
+        }),
       });
-
-      if (error) {
-        throw new Error(`Database listing failed: ${error.message}`);
+      if (syncRes.ok) {
+        const syncJson = await syncRes.json();
+        if (syncJson?.success && syncJson?.data) {
+          savedItem = {
+            ...newItem,
+            ...syncJson.data,
+            authorName: newItem.authorName,
+            authorPrecinct: newItem.authorPrecinct,
+            authorVerified: newItem.authorVerified,
+          };
+        }
       }
-
-      await refreshSupabaseData();
-      return;
+    } catch (syncErr) {
+      console.warn('[Sync] /api/sync CREATE_EXCHANGE fallback:', syncErr);
     }
 
     setExchangeItems((prev) => {
-      const next = [newItem, ...prev];
+      const next = [savedItem, ...prev.filter((i) => i.id !== savedItem.id)];
       try {
         localStorage.setItem(EXCHANGE_CACHE_KEY, JSON.stringify(next));
       } catch {}
       return next;
     });
 
-    logAudit('CREATE_EXCHANGE_ITEM', 'exchange_listings', newItem.id, {
+    logAudit('CREATE_EXCHANGE_ITEM', 'exchange_listings', savedItem.id, {
       type: data.listingType,
       category: data.category,
       photoCount: resolvedImageUrls.length,
     });
 
-    moderateContent('exchange', newItem.id, data.title, data.description).catch(() => {});
+    moderateContent('exchange', savedItem.id, data.title, data.description).catch(() => {});
   };
 
   const reserveExchangeItem = async (itemId: string) => {
-    if (schemaReady && supabaseUser) {
-      try {
-        await supabase.from('exchange_listings').update({
-          status: 'reserved',
-          reserved_by_id: supabaseUser.id,
-        }).eq('id', itemId);
-      } catch (err) {
-        console.error('Error reserving exchange item in Supabase:', err);
-      }
+    // Sync to Supabase via /api/sync
+    try {
+      await fetch('/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'RESERVE_EXCHANGE',
+          payload: { itemId, reservedById: currentUser.id },
+          user: currentUser,
+        }),
+      });
+    } catch (syncErr) {
+      console.warn('[Sync] /api/sync RESERVE_EXCHANGE fallback:', syncErr);
     }
 
     setExchangeItems((prev) => {
@@ -2194,53 +2305,68 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       createdAt: new Date().toISOString(),
     };
 
-    if (schemaReady && supabaseUser) {
-      const validCategories = ['home_services', 'childcare', 'pet_care', 'tutoring', 'carpool', 'gardening', 'tech_help', 'other'];
-      const dbCategory = validCategories.includes(data.category) ? data.category : 'other';
-
-      const { error } = await supabase.from('service_listings').insert({
-        author_id: supabaseUser.id,
-        type: data.type === 'requesting' ? 'requesting' : 'offering',
-        category: dbCategory,
-        title: data.title,
-        description: data.description,
-        price_estimate: data.priceEstimate || null,
-        precinct: newService.precinct,
-        status: 'active',
+    let savedService = newService;
+    try {
+      const syncRes = await fetch('/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'CREATE_SERVICE',
+          payload: {
+            ...data,
+            imageUrl: primaryImage,
+            imageUrls: resolvedImageUrls,
+          },
+          user: currentUser,
+        }),
       });
-
-      if (error) {
-        throw new Error(`Database service listing failed: ${error.message}`);
+      if (syncRes.ok) {
+        const syncJson = await syncRes.json();
+        if (syncJson?.success && syncJson?.data) {
+          savedService = {
+            ...newService,
+            ...syncJson.data,
+            authorName: newService.authorName,
+            authorPrecinct: newService.authorPrecinct,
+            authorVerified: newService.authorVerified,
+          };
+        }
       }
-
-      await refreshSupabaseData();
-      return;
+    } catch (syncErr) {
+      console.warn('[Sync] /api/sync CREATE_SERVICE fallback:', syncErr);
     }
 
     setServices((prev) => {
-      const next = [newService, ...prev];
+      const next = [savedService, ...prev.filter((s) => s.id !== savedService.id)];
       try {
         localStorage.setItem(SERVICES_CACHE_KEY, JSON.stringify(next));
       } catch {}
       return next;
     });
 
-    logAudit('CREATE_SERVICE', 'service_listings', newService.id, {
+    logAudit('CREATE_SERVICE', 'service_listings', savedService.id, {
       type: data.type,
       category: data.category,
       hasPhoto: Boolean(primaryImage),
     });
 
-    moderateContent('service', newService.id, data.title, data.description).catch(() => {});
+    moderateContent('service', savedService.id, data.title, data.description).catch(() => {});
   };
 
   const deleteService = async (serviceId: string) => {
-    if (schemaReady && supabaseUser) {
-      try {
-        await supabase.from('service_listings').delete().eq('id', serviceId);
-      } catch (err) {
-        console.error('Error deleting service listing from Supabase:', err);
-      }
+    // Sync to Supabase via /api/sync
+    try {
+      await fetch('/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'DELETE_SERVICE',
+          payload: { serviceId },
+          user: currentUser,
+        }),
+      });
+    } catch (syncErr) {
+      console.warn('[Sync] /api/sync DELETE_SERVICE fallback:', syncErr);
     }
 
     setServices((prev) => {
@@ -2452,6 +2578,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       targetTab: 'messages',
       targetId: conversationId,
     });
+
+    // Sync message across devices via /api/sync
+    try {
+      fetch('/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'SEND_MESSAGE',
+          payload: { conversationId, content, isAnonymous, imageUrl },
+          user: currentUser,
+        }),
+      }).catch((err) => console.warn('[Sync] /api/sync SEND_MESSAGE fallback:', err));
+    } catch {}
   };
 
   const startConversation = (
@@ -2489,6 +2628,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
 
     setConversations((prev) => [newConv, ...prev]);
+
+    // Sync new conversation across devices via /api/sync
+    try {
+      fetch('/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'START_CONVERSATION',
+          payload: { conversation: newConv },
+          user: currentUser,
+        }),
+      }).catch((err) => console.warn('[Sync] /api/sync START_CONVERSATION fallback:', err));
+    } catch {}
+
     sendMessage(newConvId, initialMessage);
     return newConvId;
   };

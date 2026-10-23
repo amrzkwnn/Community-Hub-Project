@@ -171,7 +171,7 @@ export default function Header() {
                 className="flex flex-col ml-0.5 cursor-pointer select-none"
               >
                 <span className="sr-only">Community Hub</span>
-                <span className="text-base font-bold text-[#9E1315] tracking-tight leading-none">TESDH</span>
+                <span className="text-base font-bold text-[#9E1315] tracking-tight leading-none">NADI</span>
                 <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mt-0.5">
                   {getMobileSectionLabel(activeTab)}
                 </span>
@@ -199,16 +199,19 @@ export default function Header() {
 
               <NotificationCenter />
 
-              <div
+              <button
+                type="button"
                 onClick={() => setRoleMenuOpen(!roleMenuOpen)}
-                className="w-8 h-8 rounded-[9999px] overflow-hidden ring-1 ring-slate-200 dark:ring-slate-700 cursor-pointer ml-1 shrink-0"
+                aria-label="Account and Profile Menu"
+                aria-expanded={roleMenuOpen}
+                className="w-8 h-8 rounded-full overflow-hidden ring-1 ring-slate-200 dark:ring-slate-700 cursor-pointer ml-1 shrink-0 p-0 active:scale-95 transition-transform focus:outline-none focus:ring-2 focus:ring-[#9E1315]"
               >
                 <img
                   src={currentUser.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
                   alt={currentUser.fullName}
                   className="w-full h-full object-cover"
                 />
-              </div>
+              </button>
             </div>
           </div>
 
@@ -249,7 +252,7 @@ export default function Header() {
 
               <NotificationCenter />
 
-              <div ref={roleMenuRef} className="relative z-50">
+              <div className="relative z-50">
                 <button
                   type="button"
                   onClick={() => setRoleMenuOpen(!roleMenuOpen)}
@@ -277,132 +280,162 @@ export default function Header() {
 
                   <ChevronDown className={`w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform duration-200 ${roleMenuOpen ? 'rotate-180' : ''}`} />
                 </button>
+              </div>
 
-              {/* Persona Switcher & Auth Dropdown Menu */}
-              {roleMenuOpen && (
-                <div 
-                  className="absolute right-0 mt-2 w-80 bg-white dark:bg-[#15181C] rounded-2xl shadow-2xl border border-slate-200/90 dark:border-slate-800 p-2 z-50 pointer-events-auto animate-in fade-in zoom-in-95 duration-150"
-                  role="menu"
-                  aria-label="Profile and demo account options"
-                >
-                  <div className="grid grid-cols-2 gap-1.5 mb-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsProfileModalOpen(true);
-                        setRoleMenuOpen(false);
-                      }}
-                      className="flex items-center justify-center gap-1.5 p-2 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-950/70 text-[#9E1315] dark:text-rose-300 rounded-xl font-bold text-xs border border-rose-200/80 dark:border-rose-900/60 transition-colors cursor-pointer"
-                    >
-                      <User className="w-3.5 h-3.5 text-[#9E1315] dark:text-rose-300" />
-                      <span>{t('btnEdit') ? `${t('btnEdit')} Profil` : 'Edit Profile'}</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setActiveTab('settings');
-                        setRoleMenuOpen(false);
-                      }}
-                      className="flex items-center justify-center gap-1.5 p-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl font-bold text-xs border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer"
-                    >
-                      <Settings className="w-3.5 h-3.5 text-slate-600 dark:text-slate-300" />
-                      <span>{t('navSettings') || 'Settings'}</span>
-                    </button>
-                  </div>
-
-                  <div className="px-3 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                    {t('btnSwitchRole') || 'Switch Test Account / Role'}
-                  </div>
-
-                  <div className="space-y-1 max-h-56 overflow-y-auto pr-0.5">
-                    {profilesToRender.map((p) => {
-                      const isSelected = p.id === currentUser.id;
-                      const badge = getRoleBadge(p.role);
-
-                      return (
-                        <button
-                          key={p.id}
-                          type="button"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            switchProfile(p.id);
-                            setRoleMenuOpen(false);
-                          }}
-                          onMouseDown={(e) => {
-                            e.stopPropagation();
-                          }}
-                          className={`w-full flex items-center justify-between p-2 rounded-xl text-left transition-colors cursor-pointer ${
-                            isSelected
-                              ? 'bg-rose-50/80 dark:bg-rose-950/40 font-bold border border-rose-200 dark:border-rose-900/60 text-slate-900 dark:text-slate-100'
-                              : 'hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-600 dark:text-slate-300 border border-transparent'
-                          }`}
-                          aria-selected={isSelected}
-                          role="menuitem"
-                        >
-                          <div className="flex items-center gap-2 min-w-0">
-                            <img
-                              src={p.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
-                              alt={p.fullName}
-                              className="w-7 h-7 rounded-full object-cover shrink-0 ring-1 ring-slate-200 dark:ring-slate-700"
-                            />
-                            <div className="truncate">
-                              <span className="text-xs text-slate-900 dark:text-slate-100 block truncate font-semibold">
-                                {p.displayName || p.fullName}
-                              </span>
-                              <span className="text-[10px] text-slate-500 dark:text-slate-400 block truncate">
-                                {p.townshipPrecinct}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded border ${badge.bg}`}>
-                              {badge.label}
-                            </span>
-                            {isSelected && (
-                              <span className="w-1.5 h-1.5 rounded-full bg-[#9E1315] dark:bg-rose-400 shrink-0" title="Active Account" />
-                            )}
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Authentication Action at bottom of Profile Dropdown (Requirement 4) */}
-                  <hr className="my-2 border-slate-100 dark:border-slate-800" />
-
-                  {supabaseUser ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        signOut();
-                        setRoleMenuOpen(false);
-                      }}
-                      className="w-full flex items-center justify-center gap-2 p-2 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
-                    >
-                      <LogOut className="w-4 h-4" />
-                      <span>{t('signOut') || 'Sign Out'}</span>
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsAuthModalOpen(true);
-                        setRoleMenuOpen(false);
-                      }}
-                      className="w-full flex items-center justify-center gap-2 p-2.5 rounded-xl text-xs font-semibold text-white bg-[#9E1315] hover:bg-[#841012] shadow-xs hover:shadow transition-all cursor-pointer"
-                    >
-                      <LogIn className="w-4 h-4" />
-                      <span>{t('signIn') || 'Sign In'}</span>
-                    </button>
-                  )}
-                </div>
-              )}
             </div>
-
           </div>
         </div>
-      </div>
+
+        {/* Shared Persona Switcher & Auth Dropdown Menu (Accessible on Mobile and Desktop) */}
+        {roleMenuOpen && (
+          <>
+            {/* Backdrop overlay to close when tapped outside on any device */}
+            <div 
+              className="fixed inset-0 z-40 bg-black/25 lg:bg-transparent pointer-events-auto"
+              onClick={() => setRoleMenuOpen(false)}
+              aria-hidden="true"
+            />
+
+            <div 
+              ref={roleMenuRef}
+              className="fixed right-3 sm:right-6 top-16 w-[calc(100vw-24px)] max-w-[340px] bg-white dark:bg-[#15181C] rounded-2xl shadow-2xl border border-slate-200/90 dark:border-slate-800 p-3 z-50 pointer-events-auto animate-in fade-in zoom-in-95 duration-150"
+              role="menu"
+              aria-label="Profile and demo account options"
+            >
+              {/* Current Active Account Header Banner */}
+              <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800 mb-2">
+                <img
+                  src={currentUser.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
+                  alt={currentUser.fullName}
+                  className="w-10 h-10 rounded-full object-cover ring-2 ring-[#9E1315]/20 shrink-0"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate block">
+                      {currentUser.displayName || currentUser.fullName}
+                    </span>
+                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border shrink-0 ${roleInfo.bg}`}>
+                      {roleInfo.label}
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400 truncate block mt-0.5">
+                    {currentUser.townshipPrecinct || 'Bandar Elmina'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-1.5 mb-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsProfileModalOpen(true);
+                    setRoleMenuOpen(false);
+                  }}
+                  className="flex items-center justify-center gap-1.5 p-2 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-950/70 text-[#9E1315] dark:text-rose-300 rounded-xl font-bold text-xs border border-rose-200/80 dark:border-rose-900/60 transition-colors cursor-pointer"
+                >
+                  <User className="w-3.5 h-3.5 text-[#9E1315] dark:text-rose-300" />
+                  <span>{t('btnEdit') ? `${t('btnEdit')} Profil` : 'Edit Profile'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('settings');
+                    setRoleMenuOpen(false);
+                  }}
+                  className="flex items-center justify-center gap-1.5 p-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl font-bold text-xs border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer"
+                >
+                  <Settings className="w-3.5 h-3.5 text-slate-600 dark:text-slate-300" />
+                  <span>{t('navSettings') || 'Settings'}</span>
+                </button>
+              </div>
+
+              <div className="px-1 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                <span>{t('btnSwitchRole') || 'Switch Test Account / Role'}</span>
+                <span className="text-[9px] font-semibold text-emerald-600 dark:text-emerald-400">Live Persona</span>
+              </div>
+
+              <div className="space-y-1 max-h-56 overflow-y-auto pr-0.5">
+                {profilesToRender.map((p) => {
+                  const isSelected = p.id === currentUser.id;
+                  const badge = getRoleBadge(p.role);
+
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        switchProfile(p.id);
+                        setRoleMenuOpen(false);
+                      }}
+                      className={`w-full flex items-center justify-between p-2 rounded-xl text-left transition-colors cursor-pointer ${
+                        isSelected
+                          ? 'bg-rose-50/80 dark:bg-rose-950/40 font-bold border border-rose-200 dark:border-rose-900/60 text-slate-900 dark:text-slate-100'
+                          : 'hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-600 dark:text-slate-300 border border-transparent'
+                      }`}
+                      aria-selected={isSelected}
+                      role="menuitem"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <img
+                          src={p.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
+                          alt={p.fullName}
+                          className="w-7 h-7 rounded-full object-cover shrink-0 ring-1 ring-slate-200 dark:ring-slate-700"
+                        />
+                        <div className="truncate">
+                          <span className="text-xs text-slate-900 dark:text-slate-100 block truncate font-semibold">
+                            {p.displayName || p.fullName}
+                          </span>
+                          <span className="text-[10px] text-slate-500 dark:text-slate-400 block truncate">
+                            {p.townshipPrecinct}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded border ${badge.bg}`}>
+                          {badge.label}
+                        </span>
+                        {isSelected && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#9E1315] dark:bg-rose-400 shrink-0" title="Active Account" />
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Authentication Action at bottom of Profile Dropdown (Requirement 4) */}
+              <hr className="my-2 border-slate-100 dark:border-slate-800" />
+
+              {supabaseUser ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    signOut();
+                    setRoleMenuOpen(false);
+                  }}
+                  className="w-full flex items-center justify-center gap-2 p-2 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span>{t('signOut') || 'Sign Out'}</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAuthModalOpen(true);
+                    setRoleMenuOpen(false);
+                  }}
+                  className="w-full flex items-center justify-center gap-2 p-2.5 rounded-xl text-xs font-semibold text-white bg-[#9E1315] hover:bg-[#841012] shadow-xs hover:shadow transition-all cursor-pointer"
+                >
+                  <LogIn className="w-4 h-4" />
+                  <span>{t('signIn') || 'Sign In'}</span>
+                </button>
+              )}
+            </div>
+          </>
+        )}
 
         {/* Mobile Search Overlay when search button tapped */}
         {isMobileSearchOpen && (

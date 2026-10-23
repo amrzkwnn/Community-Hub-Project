@@ -202,6 +202,11 @@ export default function HomeView() {
       .map((item) => item.event);
   }, [selectedDateKey, eventsByDate, allEvents, viewingMonth, today]);
 
+  // Real active local services count (excluding requests)
+  const availableServicesCount = useMemo(() => {
+    return services.filter((s) => s.status === 'active' && s.type === 'offering').length;
+  }, [services]);
+
   // Calendar navigation handlers
   const handlePrevMonth = () => {
     setViewingMonth((prev) => (prev ? navigateMonth(prev, -1) : null));
@@ -464,7 +469,7 @@ export default function HomeView() {
     },
     {
       id: 'messages',
-      title: 'Secure Messages',
+      title: 'Messages',
       description: 'Connect privately with your neighbours.',
       destination: 'messages',
       tag: 'Encrypted',
@@ -641,9 +646,6 @@ export default function HomeView() {
                     <div className="w-10 h-10 rounded-xl bg-orange-500/10 text-orange-600 flex items-center justify-center">
                       <span className="material-symbols-outlined text-xl">explore</span>
                     </div>
-                    <span className="px-2.5 py-0.5 rounded-full bg-orange-100 dark:bg-orange-950/60 text-orange-800 dark:text-orange-300 text-xs font-semibold">
-                      Live GPS
-                    </span>
                   </div>
                   <div>
                     <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-1">Resilience Map</h3>
@@ -653,7 +655,7 @@ export default function HomeView() {
                   </div>
                   <div className="mt-4 pt-3 flex items-center justify-between border-t border-slate-100 dark:border-slate-800 text-xs">
                     <span className="font-semibold text-orange-600 dark:text-orange-400 inline-flex items-center gap-1">
-                      View Live Grid <span className="material-symbols-outlined text-sm">arrow_forward</span>
+                      View Map <span className="material-symbols-outlined text-sm">arrow_forward</span>
                     </span>
                     <span className="material-symbols-outlined text-orange-500 text-sm animate-pulse">radar</span>
                   </div>
@@ -702,7 +704,7 @@ export default function HomeView() {
                       <span className="material-symbols-outlined text-xl">home_repair_service</span>
                     </div>
                     <span className="px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs font-semibold">
-                      Verified
+                      {availableServicesCount} {availableServicesCount === 1 ? 'service available' : 'services available'}
                     </span>
                   </div>
                   <div>
@@ -713,13 +715,13 @@ export default function HomeView() {
                   </div>
                   <div className="mt-4 pt-3 flex items-center justify-between border-t border-slate-100 dark:border-slate-800 text-xs">
                     <span className="font-semibold text-slate-800 dark:text-slate-200 inline-flex items-center gap-1">
-                      Directory <span className="material-symbols-outlined text-sm">arrow_forward</span>
+                      Services <span className="material-symbols-outlined text-sm">arrow_forward</span>
                     </span>
                     <span className="material-symbols-outlined text-emerald-500 text-sm">verified</span>
                   </div>
                 </div>
 
-                {/* 5. Secure Messages Card */}
+                {/* 5. Messages Card */}
                 <div 
                   role="button"
                   tabIndex={0}
@@ -734,7 +736,7 @@ export default function HomeView() {
                     <span className="w-2.5 h-2.5 rounded-full bg-[#9E1315]"></span>
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-1">Secure Messages</h3>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-1">Messages</h3>
                     <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
                       Direct private messaging with resident committee and guardhouse.
                     </p>
@@ -768,13 +770,13 @@ export default function HomeView() {
             <section className="py-2">
               <div className="flex items-center justify-between mb-3 px-0.5">
                 <div className="flex items-center gap-1.5">
-                  <span className="material-symbols-outlined text-[#9E1315] text-lg">campaign</span>
-                  <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 tracking-tight">Official Civic Notices</h2>
+                  <span className="material-symbols-outlined text-white text-lg drop-shadow-sm">campaign</span>
+                  <h2 className="text-sm font-bold text-white tracking-tight drop-shadow-sm">Official Civic Notices</h2>
                 </div>
                 <button 
                   type="button"
                   onClick={() => setActiveTab('feed')}
-                  className="text-xs font-semibold text-[#9E1315] dark:text-rose-400 hover:underline cursor-pointer"
+                  className="text-xs font-semibold text-white/90 hover:text-white drop-shadow-sm hover:underline cursor-pointer"
                 >
                   View All ({officialNotices.length})
                 </button>
@@ -823,91 +825,173 @@ export default function HomeView() {
             <section className="py-2 mb-4">
               <div className="flex items-center justify-between mb-3 px-0.5">
                 <div className="flex items-center gap-1.5">
-                  <span className="material-symbols-outlined text-[#9E1315] text-lg">event</span>
-                  <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 tracking-tight">Community Calendar</h2>
+                  <span className="material-symbols-outlined text-white text-lg drop-shadow-sm">event</span>
+                  <h2 className="text-sm font-bold text-white tracking-tight drop-shadow-sm">Community Calendar</h2>
                 </div>
-                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                  {viewingMonth ? formatMonthYearHeader(viewingMonth) : 'October 2026'}
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={handlePrevMonth}
+                    aria-label="Previous month"
+                    className="w-7 h-7 rounded-lg bg-white/90 dark:bg-[#15181C]/90 backdrop-blur-md text-slate-700 dark:text-slate-200 flex items-center justify-center shadow-xs active:scale-95 transition-transform cursor-pointer border border-white/60 dark:border-slate-800"
+                  >
+                    <span className="material-symbols-outlined text-base">chevron_left</span>
+                  </button>
+                  <span className="text-xs font-bold text-white drop-shadow-sm min-w-[85px] text-center">
+                    {viewingMonth ? formatMonthYearHeader(viewingMonth) : 'October 2026'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleNextMonth}
+                    aria-label="Next month"
+                    className="w-7 h-7 rounded-lg bg-white/90 dark:bg-[#15181C]/90 backdrop-blur-md text-slate-700 dark:text-slate-200 flex items-center justify-center shadow-xs active:scale-95 transition-transform cursor-pointer border border-white/60 dark:border-slate-800"
+                  >
+                    <span className="material-symbols-outlined text-base">chevron_right</span>
+                  </button>
+                </div>
               </div>
 
               {/* Day Chips Selector */}
-              <div className="bg-white/85 dark:bg-[#15181C]/85 backdrop-blur-md rounded-xl p-3 shadow-[0_2px_12px_rgba(0,0,0,0.04)] mb-3 border border-white/60 dark:border-slate-800">
-                <div className="flex justify-between items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
-                  {['23', '24', '25', '26', '27', '28'].map((dayNum, dIdx) => {
-                    const isSelected = dayNum === '25' || (selectedDateKey && selectedDateKey.endsWith(dayNum));
+              <div className="bg-white/90 dark:bg-[#15181C]/90 backdrop-blur-md rounded-2xl p-3 shadow-[0_2px_12px_rgba(0,0,0,0.06)] mb-3 border border-white/60 dark:border-slate-800">
+                <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100 dark:border-slate-800 text-[11px]">
+                  <span className="font-semibold text-slate-600 dark:text-slate-300">
+                    {selectedDateKey ? `Selected: ${selectedDateKey}` : 'Select a date'}
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    {selectedDateKey && (
+                      <button
+                        type="button"
+                        onClick={handleClearDateFilter}
+                        className="text-[10px] font-bold text-[#9E1315] dark:text-rose-400 hover:underline cursor-pointer"
+                      >
+                        Show All
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleTodayClick}
+                      className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-[10px] hover:bg-slate-200 transition-colors cursor-pointer"
+                    >
+                      Today
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex gap-1.5 overflow-x-auto no-scrollbar py-1">
+                  {(calendarDays.length > 0 ? calendarDays.filter((d) => d.isCurrentMonth) : []).map((day) => {
+                    const isSelected = selectedDateKey === day.dateKey;
+                    const dayEvents = eventsByDate.get(day.dateKey) || [];
+                    const hasEvents = dayEvents.length > 0;
+                    const weekday = day.date.toLocaleDateString('en-MY', { weekday: 'short', timeZone: 'Asia/Kuala_Lumpur' });
+
                     return (
                       <button
-                        key={dayNum}
+                        key={day.dateKey}
                         type="button"
-                        onClick={() => setSelectedDateKey(`2026-10-${dayNum}`)}
-                        className={`flex flex-col items-center justify-center min-w-[42px] py-2 rounded-lg transition-all active:scale-95 cursor-pointer ${
+                        onClick={() => handleDateSelect(day)}
+                        className={`flex flex-col items-center justify-center min-w-[44px] py-2 px-1 rounded-xl transition-all active:scale-95 cursor-pointer shrink-0 ${
                           isSelected
-                            ? 'bg-[#9E1315] text-white shadow-xs'
-                            : 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200'
+                            ? 'bg-[#9E1315] text-white shadow-xs font-bold'
+                            : day.isToday
+                            ? 'bg-rose-50 dark:bg-rose-950/40 text-[#9E1315] dark:text-rose-300 border border-[#9E1315]/40 font-bold'
+                            : 'bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200 hover:bg-slate-100'
                         }`}
                       >
-                        <span className={`text-[10px] uppercase font-medium ${isSelected ? 'text-white/90' : 'text-slate-400'}`}>
-                          {['Wed', 'Thu', 'Fri', 'Sat', 'Sun', 'Mon'][dIdx]}
+                        <span className={`text-[10px] uppercase font-semibold ${isSelected ? 'text-white/90' : 'text-slate-400'}`}>
+                          {weekday}
                         </span>
-                        <span className="text-sm font-bold mt-0.5">{dayNum}</span>
-                        <span className={`w-1 h-1 rounded-full mt-1 ${isSelected ? 'bg-white' : dIdx === 1 || dIdx === 3 ? 'bg-[#9E1315]' : 'bg-transparent'}`} />
+                        <span className="text-sm font-bold mt-0.5 leading-none">{day.dayNumber}</span>
+                        <span className={`w-1.5 h-1.5 rounded-full mt-1 ${isSelected ? 'bg-white' : hasEvents ? 'bg-emerald-500' : 'bg-transparent'}`} />
                       </button>
                     );
                   })}
                 </div>
               </div>
 
-              {/* Event Cards */}
+              {/* Event Cards & Details */}
               <div className="flex flex-col gap-3">
-                {upcomingEvents.slice(0, 2).map((evt) => {
-                  const sched = getEventSchedule(evt);
-                  const isRsvpd = rsvpEvents.includes(evt.id);
-                  return (
-                    <div 
-                      key={evt.id}
-                      className="bg-white/90 dark:bg-[#15181C]/90 backdrop-blur-md rounded-xl p-3.5 shadow-[0_2px_12px_rgba(0,0,0,0.04)] flex gap-3.5 items-start border border-white/60 dark:border-slate-800 text-left"
-                    >
-                      <div className="w-14 h-16 rounded-lg bg-slate-100 dark:bg-slate-800 flex flex-col items-center justify-center shrink-0">
-                        <span className="text-[10px] font-bold text-[#9E1315] uppercase">{sched.month || 'OCT'}</span>
-                        <span className="text-lg font-bold text-slate-900 dark:text-slate-100 leading-tight">{sched.day || '26'}</span>
-                        <span className="text-[10px] text-slate-400 -mt-0.5">{sched.scheduleString?.slice(0, 3).toUpperCase() || 'SAT'}</span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 mb-1">
-                          <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-[10px] font-semibold">
-                            Civic Green
+                {displayedEvents.length === 0 ? (
+                  <div className="bg-white/90 dark:bg-[#15181C]/90 backdrop-blur-md rounded-2xl p-6 text-center border border-white/60 dark:border-slate-800 shadow-xs">
+                    <span className="material-symbols-outlined text-3xl text-slate-400 dark:text-slate-500 mb-1">event_busy</span>
+                    <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                      No events scheduled for {selectedDateKey || 'this month'}
+                    </p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Check another date or explore upcoming community activities.
+                    </p>
+                    {selectedDateKey && (
+                      <button
+                        type="button"
+                        onClick={handleClearDateFilter}
+                        className="mt-3 px-3 py-1.5 rounded-lg bg-[#9E1315] text-white text-xs font-semibold hover:bg-[#841012] transition-colors cursor-pointer"
+                      >
+                        View All Month Events
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  displayedEvents.map((evt) => {
+                    const sched = parseEventSchedule(evt);
+                    const isRsvpd = rsvpEvents.includes(evt.id);
+                    const weekdayShort = evt.eventDate ? new Date(evt.eventDate).toLocaleDateString('en-MY', { weekday: 'short', timeZone: 'Asia/Kuala_Lumpur' }).toUpperCase() : (sched.scheduleString?.slice(0, 3).toUpperCase() || 'SAT');
+
+                    return (
+                      <div 
+                        key={evt.id}
+                        onClick={() => setSelectedEventModal(evt)}
+                        className="bg-white/90 dark:bg-[#15181C]/90 backdrop-blur-md rounded-2xl p-3.5 shadow-[0_2px_12px_rgba(0,0,0,0.04)] flex gap-3.5 items-start border border-white/60 dark:border-slate-800 text-left cursor-pointer active:scale-[0.99] transition-transform"
+                      >
+                        <div className="w-14 h-16 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200/60 dark:border-rose-900/40 flex flex-col items-center justify-center shrink-0">
+                          <span className="text-[10px] font-bold text-[#9E1315] dark:text-rose-400 uppercase">
+                            {sched.monthShort || 'OCT'}
                           </span>
-                          <span className="text-[11px] text-slate-400">{sched.timeString || '08:00 AM - 11:30 AM'}</span>
+                          <span className="text-lg font-bold text-slate-900 dark:text-slate-100 leading-tight">
+                            {sched.dayNumber || '26'}
+                          </span>
+                          <span className="text-[9px] text-slate-400 dark:text-slate-500 -mt-0.5 font-semibold">
+                            {weekdayShort}
+                          </span>
                         </div>
-                        <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
-                          {evt.title}
-                        </h4>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5 truncate">
-                          <span className="material-symbols-outlined text-xs text-[#9E1315]">location_on</span>
-                          {evt.eventVenue || 'Central Lake Pavilion A'}
-                        </p>
-                        <div className="flex items-center justify-between mt-3">
-                          <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400 text-xs">
-                            <span className="material-symbols-outlined text-sm text-[#9E1315]">group</span>
-                            <span>42 attending</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-[10px] font-semibold">
+                              Community
+                            </span>
+                            <span className="text-[11px] text-slate-400 truncate">
+                              {sched.timeString || '08:00 AM'}
+                            </span>
                           </div>
-                          <button 
-                            type="button"
-                            onClick={() => toggleRsvpEvent(evt.id)}
-                            className={`h-8 px-3.5 rounded-lg text-xs font-semibold active:scale-95 transition-all shadow-xs cursor-pointer ${
-                              isRsvpd
-                                ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                                : 'bg-[#9E1315] hover:bg-[#841012] text-white'
-                            }`}
-                          >
-                            {isRsvpd ? 'RSVP Attend ✓' : 'RSVP Attend'}
-                          </button>
+                          <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
+                            {evt.title}
+                          </h4>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5 truncate">
+                            <span className="material-symbols-outlined text-xs text-[#9E1315]">location_on</span>
+                            {evt.eventVenue || 'Central Lake Pavilion A'}
+                          </p>
+                          <div className="flex items-center justify-between mt-3">
+                            <span className="text-[11px] font-semibold text-[#9E1315] dark:text-rose-400 flex items-center gap-0.5">
+                              Details <span className="material-symbols-outlined text-xs">arrow_forward</span>
+                            </span>
+                            <button 
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleRsvpEvent(evt.id);
+                              }}
+                              className={`h-7 px-3 rounded-lg text-[11px] font-semibold active:scale-95 transition-all shadow-xs cursor-pointer ${
+                                isRsvpd
+                                  ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                                  : 'bg-[#9E1315] hover:bg-[#841012] text-white'
+                              }`}
+                            >
+                              {isRsvpd ? 'Attending ✓' : 'RSVP Attend'}
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })
+                )}
               </div>
             </section>
           </div>
