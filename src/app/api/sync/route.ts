@@ -47,11 +47,13 @@ export async function GET(request: NextRequest) {
           latitude: Number(r.latitude),
           longitude: Number(r.longitude),
           severity: r.severity || 'medium',
-          status: r.status === 'pending' ? 'reported' : r.status,
-          isVerified: r.status === 'under_review' || r.status === 'resolved',
+          status: r.status || 'pending',
+          isVerified: r.status === 'under_review' || r.status === 'resolved' || r.status === 'dispatched',
           isAnonymous: Boolean(r.is_anonymous),
           assignedTeam: r.assigned_team,
           managementNotes: r.management_notes,
+          parentIncidentId: r.parent_incident_id || null,
+          isMerged: Boolean(r.is_merged || (r.management_notes && r.management_notes.includes('[Merged into'))),
           updates: [
             {
               id: `upd-${r.id}`,
@@ -181,10 +183,55 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // 1. Authenticate requesting user to enforce server-side access control
+  const sessionHeader = request.headers.get('x-tesdh-session') || 
+    request.headers.get('authorization')?.replace('Bearer ', '');
+  let isManagement = false;
+  let requestingUserId = sessionHeader || '';
+
+  if (sessionHeader === 'user-azman') {
+    isManagement = true;
+  } else if (sessionHeader) {
+    const { INITIAL_PROFILES } = await import('@/lib/data/mockData');
+    const p = INITIAL_PROFILES.find((prof) => prof.id === sessionHeader);
+    if (p?.role === 'management') {
+      isManagement = true;
+    }
+  }
+
   // Merge database records with memory store (database records take precedence)
-  const finalIncidents = dbIncidents.length > 0 
+  const rawIncidents = dbIncidents.length > 0 
     ? [...dbIncidents, ...memory.incidents.filter((m) => !dbIncidents.some((d) => d.id === m.id))]
     : memory.incidents;
+
+  // Enforce server-side approval-only public visibility (Part 5):
+  // - Approved incidents ('reported', 'under_review', 'dispatched', 'resolved') are visible to all.
+  // - Unapproved ('pending') and 'rejected' incidents are ONLY returned if requesting user is Management or original submitter.
+  // - Merged duplicate incidents are excluded from public maps to prevent duplicate markers.
+  const finalIncidents = rawIncidents.filter((inc) => {
+    // Management sees all incidents (including pending, rejected, and merged duplicates for audit)
+    if (isManagement) return true;
+
+    // Original reporter can see their own pending or rejected submissions
+    if (requestingUserId) {
+      const reporterUuid = toDatabaseUserId(requestingUserId);
+      if (inc.reporterId === requestingUserId || inc.reporterId === reporterUuid) {
+        return true;
+      }
+    }
+
+    // Hide unapproved (pending) and rejected reports from public and other residents
+    if (inc.status === 'pending' || inc.status === 'rejected' || inc.status === 'dismissed') {
+      return false;
+    }
+
+    // Hide merged duplicates from public map view
+    if (inc.isMerged) {
+      return false;
+    }
+
+    return true;
+  });
 
   const finalPosts = dbPosts.length > 0
     ? [...dbPosts, ...memory.posts.filter((m) => !dbPosts.some((d) => d.id === m.id))]
@@ -272,7 +319,8 @@ export async function POST(request: NextRequest) {
             resultRecord = {
               ...payload,
               id: `inc-${Date.now()}`,
-              status: 'reported',
+              status: 'pending',
+              isVerified: false,
               createdAt: new Date().toISOString(),
             };
           } else {
@@ -288,7 +336,7 @@ export async function POST(request: NextRequest) {
               latitude: Number(data.latitude),
               longitude: Number(data.longitude),
               severity: data.severity,
-              status: 'reported',
+              status: 'pending',
               isVerified: false,
               isAnonymous: Boolean(data.is_anonymous),
               createdAt: data.created_at,
@@ -309,7 +357,8 @@ export async function POST(request: NextRequest) {
           resultRecord = {
             ...payload,
             id: `inc-${Date.now()}`,
-            status: 'reported',
+            status: 'pending',
+            isVerified: false,
             createdAt: new Date().toISOString(),
           };
         }
@@ -319,6 +368,7 @@ export async function POST(request: NextRequest) {
         break;
       }
 
+      case 'APPROVE_INCIDENT':
       case 'VERIFY_INCIDENT': {
         const { incidentId, notes, verifiedBy } = payload;
         if (supabase) {
@@ -326,7 +376,7 @@ export async function POST(request: NextRequest) {
             .from('community_reports')
             .update({
               status: 'under_review',
-              management_notes: notes,
+              management_notes: notes || 'Verified and approved for public community visibility.',
             })
             .eq('id', incidentId);
         }
@@ -335,18 +385,19 @@ export async function POST(request: NextRequest) {
           if (inc.id === incidentId) {
             return {
               ...inc,
+              status: 'under_review' as any,
               isVerified: true,
-              status: 'in_progress',
-              verificationNotes: notes,
-              verifiedByName: verifiedBy || 'JMB Management Office',
-              managementNotes: notes,
+              verificationNotes: notes || 'Verified and approved by Management.',
+              verifiedByName: verifiedBy || user?.fullName || 'Capt. (R) Azman (Management)',
+              verifiedAt: new Date().toISOString(),
+              managementNotes: notes || 'Verified and approved by Management.',
               updatedAt: new Date().toISOString(),
             };
           }
           return inc;
         });
         updateMemoryStore({ incidents: updatedIncidents });
-        resultRecord = { incidentId, verified: true };
+        resultRecord = { incidentId, verified: true, approved: true };
         break;
       }
 
@@ -356,8 +407,8 @@ export async function POST(request: NextRequest) {
           await supabase
             .from('community_reports')
             .update({
-              status: 'dismissed',
-              management_notes: `Rejected: ${reason}`,
+              status: 'rejected',
+              management_notes: `Rejected: ${reason || 'Unconfirmed report'}`,
             })
             .eq('id', incidentId);
         }
@@ -366,8 +417,9 @@ export async function POST(request: NextRequest) {
           if (inc.id === incidentId) {
             return {
               ...inc,
-              status: 'resolved',
-              managementNotes: `Rejected: ${reason}`,
+              status: 'rejected' as any,
+              isVerified: false,
+              managementNotes: `Rejected: ${reason || 'Unconfirmed report'}`,
               updatedAt: new Date().toISOString(),
             };
           }
@@ -375,6 +427,57 @@ export async function POST(request: NextRequest) {
         });
         updateMemoryStore({ incidents: updatedIncidents });
         resultRecord = { incidentId, rejected: true };
+        break;
+      }
+
+      case 'MERGE_INCIDENTS': {
+        const { canonicalId, duplicateIds, reason } = payload;
+        const mergeNote = reason || 'Merged into canonical incident report';
+        const now = new Date().toISOString();
+
+        if (supabase) {
+          for (const dupId of duplicateIds) {
+            await supabase
+              .from('community_reports')
+              .update({
+                status: 'resolved',
+                management_notes: `[Merged into #${canonicalId}] ${mergeNote}`,
+              })
+              .eq('id', dupId);
+          }
+          await supabase
+            .from('community_reports')
+            .update({
+              management_notes: `[Consolidated ${duplicateIds.length} duplicate report(s)] ${mergeNote}`,
+            })
+            .eq('id', canonicalId);
+        }
+
+        const updatedIncidents = memory.incidents.map((inc) => {
+          if (duplicateIds.includes(inc.id)) {
+            return {
+              ...inc,
+              status: 'resolved' as any,
+              parentIncidentId: canonicalId,
+              isMerged: true,
+              duplicateReason: mergeNote,
+              mergedAt: now,
+              mergedBy: user?.fullName || 'Management',
+              updatedAt: now,
+            };
+          }
+          if (inc.id === canonicalId) {
+            return {
+              ...inc,
+              mergedIncidentIds: Array.from(new Set([...(inc.mergedIncidentIds || []), ...duplicateIds])),
+              managementNotes: `[Consolidated ${duplicateIds.length} duplicate report(s)] ${mergeNote}`,
+              updatedAt: now,
+            };
+          }
+          return inc;
+        });
+        updateMemoryStore({ incidents: updatedIncidents });
+        resultRecord = { canonicalId, duplicateIds, merged: true };
         break;
       }
 

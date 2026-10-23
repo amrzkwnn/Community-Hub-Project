@@ -220,9 +220,18 @@ export default function ResilienceView() {
     }
   }, [incidents, selectedIncident]);
 
-  // Filtered incidents calculation
+  // Filtered incidents calculation (Strictly approval-only public visibility)
   const filteredIncidents = incidents.filter((inc) => {
     if (inc.isArchived) return false;
+    // Merged duplicates are consolidated under canonical incident
+    if (inc.isMerged) return false;
+
+    // Public visibility rule:
+    // If pending or rejected, only visible to Management or the reporting resident themselves!
+    const isOwner = Boolean(currentUser && inc.reporterId === currentUser.id);
+    if ((inc.status === 'pending' || inc.status === 'rejected') && !isManagement && !isOwner) {
+      return false;
+    }
     
     // Search query
     if (searchQuery.trim()) {
@@ -351,9 +360,9 @@ export default function ResilienceView() {
     setNewDesc('');
     setNewImageUrl('');
     
-    // Set success toast matching Stitch Step 5
+    // Set success toast matching Step 1: Resident submission requirement
     const refCode = result.incident ? `#ELM-${result.incident.id.slice(0, 4)}` : '#ELM-889';
-    setSubmissionToast(`Dispatched to Elmina Auxiliary Police & Sime Darby Township Operations Desk. Ref ${refCode}.`);
+    setSubmissionToast(`Report submitted for JMB Management review & approval (Ref ${refCode}). It will become publicly visible once approved.`);
     setTimeout(() => {
       setSubmissionToast(null);
     }, 6000);
@@ -448,12 +457,16 @@ export default function ResilienceView() {
 
   const getStatusBadge = (status: IncidentStatus) => {
     switch (status) {
+      case 'pending':
+        return { label: 'Pending Approval', class: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300' };
+      case 'rejected':
+        return { label: 'Rejected', class: 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border-rose-300' };
       case 'resolved':
         return { label: 'Resolved', class: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300' };
       case 'dispatched':
         return { label: 'En Route / Dispatched', class: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300 border-indigo-300' };
       case 'under_review':
-        return { label: 'Under Review', class: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300' };
+        return { label: 'Under Review', class: 'bg-sky-100 text-sky-800 dark:bg-sky-950/60 dark:text-sky-300 border-sky-300' };
       default:
         return { label: 'Reported', class: 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300 border-slate-300' };
     }
@@ -1016,6 +1029,12 @@ export default function ResilienceView() {
                       <span className="text-lg font-bold text-slate-900 dark:text-white">
                         #ELM-{selectedIncident.id.slice(0, 4)}
                       </span>
+                      {selectedIncident.status === 'pending' && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 text-[11px] font-semibold">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                          Pending JMB Approval
+                        </span>
+                      )}
                       {selectedIncident.isVerified && (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-[11px] font-semibold">
                           <CheckCircle2 className="w-3 h-3 text-blue-600" />

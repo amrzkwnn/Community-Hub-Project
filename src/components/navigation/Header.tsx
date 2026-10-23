@@ -168,11 +168,14 @@ export default function Header() {
               </button>
               <div 
                 onClick={() => setActiveTab('home')}
-                className="flex flex-col ml-0.5 cursor-pointer select-none"
+                className="flex items-center gap-2 ml-0.5 cursor-pointer select-none"
               >
-                <span className="sr-only">Community Hub</span>
-                <span className="text-base font-bold text-[#9E1315] tracking-tight leading-none">NADI</span>
-                <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mt-0.5">
+                <img
+                  src="/images/nadikomuniti-logo-transparent.png"
+                  alt="Nadikomuniti — Connect & Relax"
+                  className="h-7 w-auto object-contain max-w-[130px]"
+                />
+                <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-l border-slate-300 dark:border-slate-700 pl-2">
                   {getMobileSectionLabel(activeTab)}
                 </span>
               </div>
@@ -232,6 +235,19 @@ export default function Header() {
                   <PanelLeftClose className="w-4.5 h-4.5" />
                 )}
               </button>
+              {isSidebarCollapsed && (
+                <div 
+                  onClick={() => setActiveTab('home')}
+                  className="flex items-center gap-2 cursor-pointer select-none group"
+                  title="Nadikomuniti — Connect & Relax"
+                >
+                  <img
+                    src="/images/nadikomuniti-logo-transparent.png"
+                    alt="Nadikomuniti — Connect & Relax"
+                    className="h-8 w-auto object-contain max-w-[150px] group-hover:scale-105 transition-transform"
+                  />
+                </div>
+              )}
             </div>
 
             <div className="flex-1 max-w-lg min-w-0">

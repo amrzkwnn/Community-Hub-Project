@@ -138,6 +138,34 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Persist resolution in Supabase moderation_reports table
+    try {
+      const { getSupabaseAdmin, toDatabaseUserId } = await import('@/lib/server/dbSync');
+      const supabaseAdmin = getSupabaseAdmin();
+      if (supabaseAdmin) {
+        const reviewerUuid = toDatabaseUserId(user.id);
+        const repStatus = action === 'dismissed' ? 'dismissed' : action === 'under_review' ? 'under_review' : 'actioned';
+        if (reportId) {
+          await supabaseAdmin.from('moderation_reports').update({
+            status: repStatus,
+            reviewed_by: reviewerUuid,
+            resolution_note: reviewerNote,
+          }).eq('id', reportId);
+        } else if (targetId) {
+          const targetUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetId)
+            ? targetId
+            : toDatabaseUserId(targetId);
+          await supabaseAdmin.from('moderation_reports').update({
+            status: repStatus,
+            reviewed_by: reviewerUuid,
+            resolution_note: reviewerNote,
+          }).eq('target_id', targetUuid);
+        }
+      }
+    } catch (e) {
+      console.warn('[moderation/action] Supabase report update warning:', e);
+    }
+
     // 4. Soft-delete content in Supabase if action is 'removed'
     if (action === 'removed' && targetId) {
       try {

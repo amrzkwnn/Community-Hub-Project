@@ -192,3 +192,159 @@ font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, san
      }
    }
    ```
+
+---
+
+## 8. Official Nadikomuniti Brand & Logo Integration System
+
+The **Nadikomuniti** brand (`NadiKomuniti Connect & Relax`) serves as the official community identity of the City of Elmina portal under Sime Darby Property.
+
+### 8.1 Brand Assets & Extraction
+- **Master Asset:** `public/images/nadikomuniti-logo.png`
+- **Transparent Alpha Asset:** `public/images/nadikomuniti-logo-transparent.png`
+- **Asset Integrity Policy:** The authentic brand artwork, including the organic twin-leaf green flourish, the flowing cursive script typography, and the burgundy/maroon tagline ("CONNECT & RELAX"), is preserved without modification or synthetic redrawing. Transparent rendering uses strict chroma-key extraction on the white canvas boundary.
+
+### 8.2 Dimension & Placement Standards
+
+| Viewport / Placement | Render Dimensions | CSS Utility Classes | Behavior & Clear Space |
+| :--- | :--- | :--- | :--- |
+| **Desktop Expanded Sidebar** | `170px` (W) × `42px` (H) | `w-[170px] h-[42px] object-contain object-left` | Anchored at top of fixed sidebar navigation with 16px horizontal and 12px vertical padding. |
+| **Desktop Collapsed Sidebar** | `36px` (W) × `36px` (H) | `w-9 h-9 rounded-xl object-contain object-left` | Clipped to the green leaf emblem with an elegant rounded container. |
+| **Mobile Header** | `140px` (W) × `34px` (H) | `w-[140px] h-[34px] object-contain object-left` | Aligned with hamburger trigger and notification badge in sticky top mobile bar. |
+| **Mobile Drawer Header** | `150px` (W) × `36px` (H) | `w-[150px] h-[36px] object-contain object-left` | Displayed above the mobile drawer's precinct switcher with 16px bottom divider. |
+
+### 8.3 Light & Dark Mode Harmonization
+- **Light Canvas (`#F8F9FA`):** Native transparent asset renders directly against light container surfaces.
+- **Dark Canvas (`#0F1113` / `#15181C`):** Subtly enhanced with `dark:brightness-105 dark:contrast-105` to ensure maximum legibility of the burgundy typography against dark backgrounds without altering the original artwork colors.
+
+---
+
+## 9. Google Stitch Mobile Architecture (The 7 Core Screens)
+
+Implemented from the approved Google Stitch project (`projects/12344300653138993483`) with pixel-level responsiveness across 360px, 390px, and 430px mobile viewports:
+
+1. **Screen 1: Mobile Home / Dashboard (`/`)**
+   - High-priority emergency broadcast ribbon at top.
+   - Pinned township notices with 3px crimson brand bar.
+   - Live precinct environmental telemetry (air quality, temperature, rainfall forecast).
+   - Quick navigation action grid (Report Hazard, Resident Exchange, Find Service, Chat).
+2. **Screen 2: Community Feed & Discussion Detail (`/feed`)**
+   - Chronological and trending township feed with category filters (All, Notices, Safety, Lost & Found, Recommendations).
+   - Touch-friendly 40px back navigation pill button (`arrow_back` icon + "Back to Feed" label) for instant single-tap return from discussion threads.
+   - Unsent comment draft protection confirmation dialog.
+3. **Screen 3: Resilience Navigator & Map View (`/map`)**
+   - Full-bleed Mapbox interactive precinct map with hazard markers (Fallen Tree, Flash Flood, Streetlight Outage, Gate Congestion).
+   - Emergency shelter locator and water point distribution pins.
+   - Dynamic clustering with 500m radius threshold indicator.
+4. **Screen 4: Resident Exchange (`/exchange`)**
+   - Peer-to-peer neighborhood circular economy hub (giveaways, tool loans, book swapping).
+   - Item status badges (`available`, `reserved`, `completed`).
+   - Direct resident-to-resident contact trigger.
+5. **Screen 5: Local Services Directory (`/services`)**
+   - Vetted township contractors and resident handymen (Aircond Service, Plumbing, Electrical, Landscaping, Tutoring).
+   - Verification status badge and resident rating stars.
+   - One-tap WhatsApp inquiry and direct phone call links.
+6. **Screen 6: Direct Messages & Community Chat (`/messages`)**
+   - Real-time conversation threads between verified residents and management duty officers.
+   - Read receipts, timestamps, and attachment previews.
+7. **Screen 7: Profile, Identity & Security Settings (`/settings`)**
+   - Resident S&P / Tenancy agreement verification standing.
+   - PDPA privacy controls (PII masking, phone number masking).
+   - System theme switcher (Light, Dark, System Preference).
+
+---
+
+## 10. Incident Safety & Approval-Only Visibility Architecture
+
+To protect township tranquility and prevent unverified rumors or panic, all incident submissions follow a strict **human-in-the-loop governance protocol**.
+
+```
+[Resident Reports Hazard on Map]
+               │
+               ▼
+   [Status: 'pending' (Default)]
+               │
+      ┌────────┴────────┐
+      ▼                 ▼
+[Public Map]      [Management Console]
+(Hidden / 404)     (Queued in "Pending Approval" Tab)
+                        │
+             ┌──────────┴──────────┐
+             ▼                     ▼
+      [Approve & Publish]    [Decline / Reject]
+             │                     │
+             ▼                     ▼
+    [Status: 'under_review']  [Status: 'rejected']
+    (Visible on Public Map,   (Stored in Audit Trail;
+     isVerified: true)         Never visible publicly)
+```
+
+### 10.1 Dual-Layer Backend Enforcement
+- **Client Enforcement:** `ResilienceView.tsx` filters `filteredIncidents` to exclude any incident where `status === 'pending' || status === 'rejected' || status === 'dismissed'`, unless the active user has role `management` or matches `reporterId`.
+- **Server-Side RLS Enforcement:** `GET /api/sync` strictly strips pending and rejected incidents before returning the payload to non-management sessions. URL tampering or client state injection cannot expose unapproved incidents.
+
+### 10.2 Management Incident Sub-Tabs
+1. **Active Incidents:** Currently published hazards (`under_review`, `in_progress`, `resolved`).
+2. **Pending Approval [Count Badge]:** Real-time queue of new resident reports awaiting Duty Officer verification. Includes photo evidence, precinct location, and one-click "Approve & Publish to Map" or "Decline / Reject".
+3. **AI Duplicate Merge [Count Badge]:** Candidate pairs identified by the AI deduplication engine.
+4. **Archived / History:** Complete historical record of resolved or rejected incidents.
+
+---
+
+## 11. AI Duplicate Incident Merging System
+
+When multiple residents report the same localized event (e.g., a fallen tree blocking Persiaran Elmina), the system clusters reports to prevent map clutter while preserving all resident evidence.
+
+### 11.1 Tri-Factor Deduplication Heuristics
+1. **Spatial Proximity:** Haversine formula calculation:
+   $$\text{Distance} \le 500\text{ meters}$$
+2. **Temporal Proximity:** Timestamp delta:
+   $$\Delta t \le 7\text{ days (604,800,000 ms)}$$
+3. **Gemini Semantic Comparison:** Hazard category alignment and natural language description comparison via Gemini 2.5 Flash, generating:
+   - Match Confidence Score ($0\% - 100\%$)
+   - Human-readable AI rationale explaining the physical similarity
+
+### 11.2 Non-Destructive Consolidation Mechanics
+- **Canonical Incident Selection:** The earliest or highest-detail report is retained as the parent (`canonical`).
+- **Merged Child Incident:** Marked `isMerged: true` with `parentIncidentId` pointing to the canonical report.
+- **Evidence Preservation:** Child photo attachments, reporter notes, and timestamps are appended to the parent's `mergedIncidentIds` array.
+- **Public Map Clutter Prevention:** Merged child reports are automatically filtered out from public map rendering (`isMerged !== true`), while duty officers can view the full consolidated cluster in the Management Console.
+
+---
+
+## 12. Community Moderation Engine & Review Dossier
+
+### 12.1 Durable Moderation Persistence
+- **State Integrity:** Manual resident reports (`moderation_reports`) are persisted directly to Supabase and synchronized into a durable in-memory server store (`moderationStore.ts`).
+- **Unified Case Synthesis:** Automated AI background scans and manual resident claims targeting the same post, listing, or service are consolidated into a single actionable case (`unifiedCases`) keyed by `targetId`.
+- **Negative Guardrails:** Civic criticism of township management, complaints regarding gate delays, or facility maintenance tickets are protected as legitimate feedback and immune to automatic suppression.
+
+### 12.2 Comprehensive Moderation Dossier Modal
+Each case card provides a "View Dossier" action opening a 5-section investigative modal:
+1. **Dossier Header:** Target type, current moderation status, priority score badge, and modal dismiss.
+2. **Reported Content Display:** Full original title, verbatim content preview, author name, township precinct, creation timestamp, and deep link to view in situ.
+3. **Resident Claims Breakdown:** Specific claim categories (e.g. `scam_fraud`, `harassment`, `offensive`), reporter identity, submission timestamp, and verbatim resident notes.
+4. **AI Safety Rationale:** Gemini safety evaluation, confidence percentage, and policy explanation.
+5. **Review History & Duty Officer Decision Console:** Previous audit entries, reviewer notes, and one-click actions:
+   - **Keep Content (Approved):** Clears flag and confirms content compliance.
+   - **Dismiss Flag (False Positive):** Closes report as benign or protected civic feedback.
+   - **Take Down (Remove Content):** Soft-deletes target content from all public views.
+   - **Mark Under Review:** Escalates to Senior Estate Management with mandatory auditor notes.
+
+---
+
+## 13. Management Console Dark Mode Tokens & Standards
+
+The Management Console utilizes a bespoke dark color system engineered for extended security-monitoring shifts:
+
+| Token Name | Light Token | Dark Token | Purpose & Context |
+| :--- | :--- | :--- | :--- |
+| **Canvas Background** | `#F8F9FA` | `#0F1113` | Deep low-glare backdrop preventing eye fatigue |
+| **Console Panel Card** | `#FFFFFF` | `#15181C` | Structural containers for tables, queues, and modals |
+| **Card Border** | `#E2E8F0` | `#1E293B` | Subtle hairline container boundary (`slate-800`) |
+| **Subtle Table Row / Input** | `#F8FAFC` | `#0F172A` / `#1E293B` | Alternating table rows, input fields, filter bars |
+| **Primary Typography** | `#0F172A` | `#F8FAFC` | High-contrast titles, numbers, and data points |
+| **Secondary Typography** | `#64748B` | `#94A3B8` | Subtitles, field labels, timestamps (`slate-400`) |
+| **Primary Brand Action** | `#065F46` (Emerald) | `#047857` / `#10B981` | Duty officer verification and approval actions |
+| **Destructive Brand Action** | `#DC2626` (Rose) | `#EF4444` / `#F87171` | Decline, suspension, and take-down actions |
+

@@ -175,7 +175,9 @@ interface AppContextType {
     assignedTeam?: string
   ) => Promise<void>;
   verifyIncident: (incidentId: string, notes: string) => Promise<{ success: boolean; error?: string }>;
-  rejectIncident: (incidentId: string, reason: string) => Promise<void>;
+  approveIncident: (incidentId: string, notes?: string) => Promise<{ success: boolean; error?: string }>;
+  mergeIncidents: (canonicalId: string, duplicateIds: string[], reason?: string) => Promise<{ success: boolean; error?: string }>;
+  rejectIncident: (incidentId: string, reason: string) => Promise<{ success: boolean; error?: string }>;
   archiveIncident: (incidentId: string) => Promise<{ success: boolean; error?: string }>;
   
   // Circular Exchange & Local Services
@@ -1780,7 +1782,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       latitude: data.latitude,
       longitude: data.longitude,
       severity: data.severity,
-      status: 'reported',
+      status: 'pending',
       isVerified: false,
       imageUrl: data.imageUrl,
       isAnonymous: Boolean(data.isAnonymous),
@@ -1791,8 +1793,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           authorName: data.isAnonymous ? t('anonymousNeighbour') : currentUser.fullName,
           authorRole: currentUser.role,
           statusFrom: undefined,
-          statusTo: 'reported',
-          note: 'New incident report submitted via community hub.',
+          statusTo: 'pending',
+          note: 'Incident report submitted for Management review and approval.',
           createdAt: new Date().toISOString(),
         },
       ],
@@ -1841,12 +1843,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       type: data.incidentType,
       severity: data.severity,
       isDuplicate,
+      status: 'pending',
     });
 
     return { isDuplicate, duplicateOf, incident: savedIncident };
   };
 
-  // Incident Verification (Strictly Management Role)
+  // Incident Verification & Approval (Strictly Management Role)
   const verifyIncident = async (incidentId: string, notes: string): Promise<{ success: boolean; error?: string }> => {
     if (currentUser.role !== 'management') {
       return { success: false, error: 'Access denied: Only management staff are authorized to verify incidents.' };
@@ -1862,13 +1865,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             authorName: currentUser.fullName,
             authorRole: currentUser.role,
             statusFrom: inc.status,
-            statusTo: inc.status,
-            note: `Incident verified by JMB Management Office: ${notes}`,
+            statusTo: 'under_review' as IncidentStatus,
+            note: `Incident verified & approved by JMB Management Office: ${notes}`,
             createdAt: verifiedAt,
           };
 
           return {
             ...inc,
+            status: 'under_review' as IncidentStatus,
             isVerified: true,
             verifiedBy: currentUser.id,
             verifiedByName: currentUser.fullName,
@@ -1906,16 +1910,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'VERIFY_INCIDENT',
+          action: 'APPROVE_INCIDENT',
           payload: { incidentId, notes, verifiedBy: currentUser.fullName },
           user: currentUser,
         }),
       });
     } catch (syncErr) {
-      console.warn('[Sync] /api/sync VERIFY_INCIDENT fallback:', syncErr);
+      console.warn('[Sync] /api/sync APPROVE_INCIDENT fallback:', syncErr);
     }
 
-    logAudit('VERIFY_INCIDENT', 'community_reports', incidentId, {
+    logAudit('APPROVE_INCIDENT', 'community_reports', incidentId, {
       verifiedBy: currentUser.fullName,
       notes,
     });
@@ -1923,18 +1927,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return { success: true };
   };
 
-  const rejectIncident = async (incidentId: string, reason: string) => {
-    if (currentUser.role !== 'management') return;
+  const approveIncident = async (incidentId: string, notes?: string): Promise<{ success: boolean; error?: string }> => {
+    return verifyIncident(incidentId, notes || 'Approved for public visibility and dispatch by Township Management.');
+  };
+
+  const rejectIncident = async (incidentId: string, reason: string): Promise<{ success: boolean; error?: string }> => {
+    if (currentUser.role !== 'management') {
+      return { success: false, error: 'Access denied: Only management staff can reject incidents.' };
+    }
 
     setIncidents((prev) => {
-      const next = prev.map((inc) => (inc.id === incidentId ? { ...inc, status: 'resolved' as IncidentStatus, managementNotes: `Rejected: ${reason}` } : inc));
+      const next = prev.map((inc) => (inc.id === incidentId ? { ...inc, status: 'rejected' as IncidentStatus, isVerified: false, managementNotes: `Rejected by Management: ${reason}` } : inc));
       try {
         localStorage.setItem(INCIDENTS_CACHE_KEY, JSON.stringify(next));
       } catch {}
       return next;
     });
 
-    // Sync to Supabase via /api/sync
     try {
       await fetch('/api/sync', {
         method: 'POST',
@@ -1950,6 +1959,72 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     logAudit('REJECT_INCIDENT', 'community_reports', incidentId, { reason });
+    return { success: true };
+  };
+
+  // AI-Assisted Duplicate Incident Merging (Part 6)
+  const mergeIncidents = async (
+    canonicalId: string, 
+    duplicateIds: string[], 
+    reason?: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (currentUser.role !== 'management') {
+      return { success: false, error: 'Access denied: Only management staff are authorized to merge incident reports.' };
+    }
+
+    const mergeReason = reason || 'Consolidated duplicate hazard report';
+    const now = new Date().toISOString();
+
+    setIncidents((prev) => {
+      const next = prev.map((inc) => {
+        if (duplicateIds.includes(inc.id)) {
+          return {
+            ...inc,
+            status: 'resolved' as IncidentStatus,
+            parentIncidentId: canonicalId,
+            isMerged: true,
+            duplicateReason: mergeReason,
+            mergedAt: now,
+            mergedBy: currentUser.fullName,
+            updatedAt: now,
+          };
+        }
+        if (inc.id === canonicalId) {
+          return {
+            ...inc,
+            mergedIncidentIds: Array.from(new Set([...(inc.mergedIncidentIds || []), ...duplicateIds])),
+            managementNotes: `[Consolidated ${duplicateIds.length} duplicate report(s)] ${mergeReason}`,
+            updatedAt: now,
+          };
+        }
+        return inc;
+      });
+      try {
+        localStorage.setItem(INCIDENTS_CACHE_KEY, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    try {
+      await fetch('/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'MERGE_INCIDENTS',
+          payload: { canonicalId, duplicateIds, reason: mergeReason },
+          user: currentUser,
+        }),
+      });
+    } catch (syncErr) {
+      console.warn('[Sync] /api/sync MERGE_INCIDENTS fallback:', syncErr);
+    }
+
+    logAudit('MERGE_INCIDENTS', 'community_reports', canonicalId, {
+      duplicateIds,
+      reason: mergeReason,
+    });
+
+    return { success: true };
   };
 
   // Archive Resolved Incident (Management Only, Soft Deletion with Audit Trail)
@@ -2721,6 +2796,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (json.report) {
         setModerationReports((prev) => [json.report, ...prev.filter((r) => r.id !== json.report.id)]);
       }
+      if (json.unifiedCase) {
+        setUnifiedCases((prev) => [
+          json.unifiedCase,
+          ...prev.filter((c) => c.id !== json.unifiedCase.id && !(c.targetType === json.unifiedCase.targetType && c.targetId === json.unifiedCase.targetId))
+        ]);
+      }
       logAudit('REPORT_CONTENT', data.targetType, data.targetId, { reason: data.reason });
       return { success: true, isDuplicate: Boolean(json.isDuplicate) };
     } catch (err) {
@@ -3205,6 +3286,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         reportIncident,
         updateIncidentStatus,
         verifyIncident,
+        approveIncident,
+        mergeIncidents,
         rejectIncident,
         archiveIncident,
         exchangeItems,

@@ -2409,14 +2409,22 @@ export default function FeedView() {
             <div className="sticky top-0 z-20 bg-white/95 dark:bg-[#17191C]/95 backdrop-blur-md px-4 sm:px-6 py-3.5 border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
               <button
                 type="button"
-                onClick={closeIndividualPost}
-                className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-[#9E1315] dark:text-rose-400 hover:text-[#841012] transition-colors cursor-pointer group"
+                onClick={() => {
+                  const draft = selectedPostModal ? replyInput[selectedPostModal.id]?.trim() : '';
+                  if (draft && draft.length > 0) {
+                    if (!window.confirm('You have an unsent comment draft. Are you sure you want to return to Community Feed?')) {
+                      return;
+                    }
+                  }
+                  closeIndividualPost();
+                }}
+                className="inline-flex items-center gap-2 h-10 px-3.5 -ml-1 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100 font-bold text-xs sm:text-sm active:scale-95 transition-all cursor-pointer shadow-2xs group"
                 aria-label="Back to Community Feed"
               >
-                <span className="material-symbols-outlined text-[18px] group-hover:-translate-x-0.5 transition-transform">
+                <span className="material-symbols-outlined text-[20px] text-[#9E1315] dark:text-rose-400 group-hover:-translate-x-0.5 transition-transform shrink-0">
                   arrow_back
                 </span>
-                <span>Community Feed</span>
+                <span>Back to Feed</span>
               </button>
 
               <div className="flex items-center gap-2">

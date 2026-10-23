@@ -10,7 +10,7 @@ import type {
   AiModerationRiskLevel,
   FalsePositiveStats
 } from '../../types/index.ts';
-import { INITIAL_AI_MODERATION_ITEMS } from '../data/mockData.ts';
+import { INITIAL_AI_MODERATION_ITEMS, INITIAL_MODERATION_REPORTS } from '../data/mockData.ts';
 
 // Storage file location for durable persistence across server requests and reloads.
 // In serverless environments (e.g. Vercel Lambda), process.cwd() is read-only.
@@ -34,7 +34,7 @@ interface ModerationStoreData {
 }
 
 const DEFAULT_STORE: ModerationStoreData = {
-  reports: [],
+  reports: [...INITIAL_MODERATION_REPORTS],
   aiQueue: [...INITIAL_AI_MODERATION_ITEMS],
   jobs: [],
   cases: [],
@@ -50,6 +50,16 @@ const DEFAULT_STORE: ModerationStoreData = {
 
 let memoryStore: ModerationStoreData | null = null;
 
+function normalizeTargetType(t: string): string {
+  if (t === 'comment') return 'reply';
+  return t;
+}
+
+function typesMatch(t1: string, t2: string): boolean {
+  if (t1 === t2) return true;
+  return normalizeTargetType(t1) === normalizeTargetType(t2);
+}
+
 function ensureStoreLoaded(): ModerationStoreData {
   if (memoryStore) return memoryStore;
 
@@ -57,9 +67,31 @@ function ensureStoreLoaded(): ModerationStoreData {
     if (fs.existsSync(STORE_FILE)) {
       const raw = fs.readFileSync(STORE_FILE, 'utf-8');
       const parsed = JSON.parse(raw);
+      
+      const loadedReports: ModerationReport[] = Array.isArray(parsed.reports) && parsed.reports.length > 0 
+        ? parsed.reports 
+        : [...INITIAL_MODERATION_REPORTS];
+        
+      // Merge in any initial reports that might be missing
+      for (const initRep of INITIAL_MODERATION_REPORTS) {
+        if (!loadedReports.some((r) => r.id === initRep.id)) {
+          loadedReports.push(initRep);
+        }
+      }
+
+      const loadedAiQueue: AiModerationItem[] = Array.isArray(parsed.aiQueue) && parsed.aiQueue.length > 0
+        ? parsed.aiQueue
+        : [...INITIAL_AI_MODERATION_ITEMS];
+        
+      for (const initAi of INITIAL_AI_MODERATION_ITEMS) {
+        if (!loadedAiQueue.some((a) => a.id === initAi.id)) {
+          loadedAiQueue.push(initAi);
+        }
+      }
+
       memoryStore = {
-        reports: Array.isArray(parsed.reports) ? parsed.reports : [],
-        aiQueue: Array.isArray(parsed.aiQueue) && parsed.aiQueue.length > 0 ? parsed.aiQueue : [...INITIAL_AI_MODERATION_ITEMS],
+        reports: loadedReports,
+        aiQueue: loadedAiQueue,
         jobs: Array.isArray(parsed.jobs) ? parsed.jobs : [],
         cases: Array.isArray(parsed.cases) ? parsed.cases : [],
         falsePositiveCounts: {
@@ -67,6 +99,10 @@ function ensureStoreLoaded(): ModerationStoreData {
           ...(parsed.falsePositiveCounts || {})
         }
       };
+
+      // Re-index unified cases to guarantee every manual report & AI flag is represented
+      rebuildAllCases(memoryStore);
+      persistStore();
       return memoryStore;
     }
   } catch (err) {
@@ -74,32 +110,30 @@ function ensureStoreLoaded(): ModerationStoreData {
   }
 
   memoryStore = {
-    reports: [],
+    reports: [...INITIAL_MODERATION_REPORTS],
     aiQueue: [...INITIAL_AI_MODERATION_ITEMS],
     jobs: [],
     cases: [],
     falsePositiveCounts: { ...DEFAULT_STORE.falsePositiveCounts }
   };
+  rebuildAllCases(memoryStore);
   persistStore();
   return memoryStore;
 }
 
-function persistStore() {
-  if (!memoryStore) return;
-  try {
-    if (!fs.existsSync(STORE_DIR)) {
-      fs.mkdirSync(STORE_DIR, { recursive: true });
-    }
-    fs.writeFileSync(STORE_FILE, JSON.stringify(memoryStore, null, 2), 'utf-8');
-  } catch (err) {
-    console.warn('[moderationStore] Failed writing persistent store:', err);
+function rebuildAllCases(store: ModerationStoreData) {
+  // Sync all manual reports into cases
+  for (const rep of store.reports) {
+    internalSyncCase(store, rep.targetType, rep.targetId, rep.targetTitle, rep.targetContent);
+  }
+  // Sync all AI items into cases
+  for (const ai of store.aiQueue) {
+    internalSyncCase(store, ai.contentType, ai.contentId, ai.contentTitle, ai.contentPreview, ai.authorId, ai.authorName);
   }
 }
 
-/**
- * Re-indexes a unified case whenever an AI flag or resident report is added or updated.
- */
-function syncUnifiedCase(
+function internalSyncCase(
+  store: ModerationStoreData,
   targetType: 'post' | 'comment' | 'reply' | 'service' | 'exchange' | 'incident' | 'user',
   targetId: string,
   targetTitle?: string,
@@ -108,16 +142,15 @@ function syncUnifiedCase(
   authorName?: string,
   authorPrecinct?: string
 ): UnifiedModerationCase {
-  const store = ensureStoreLoaded();
   const existingCaseIdx = store.cases.findIndex(
-    (c) => c.targetType === targetType && c.targetId === targetId
+    (c) => typesMatch(c.targetType, targetType) && c.targetId === targetId
   );
 
   const relatedReports = store.reports.filter(
-    (r) => r.targetType === targetType && r.targetId === targetId
+    (r) => typesMatch(r.targetType, targetType) && r.targetId === targetId
   );
   const relatedAiFlag = store.aiQueue.find(
-    (a) => a.contentType === (targetType === 'comment' ? 'reply' : targetType) && a.contentId === targetId
+    (a) => typesMatch(a.contentType, targetType) && a.contentId === targetId
   );
 
   const highestRisk: AiModerationRiskLevel = 
@@ -173,13 +206,44 @@ function syncUnifiedCase(
     store.cases.unshift(unifiedCase);
   }
 
-  persistStore();
   return unifiedCase;
+}
+
+function persistStore() {
+  if (!memoryStore) return;
+  try {
+    if (!fs.existsSync(STORE_DIR)) {
+      fs.mkdirSync(STORE_DIR, { recursive: true });
+    }
+    fs.writeFileSync(STORE_FILE, JSON.stringify(memoryStore, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('[moderationStore] Failed writing persistent store:', err);
+  }
+}
+
+/**
+ * Re-indexes a unified case whenever an AI flag or resident report is added or updated.
+ */
+function syncUnifiedCase(
+  targetType: 'post' | 'comment' | 'reply' | 'service' | 'exchange' | 'incident' | 'user',
+  targetId: string,
+  targetTitle?: string,
+  targetContent?: string,
+  authorId?: string,
+  authorName?: string,
+  authorPrecinct?: string
+): UnifiedModerationCase {
+  const store = ensureStoreLoaded();
+  const c = internalSyncCase(store, targetType, targetId, targetTitle, targetContent, authorId, authorName, authorPrecinct);
+  persistStore();
+  return c;
 }
 
 // -----------------------------------------------------------------------------
 // Manual Reports API
 // -----------------------------------------------------------------------------
+
+import crypto from 'crypto';
 
 export function addManualReport(reportData: Omit<ModerationReport, 'id' | 'createdAt' | 'status'> & {
   id?: string;
@@ -193,7 +257,7 @@ export function addManualReport(reportData: Omit<ModerationReport, 'id' | 'creat
   const existingRecent = store.reports.find(
     (r) =>
       r.reporterId === reportData.reporterId &&
-      r.targetType === reportData.targetType &&
+      typesMatch(r.targetType, reportData.targetType) &&
       r.targetId === reportData.targetId &&
       now - new Date(r.createdAt).getTime() < 5 * 60 * 1000
   );
@@ -208,8 +272,10 @@ export function addManualReport(reportData: Omit<ModerationReport, 'id' | 'creat
     return { report: existingRecent, unifiedCase, isDuplicate: true };
   }
 
+  const generatedId = reportData.id || crypto.randomUUID();
+
   const newReport: ModerationReport = {
-    id: reportData.id || `rep-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+    id: generatedId,
     reporterId: reportData.reporterId,
     reporterName: reportData.reporterName,
     targetType: reportData.targetType,
@@ -238,6 +304,27 @@ export function addManualReport(reportData: Omit<ModerationReport, 'id' | 'creat
 export function getManualReports(): ModerationReport[] {
   const store = ensureStoreLoaded();
   return [...store.reports];
+}
+
+export function upsertDatabaseReports(dbReports: ModerationReport[]) {
+  const store = ensureStoreLoaded();
+  let modified = false;
+  for (const rep of dbReports) {
+    const existingIdx = store.reports.findIndex((r) => r.id === rep.id);
+    if (existingIdx >= 0) {
+      if (store.reports[existingIdx].status !== rep.status || rep.resolutionNote) {
+        store.reports[existingIdx] = { ...store.reports[existingIdx], ...rep };
+        modified = true;
+      }
+    } else {
+      store.reports.unshift(rep);
+      modified = true;
+    }
+  }
+  if (modified) {
+    rebuildAllCases(store);
+    persistStore();
+  }
 }
 
 export function updateManualReport(

@@ -169,7 +169,14 @@ export type IncidentType =
 
 export type IncidentSeverity = 'low' | 'medium' | 'high' | 'critical';
 
-export type IncidentStatus = 'reported' | 'under_review' | 'dispatched' | 'resolved';
+export type IncidentStatus = 
+  | 'pending'
+  | 'reported'
+  | 'under_review'
+  | 'dispatched'
+  | 'resolved'
+  | 'rejected'
+  | 'dismissed';
 
 export interface IncidentUpdate {
   id: string;
@@ -212,6 +219,13 @@ export interface ResilienceIncident {
   updates: IncidentUpdate[];
   createdAt: string;
   updatedAt: string;
+  // Duplicate incident grouping & merging (Part 6)
+  parentIncidentId?: string | null;
+  isMerged?: boolean;
+  mergedIncidentIds?: string[];
+  duplicateReason?: string;
+  mergedAt?: string;
+  mergedBy?: string;
 }
 
 export interface Message {

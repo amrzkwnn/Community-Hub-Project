@@ -97,24 +97,33 @@ export async function POST(request: NextRequest) {
       details: details ? String(details).trim() : undefined,
     });
 
-    // Attempt best-effort Supabase sync if configured
+    // Attempt durable Supabase persistence
     try {
-      const supabase = await createClient();
-      const mappedReason = ['spam', 'harassment', 'false_information', 'inappropriate', 'duplicate', 'privacy_violation'].includes(reason)
-        ? reason
-        : 'other';
+      const { getSupabaseAdmin, toDatabaseUserId } = await import('@/lib/server/dbSync');
+      const supabaseAdmin = getSupabaseAdmin();
+      if (supabaseAdmin) {
+        const mappedReason = ['spam', 'harassment', 'false_information', 'inappropriate', 'duplicate', 'privacy_violation'].includes(reason)
+          ? reason
+          : 'other';
 
-      await supabase.from('moderation_reports').insert({
-        id: report.id,
-        reporter_id: user.id.length === 36 ? user.id : '11111111-1111-4111-8111-111111111111',
-        target_type: targetType === 'comment' ? 'reply' : targetType,
-        target_id: targetId.length === 36 ? targetId : '11111111-1111-4111-8111-111111111111',
-        reason: mappedReason,
-        details: details || null,
-        status: 'pending',
-      });
-    } catch {
-      // Supabase is optional in local/offline demo mode; local durable store guarantees retention
+        const reporterUuid = toDatabaseUserId(user.id);
+        const targetUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetId) 
+          ? targetId 
+          : toDatabaseUserId(targetId);
+
+        await supabaseAdmin.from('moderation_reports').upsert({
+          id: report.id,
+          reporter_id: reporterUuid,
+          target_type: targetType === 'comment' ? 'reply' : targetType,
+          target_id: targetUuid,
+          reason: mappedReason,
+          details: details || null,
+          status: 'pending',
+          created_at: report.createdAt,
+        });
+      }
+    } catch (dbErr) {
+      console.warn('[moderation/report] Supabase insertion warning:', dbErr);
     }
 
     return NextResponse.json({

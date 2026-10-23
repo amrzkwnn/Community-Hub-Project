@@ -82,6 +82,8 @@ export default function ManagementView() {
     resolveAiModeration,
     updateIncidentStatus, 
     verifyIncident,
+    approveIncident,
+    mergeIncidents,
     rejectIncident,
     archiveIncident,
     verifyResidentAccount, 
@@ -182,7 +184,7 @@ export default function ManagementView() {
   // ==========================================
   // SECTION 5C: INCIDENT STATE
   // ==========================================
-  const [incidentSubTab, setIncidentSubTab] = useState<'active' | 'history'>('active');
+  const [incidentSubTab, setIncidentSubTab] = useState<'active' | 'pending' | 'duplicates' | 'history'>('active');
   const [incidentSearchQuery, setIncidentSearchQuery] = useState('');
   const [incidentSeverityFilter, setIncidentSeverityFilter] = useState('all');
   const [incidentTypeFilter, setIncidentTypeFilter] = useState('all');
@@ -194,6 +196,11 @@ export default function ManagementView() {
   const [archiveModalIncident, setArchiveModalIncident] = useState<ResilienceIncident | null>(null);
   const [archiveLoading, setArchiveLoading] = useState(false);
   const [expandedTimelineId, setExpandedTimelineId] = useState<string | null>(null);
+  const [duplicateAssessments, setDuplicateAssessments] = useState<any[]>([]);
+  const [isLoadingDuplicates, setIsLoadingDuplicates] = useState(false);
+  const [mergeConfirmPair, setMergeConfirmPair] = useState<any | null>(null);
+  const [mergeReasonInput, setMergeReasonInput] = useState('');
+  const [isMerging, setIsMerging] = useState(false);
 
   // ==========================================
   // SECTION 5D: RESIDENT MANAGEMENT STATE
@@ -268,15 +275,15 @@ export default function ManagementView() {
   if (currentUser.role !== 'management') {
     return (
       <div className="max-w-2xl mx-auto px-4 py-16 text-center">
-        <div className="bg-white p-8 sm:p-10 rounded-3xl border border-rose-200 shadow-xl space-y-4">
-          <div className="w-16 h-16 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto shadow-inner">
+        <div className="bg-white dark:bg-[#15181C] p-8 sm:p-10 rounded-3xl border border-rose-200 dark:border-rose-900/50 shadow-xl space-y-4">
+          <div className="w-16 h-16 rounded-2xl bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto shadow-inner">
             <Lock className="w-8 h-8" />
           </div>
-          <h2 className="text-xl font-black text-slate-900 tracking-tight">
+          <h2 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
             Access Restricted / Management Access Only
           </h2>
-          <p className="text-xs text-slate-600 leading-relaxed max-w-md mx-auto">
-            This Administration & Security Console is restricted to authorized management personnel with verified database role <code className="bg-rose-50 text-rose-800 px-1.5 py-0.5 rounded font-mono font-bold">management</code>. Client-side profile switching does not bypass server-side Row Level Security (RLS) enforcement.
+          <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed max-w-md mx-auto">
+            This Administration & Security Console is restricted to authorized management personnel with verified database role <code className="bg-rose-50 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 px-1.5 py-0.5 rounded font-mono font-bold">management</code>. Client-side profile switching does not bypass server-side Row Level Security (RLS) enforcement.
           </p>
           <div className="pt-3 flex flex-col sm:flex-row items-center justify-center gap-3">
             <button
@@ -287,7 +294,7 @@ export default function ManagementView() {
             </button>
             <button
               onClick={() => switchProfile('user-azman')}
-              className="w-full sm:w-auto bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-xl transition-all cursor-pointer border border-slate-300"
+              className="w-full sm:w-auto bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold px-4 py-2.5 rounded-xl transition-all cursor-pointer border border-slate-300 dark:border-slate-700"
             >
               Sign In as Management (Capt Azman)
             </button>
@@ -306,9 +313,10 @@ export default function ManagementView() {
   const failedModerationJobs = moderationHealth?.recentJobs?.filter((j: any) => j.status === 'failed') || [];
 
   const pendingVerificationProfiles = availableProfiles.filter((p) => p.verificationStatus === 'pending');
-  const activeIncidents = incidents.filter((i) => !i.isArchived);
+  const activeIncidents = incidents.filter((i) => !i.isArchived && !i.isMerged && i.status !== 'pending' && i.status !== 'rejected');
+  const pendingIncidents = incidents.filter((i) => !i.isArchived && i.status === 'pending');
   const unverifiedIncidents = incidents.filter((i) => !i.isArchived && !i.isVerified);
-  const unresolvedIncidents = incidents.filter((i) => !i.isArchived && i.status !== 'resolved');
+  const unresolvedIncidents = incidents.filter((i) => !i.isArchived && i.status !== 'resolved' && !i.isMerged);
 
   const officialNoticesList = posts.filter(
     (p) => (p.category === 'announcement' || p.category === 'security_alert' || p.authorRole === 'management' || p.authorRole === 'security') && p.status === 'active'
@@ -442,15 +450,72 @@ export default function ManagementView() {
     setVerificationNotes('');
   };
 
-  // Reject Incident Verification
-  const handleRejectIncidentSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Approve Incident for Public Resilience Map
+  const handleApproveIncident = async (incidentId: string) => {
+    try {
+      const res = await approveIncident(incidentId, 'Approved for public visibility and response dispatch.');
+      if (res.success) {
+        showSuccess('Incident approved! It is now visible on the public Resilience Map.');
+      } else {
+        showError(res.error || 'Failed to approve incident.');
+      }
+    } catch (err: any) {
+      showError(err.message || 'Error approving incident.');
+    }
+  };
+
+  // Reject / Decline Incident
+  const handleRejectIncidentSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!rejectingIncidentId) return;
-    await rejectIncident(rejectingIncidentId, rejectionReason || 'Report could not be confirmed on-site.');
-    showSuccess('Incident verification revoked.');
+    await rejectIncident(rejectingIncidentId, rejectionReason || 'Report declined by Management review.');
+    showSuccess('Incident report declined and kept in management audit log.');
     setRejectingIncidentId(null);
     setRejectionReason('');
   };
+
+  // Fetch Duplicate Assessments
+  const fetchIncidentDuplicates = async () => {
+    setIsLoadingDuplicates(true);
+    try {
+      const res = await fetch('/api/ai/incident-duplicate');
+      if (res.ok) {
+        const data = await res.json();
+        setDuplicateAssessments(data.pairs || []);
+      }
+    } catch (err) {
+      console.warn('Error fetching duplicate incidents:', err);
+    } finally {
+      setIsLoadingDuplicates(false);
+    }
+  };
+
+  // Execute Merge Duplicate Incidents
+  const handleExecuteMerge = async (canonicalId: string, duplicateId: string, reason?: string) => {
+    setIsMerging(true);
+    try {
+      const res = await mergeIncidents(canonicalId, [duplicateId], reason || 'Consolidated duplicate hazard report');
+      if (res.success) {
+        showSuccess('Incident reports merged successfully! Duplicate report consolidated under canonical record.');
+        setMergeConfirmPair(null);
+        setMergeReasonInput('');
+        fetchIncidentDuplicates();
+      } else {
+        showError(res.error || 'Failed to merge incidents.');
+      }
+    } catch (err: any) {
+      showError(err.message || 'Error merging incidents.');
+    } finally {
+      setIsMerging(false);
+    }
+  };
+
+  // Auto-fetch duplicate assessments when opening the duplicates subtab
+  useEffect(() => {
+    if (activeMgmtTab === 'incidents' && incidentSubTab === 'duplicates') {
+      fetchIncidentDuplicates();
+    }
+  }, [activeMgmtTab, incidentSubTab]);
 
   // Archive Incident
   const handleArchiveIncidentConfirm = async () => {
@@ -900,11 +965,11 @@ export default function ManagementView() {
         <div className="space-y-6 animate-in fade-in duration-150">
           {/* Active Operational Alerts Triage Bar */}
           {contextAlerts && contextAlerts.length > 0 && (
-            <div className="bg-white rounded-3xl border border-rose-200 p-5 shadow-xs space-y-3">
-              <div className="flex items-center justify-between border-b border-rose-100 pb-2.5">
+            <div className="bg-white dark:bg-[#15181C] rounded-3xl border border-rose-200 dark:border-rose-900/60 p-5 shadow-xs space-y-3">
+              <div className="flex items-center justify-between border-b border-rose-100 dark:border-rose-900/40 pb-2.5">
                 <div className="flex items-center gap-2">
                   <div className="w-2.5 h-2.5 rounded-full bg-rose-600 animate-ping" />
-                  <h3 className="text-xs font-black uppercase tracking-wider text-rose-950 flex items-center gap-1.5">
+                  <h3 className="text-xs font-black uppercase tracking-wider text-rose-950 dark:text-rose-200 flex items-center gap-1.5">
                     <AlertTriangle className="w-4 h-4 text-rose-600" />
                     <span>Active Operational</span>
                     <span className="ml-1.5 px-2 py-0.5 text-[10px] font-bold rounded-full bg-rose-100 text-rose-800 border border-rose-200">
@@ -1085,20 +1150,20 @@ export default function ManagementView() {
             {/* Left 2 Cols: Activity Velocity & Top Hazard Distribution */}
             <div className="lg:col-span-2 space-y-6 min-w-0">
               {/* Community Activity Velocity Sparkline */}
-              <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-4 w-full min-w-0 overflow-hidden">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="bg-white dark:bg-[#15181C] p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-4 w-full min-w-0 overflow-hidden">
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
                   <div>
-                    <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-                      <BarChart3 className="w-4 h-4 text-rose-800" />
+                    <h3 className="text-sm font-extrabold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                      <BarChart3 className="w-4 h-4 text-rose-800 dark:text-rose-500" />
                       <span>Township Activity Velocity ({managementPeriod.toUpperCase()})</span>
                     </h3>
-                    <p className="text-xs text-slate-500 mt-0.5">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                       Daily rate of newly logged hazards, moderation cases, and resident community posts.
                     </p>
                   </div>
                   <button
                     onClick={() => setActiveMgmtTab('analytics')}
-                    className="text-xs font-bold text-rose-800 hover:text-rose-950 flex items-center gap-1 cursor-pointer"
+                    className="text-xs font-bold text-rose-800 dark:text-rose-400 hover:text-rose-950 dark:hover:text-rose-300 flex items-center gap-1 cursor-pointer"
                   >
                     <span>Full Analytics</span>
                     <ArrowRight className="w-3.5 h-3.5" />
@@ -1176,12 +1241,12 @@ export default function ManagementView() {
               </div>
 
                 {/* Top Hazard Categories Distribution */}
-                <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-4">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-900">
+                <div className="bg-white dark:bg-[#15181C] p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+                  <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-slate-100">
                       Hazard Category Distribution ({managementPeriod.toUpperCase()})
                     </h4>
-                    <span className="text-[11px] text-slate-500 font-mono">
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
                       {incidents.length} total logged hazards
                     </span>
                   </div>
@@ -1194,15 +1259,15 @@ export default function ManagementView() {
                         className="space-y-1 cursor-pointer group"
                       >
                         <div className="flex justify-between text-xs">
-                          <span className="font-bold text-slate-800 group-hover:text-rose-800 capitalize flex items-center gap-2">
+                          <span className="font-bold text-slate-800 dark:text-slate-200 group-hover:text-rose-800 dark:group-hover:text-rose-400 capitalize flex items-center gap-2">
                             <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: cat.color }} />
                             {cat.category.replace('_', ' ')}
                           </span>
-                          <span className="text-slate-600 font-mono text-[11px]">
+                          <span className="text-slate-600 dark:text-slate-400 font-mono text-[11px]">
                             {cat.count} cases ({cat.percentage}%)
                           </span>
                         </div>
-                        <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                        <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
                           <div
                             className="h-full rounded-full transition-all duration-500"
                             style={{ width: `${Math.max(cat.percentage, 4)}%`, backgroundColor: cat.color }}
@@ -1303,35 +1368,35 @@ export default function ManagementView() {
               </div>
 
               {/* AI Moderation Pipeline Status */}
-              <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="bg-white dark:bg-[#15181C] p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
                   <div className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-rose-800" />
-                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-900">
+                    <Sparkles className="w-4 h-4 text-rose-800 dark:text-rose-500" />
+                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-slate-100">
                       AI Background Engine
                     </h3>
                   </div>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 uppercase">
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 uppercase">
                     Active
                   </span>
                 </div>
 
                 <div className="space-y-2 text-xs">
-                  <div className="flex justify-between text-slate-600">
+                  <div className="flex justify-between text-slate-600 dark:text-slate-400">
                     <span>Engine:</span>
-                    <strong className="text-slate-900">Gemini Flash + Rule Guard</strong>
+                    <strong className="text-slate-900 dark:text-slate-100">Gemini Flash + Rule Guard</strong>
                   </div>
-                  <div className="flex justify-between text-slate-600">
+                  <div className="flex justify-between text-slate-600 dark:text-slate-400">
                     <span>Queue Backing:</span>
-                    <strong className="text-slate-900">Durable Outbox Store</strong>
+                    <strong className="text-slate-900 dark:text-slate-100">Durable Outbox Store</strong>
                   </div>
-                  <div className="flex justify-between text-slate-600">
+                  <div className="flex justify-between text-slate-600 dark:text-slate-400">
                     <span>Completed Analyses:</span>
-                    <strong className="text-slate-900 font-mono">{moderationHealth?.completedJobs || 0}</strong>
+                    <strong className="text-slate-900 dark:text-slate-100 font-mono">{moderationHealth?.completedJobs || 0}</strong>
                   </div>
-                  <div className="flex justify-between text-slate-600">
+                  <div className="flex justify-between text-slate-600 dark:text-slate-400">
                     <span>Failed Jobs:</span>
-                    <strong className={`${failedModerationJobs.length > 0 ? 'text-rose-600 font-bold' : 'text-slate-900'} font-mono`}>
+                    <strong className={`${failedModerationJobs.length > 0 ? 'text-rose-600 dark:text-rose-400 font-bold' : 'text-slate-900 dark:text-slate-100'} font-mono`}>
                       {failedModerationJobs.length}
                     </strong>
                   </div>
@@ -1364,26 +1429,26 @@ export default function ManagementView() {
       {/* 5B & PART 4: UNIFIED REPORTS & AI MODERATION             */}
       {/* ======================================================== */}
       {activeMgmtTab === 'moderation' && (
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-5 animate-in fade-in duration-150">
+        <div className="bg-white dark:bg-[#15181C] p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-5 animate-in fade-in duration-150">
           {/* Header & Subtabs */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
             <div>
-              <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-                <ShieldAlert className="w-4 h-4 text-emerald-800" />
+              <h3 className="text-sm font-extrabold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4 text-emerald-800 dark:text-emerald-400" />
                 <span>Unified Reports & AI Moderation Console</span>
               </h3>
             </div>
 
             {/* Sub-tab navigation */}
-            <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-2xl shrink-0 overflow-x-auto">
+            <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl shrink-0 overflow-x-auto">
               <button
                 type="button"
                 onClick={() => setModSubTab('cases')}
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                  modSubTab === 'cases' ? 'bg-white text-emerald-950 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  modSubTab === 'cases' ? 'bg-white dark:bg-slate-900 text-emerald-950 dark:text-emerald-300 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
-                <Layers className="w-3.5 h-3.5 text-emerald-700" />
+                <Layers className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-400" />
                 <span>Unified Cases</span>
                 <span className="px-1.5 py-0.2 bg-emerald-800 text-white rounded-full text-[10px] font-bold">
                   {unifiedCases.length}
@@ -1394,12 +1459,12 @@ export default function ManagementView() {
                 type="button"
                 onClick={() => setModSubTab('ai_queue')}
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                  modSubTab === 'ai_queue' ? 'bg-white text-emerald-950 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  modSubTab === 'ai_queue' ? 'bg-white dark:bg-slate-900 text-emerald-950 dark:text-emerald-300 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
-                <Sparkles className="w-3.5 h-3.5 text-emerald-700" />
+                <Sparkles className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-400" />
                 <span>AI Flagged</span>
-                <span className="px-1.5 py-0.2 bg-slate-200 text-slate-700 rounded-full text-[10px] font-bold">
+                <span className="px-1.5 py-0.2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-full text-[10px] font-bold">
                   {aiModerationQueue.length}
                 </span>
               </button>
@@ -1408,12 +1473,12 @@ export default function ManagementView() {
                 type="button"
                 onClick={() => setModSubTab('user_reports')}
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                  modSubTab === 'user_reports' ? 'bg-white text-emerald-950 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  modSubTab === 'user_reports' ? 'bg-white dark:bg-slate-900 text-emerald-950 dark:text-emerald-300 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
-                <Users className="w-3.5 h-3.5 text-emerald-700" />
+                <Users className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-400" />
                 <span>Manual Reports</span>
-                <span className="px-1.5 py-0.2 bg-slate-200 text-slate-700 rounded-full text-[10px] font-bold">
+                <span className="px-1.5 py-0.2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-full text-[10px] font-bold">
                   {moderationReports.length}
                 </span>
               </button>
@@ -1422,10 +1487,10 @@ export default function ManagementView() {
                 type="button"
                 onClick={() => setModSubTab('jobs')}
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                  modSubTab === 'jobs' ? 'bg-white text-emerald-950 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  modSubTab === 'jobs' ? 'bg-white dark:bg-slate-900 text-emerald-950 dark:text-emerald-300 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
-                <RefreshCw className="w-3.5 h-3.5 text-emerald-700" />
+                <RefreshCw className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-400" />
                 <span>Job Queue</span>
                 {failedModerationJobs.length > 0 && (
                   <span className="px-1.5 py-0.2 bg-rose-500 text-white rounded-full text-[10px] font-bold">
@@ -1438,7 +1503,7 @@ export default function ManagementView() {
                 type="button"
                 onClick={() => setModSubTab('false_positives')}
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                  modSubTab === 'false_positives' ? 'bg-white text-emerald-950 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  modSubTab === 'false_positives' ? 'bg-white dark:bg-slate-900 text-emerald-950 dark:text-emerald-300 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
                 <span>Telemetry</span>
@@ -1547,7 +1612,7 @@ export default function ManagementView() {
                       <div
                         key={c.id}
                         className={`p-5 rounded-3xl border transition-all space-y-4 ${
-                          isPending ? 'bg-white border-slate-200 shadow-xs' : 'bg-slate-50/70 border-slate-200 opacity-95'
+                          isPending ? 'bg-white dark:bg-[#15181C] border-slate-200 dark:border-slate-800 shadow-xs' : 'bg-slate-50/70 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800 opacity-95'
                         }`}
                       >
                         {/* Case Badges Row */}
@@ -1582,7 +1647,7 @@ export default function ManagementView() {
                             </span>
                           </div>
 
-                          <div className="flex items-center gap-2 text-[11px] text-slate-500 font-mono">
+                          <div className="flex items-center gap-2 text-[11px] text-slate-500 font-mono flex-wrap">
                             <Clock className="w-3.5 h-3.5 text-slate-400" />
                             <span>{new Date(c.lastUpdatedAt).toLocaleString()}</span>
                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
@@ -1594,6 +1659,14 @@ export default function ManagementView() {
                             }`}>
                               Status: {c.overallStatus.replace('_', ' ')}
                             </span>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedCaseModal(c)}
+                              className="px-2.5 py-1 rounded-xl bg-slate-900 dark:bg-slate-100 hover:bg-black dark:hover:bg-white text-white dark:text-slate-900 text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all shadow-xs"
+                            >
+                              <FileText className="w-3 h-3" />
+                              <span>View Dossier</span>
+                            </button>
                           </div>
                         </div>
 
@@ -1659,7 +1732,7 @@ export default function ManagementView() {
                               placeholder="Officer resolution rationale / audit note for this decision..."
                               value={caseActionNote[c.id] || ''}
                               onChange={(e) => setCaseActionNote((prev) => ({ ...prev, [c.id]: e.target.value }))}
-                              className="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-emerald-700"
+                              className="w-full px-3 py-1.5 text-xs border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-emerald-700"
                             />
 
                             <div className="flex flex-wrap items-center gap-2">
@@ -1752,13 +1825,13 @@ export default function ManagementView() {
                         </span>
                       </div>
 
-                      <div className="text-xs text-slate-800 font-bold">
+                      <div className="text-xs text-slate-800 dark:text-slate-100 font-bold">
                         {item.contentTitle || `Target ID: #${item.contentId}`}
                       </div>
-                      <div className="text-xs text-slate-600 bg-white p-2.5 rounded-xl border border-slate-100 italic">
+                      <div className="text-xs text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900/80 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800 italic">
                         &ldquo;{item.contentPreview}&rdquo;
                       </div>
-                      <div className="text-[11px] text-slate-600">
+                      <div className="text-[11px] text-slate-600 dark:text-slate-400">
                         <strong>AI Rationale:</strong> {item.explanation}
                       </div>
                     </div>
@@ -1772,21 +1845,21 @@ export default function ManagementView() {
           {modSubTab === 'user_reports' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <span className="text-xs text-slate-500 font-bold">
+                <span className="text-xs text-slate-500 dark:text-slate-400 font-bold">
                   Total resident submitted reports: {moderationReports.length}
                 </span>
               </div>
 
               <div className="space-y-3">
                 {moderationReports.length === 0 ? (
-                  <p className="text-xs text-slate-400 p-8 text-center bg-slate-50 rounded-2xl">
+                  <p className="text-xs text-slate-400 dark:text-slate-500 p-8 text-center bg-slate-50 dark:bg-slate-900/40 rounded-2xl">
                     No manual resident reports submitted.
                   </p>
                 ) : (
                   moderationReports.map((rep) => (
-                    <div key={rep.id} className="p-4 rounded-2xl border border-slate-200 bg-slate-50/50 space-y-2">
+                    <div key={rep.id} className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 space-y-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 uppercase">
+                        <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 uppercase">
                           Reason: {rep.reason.replace('_', ' ')}
                         </span>
                         <span className="text-[10px] text-slate-400 font-mono">
@@ -1794,25 +1867,40 @@ export default function ManagementView() {
                         </span>
                       </div>
 
-                      <div className="text-xs text-slate-800 font-bold">
+                      <div className="text-xs text-slate-800 dark:text-slate-100 font-bold">
                         {rep.targetTitle || `Target: ${rep.targetType} (#${rep.targetId})`}
                       </div>
 
                       {rep.targetContent && (
-                        <div className="text-xs text-slate-600 bg-white p-2.5 rounded-xl border border-slate-100 italic">
+                        <div className="text-xs text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900/80 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800 italic">
                           &ldquo;{rep.targetContent}&rdquo;
                         </div>
                       )}
 
                       {rep.details && (
-                        <div className="text-[11px] text-slate-600">
+                        <div className="text-[11px] text-slate-600 dark:text-slate-400">
                           <strong>Reporter Note:</strong> {rep.details}
                         </div>
                       )}
 
-                      <div className="flex items-center justify-between pt-1 border-t border-slate-200 text-[10px] text-slate-500">
+                      <div className="flex items-center justify-between pt-1 border-t border-slate-200 dark:border-slate-800 text-[10px] text-slate-500 dark:text-slate-400">
                         <span>Reported by: {rep.reporterName || 'Resident'}</span>
-                        <span className="font-bold uppercase text-slate-700">Status: {rep.status}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold uppercase text-slate-700 dark:text-slate-300">Status: {rep.status}</span>
+                          {unifiedCases.find((c) => c.targetId === rep.targetId) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const c = unifiedCases.find((c) => c.targetId === rep.targetId);
+                                if (c) setSelectedCaseModal(c);
+                              }}
+                              className="px-2 py-0.5 rounded-lg bg-slate-900 dark:bg-slate-100 hover:bg-black dark:hover:bg-white text-white dark:text-slate-900 font-bold text-[10px] flex items-center gap-1 cursor-pointer transition-all shadow-xs"
+                            >
+                              <FileText className="w-2.5 h-2.5" />
+                              <span>View Dossier</span>
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))
@@ -1899,10 +1987,10 @@ export default function ManagementView() {
               </div>
 
               {/* Recent Jobs Table */}
-              <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+              <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#15181C]">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
-                    <tr className="border-b border-slate-200 bg-slate-50/80 text-slate-600">
+                    <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/60 text-slate-600 dark:text-slate-400">
                       <th className="py-2.5 px-3 font-bold">Job ID</th>
                       <th className="py-2.5 px-3 font-bold">Target</th>
                       <th className="py-2.5 px-3 font-bold">Status</th>
@@ -1912,7 +2000,7 @@ export default function ManagementView() {
                       <th className="py-2.5 px-3 font-bold">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                     {(!moderationHealth?.recentJobs || moderationHealth.recentJobs.length === 0) ? (
                       <tr>
                         <td colSpan={7} className="py-6 text-center text-slate-400">
@@ -1971,11 +2059,11 @@ export default function ManagementView() {
 
               {/* Job Detail Modal */}
               {selectedJobDetails && (
-                <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-                  <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 border border-slate-200 shadow-xl animate-in fade-in zoom-in-95 duration-150">
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+                  <div className="bg-white dark:bg-[#15181C] rounded-3xl max-w-lg w-full p-6 space-y-4 border border-slate-200 dark:border-slate-800 shadow-xl animate-in fade-in zoom-in-95 duration-150">
+                    <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
                       <div>
-                        <h4 className="text-sm font-black text-slate-900">Job Detail Inspector</h4>
+                        <h4 className="text-sm font-black text-slate-900 dark:text-slate-100">Job Detail Inspector</h4>
                         <span className="text-[10px] font-mono text-slate-400">ID: {selectedJobDetails.id}</span>
                       </div>
                       <button
@@ -2056,11 +2144,11 @@ export default function ManagementView() {
 
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                 {falsePositiveStats.map((stat) => (
-                  <div key={stat.category} className="p-3.5 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-1">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase block">
+                  <div key={stat.category} className="p-3.5 rounded-2xl bg-white dark:bg-[#15181C] border border-slate-200 dark:border-slate-800 shadow-2xs space-y-1">
+                    <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase block">
                       {stat.category.replace('_', ' ')}
                     </span>
-                    <span className="text-xl font-black text-slate-900 block">
+                    <span className="text-xl font-black text-slate-900 dark:text-slate-100 block">
                       {stat.count}
                     </span>
                     <span className="text-[10px] text-slate-400">
@@ -2070,12 +2158,12 @@ export default function ManagementView() {
                 ))}
               </div>
 
-              <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200 text-xs text-emerald-950 space-y-1.5">
+              <div className="p-4 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/50 text-xs text-emerald-950 dark:text-emerald-200 space-y-1.5">
                 <div className="font-bold flex items-center gap-1.5">
-                  <ShieldCheck className="w-4 h-4 text-emerald-700" />
+                  <ShieldCheck className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
                   <span>Privacy and Freedom of Expression Principles</span>
                 </div>
-                <ul className="list-disc pl-5 text-[11px] space-y-1 text-slate-700">
+                <ul className="list-disc pl-5 text-[11px] space-y-1 text-slate-700 dark:text-slate-300">
                   <li>
                     <strong>Management Criticism is Protected:</strong> Resident complaints, grievances regarding maintenance delays, and constructive criticism of JMB/Developer are strictly categorized as <em>safe</em>.
                   </li>
@@ -2089,6 +2177,254 @@ export default function ManagementView() {
               </div>
             </div>
           )}
+
+          {/* ======================================================== */}
+          {/* PART 3: MODERATION CASE DOSSIER & ENTRY DETAILS MODAL     */}
+          {/* ======================================================== */}
+          {selectedCaseModal && (
+            <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+              <div className="bg-white dark:bg-[#15181C] rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 max-h-[90vh] overflow-y-auto">
+                {/* 1. Header: Report type, Status, Priority/Risk, Close */}
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <ShieldAlert className="w-5 h-5 text-emerald-800 dark:text-emerald-400" />
+                    <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                      Moderation Case Dossier: #{selectedCaseModal.id.slice(0, 8)}
+                    </h4>
+                    <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 uppercase">
+                      {selectedCaseModal.targetType}
+                    </span>
+                    <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase ${
+                      selectedCaseModal.highestRisk === 'high' ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-200 border border-rose-300 dark:border-rose-800' :
+                      selectedCaseModal.highestRisk === 'medium' ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-800' :
+                      'bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-200 border border-blue-300 dark:border-blue-800'
+                    }`}>
+                      Risk: {selectedCaseModal.highestRisk.toUpperCase()}
+                    </span>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                      selectedCaseModal.overallStatus === 'pending' ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-200' :
+                      selectedCaseModal.overallStatus === 'under_review' ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-200' :
+                      selectedCaseModal.overallStatus === 'removed' ? 'bg-rose-700 text-white' :
+                      selectedCaseModal.overallStatus === 'kept' ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-200' :
+                      'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                    }`}>
+                      Status: {selectedCaseModal.overallStatus.replace('_', ' ')}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCaseModal(null)}
+                    className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* 2. Reported Content */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs flex-wrap gap-2">
+                    <span className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                      <FileText className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Target Content (#{selectedCaseModal.targetId})</span>
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Author: <strong>{selectedCaseModal.authorName || 'Resident'}</strong> • Reported: {new Date(selectedCaseModal.firstReportedAt).toLocaleString()}
+                      </span>
+                      {selectedCaseModal.targetType === 'post' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveTab('feed');
+                            navigateToItem({ tab: 'feed', itemId: selectedCaseModal.targetId, itemType: 'post' });
+                            setSelectedCaseModal(null);
+                          }}
+                          className="text-xs text-blue-600 dark:text-blue-400 font-bold flex items-center gap-1 hover:underline cursor-pointer"
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                          <span>View in Feed</span>
+                        </button>
+                      )}
+                      {selectedCaseModal.targetType === 'exchange' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveTab('exchange');
+                            navigateToItem({ tab: 'exchange', itemId: selectedCaseModal.targetId, itemType: 'exchange' });
+                            setSelectedCaseModal(null);
+                          }}
+                          className="text-xs text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1 hover:underline cursor-pointer"
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                          <span>View in Exchange</span>
+                        </button>
+                      )}
+                      {selectedCaseModal.targetType === 'service' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveTab('services');
+                            navigateToItem({ tab: 'services', itemId: selectedCaseModal.targetId, itemType: 'service' });
+                            setSelectedCaseModal(null);
+                          }}
+                          className="text-xs text-purple-600 dark:text-purple-400 font-bold flex items-center gap-1 hover:underline cursor-pointer"
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                          <span>View in Services</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  {selectedCaseModal.targetTitle && (
+                    <h5 className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                      {selectedCaseModal.targetTitle}
+                    </h5>
+                  )}
+                  <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300 italic">
+                    &ldquo;{selectedCaseModal.targetContent || 'Content not available or cleared.'}&rdquo;
+                  </div>
+                </div>
+
+                {/* 3. Report Info: Manual reports & AI classification */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                  {/* Manual reports */}
+                  <div className="p-3 bg-purple-50/60 dark:bg-purple-950/20 rounded-2xl border border-purple-200/70 dark:border-purple-800/40 space-y-1.5">
+                    <span className="font-bold text-purple-950 dark:text-purple-200 flex items-center gap-1 text-[11px]">
+                      <Users className="w-3.5 h-3.5 text-purple-700 dark:text-purple-400" />
+                      <span>Resident Claims ({selectedCaseModal.reports.length})</span>
+                    </span>
+                    {selectedCaseModal.reports.length === 0 ? (
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 italic">No manual resident reports submitted.</p>
+                    ) : (
+                      <div className="space-y-2 max-h-36 overflow-y-auto">
+                        {selectedCaseModal.reports.map((r) => (
+                          <div key={r.id} className="p-2 bg-white dark:bg-slate-900 rounded-xl border border-purple-100 dark:border-purple-900/50 text-[11px]">
+                            <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-[10px]">
+                              <span className="font-semibold text-purple-900 dark:text-purple-300">{r.reporterName || 'Neighbor'}</span>
+                              <span>{new Date(r.createdAt).toLocaleDateString()}</span>
+                            </div>
+                            <p className="font-bold text-slate-800 dark:text-slate-200 mt-0.5">{r.reason.replace('_', ' ')}</p>
+                            {r.details && <p className="text-slate-600 dark:text-slate-400 italic mt-0.5">&ldquo;{r.details}&rdquo;</p>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* AI classification */}
+                  <div className="p-3 bg-emerald-50/60 dark:bg-emerald-950/20 rounded-2xl border border-emerald-200/70 dark:border-emerald-800/40 space-y-1.5">
+                    <span className="font-bold text-emerald-950 dark:text-emerald-200 flex items-center gap-1 text-[11px]">
+                      <Sparkles className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-400" />
+                      <span>AI Safety Assessment</span>
+                    </span>
+                    {!selectedCaseModal.aiFlag ? (
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 italic">No AI safety violations triggered.</p>
+                    ) : (
+                      <div className="space-y-1.5 text-[11px] text-slate-700 dark:text-slate-300">
+                        <div className="flex items-center justify-between">
+                          <span>Recommendation: <strong className="uppercase text-emerald-900 dark:text-emerald-300">{selectedCaseModal.aiFlag.recommendation.replace('_', ' ')}</strong></span>
+                          <span>Confidence: <strong>{Math.round(selectedCaseModal.aiFlag.confidence * 100)}%</strong></span>
+                        </div>
+                        <p className="p-2 bg-white dark:bg-slate-900 rounded-xl border border-emerald-100 dark:border-emerald-900/50 leading-relaxed text-[11px]">
+                          {selectedCaseModal.aiFlag.explanation}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 4. Review History & Audit Trail */}
+                <div className="p-3 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-200 dark:border-slate-800 text-xs space-y-1">
+                  <span className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5 text-[11px]">
+                    <History className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Review History & Audit Trail</span>
+                  </span>
+                  <div className="text-[11px] text-slate-600 dark:text-slate-400">
+                    {selectedCaseModal.reviewedBy ? (
+                      <p>
+                        Reviewed by <strong>{selectedCaseModal.reviewedBy}</strong> on {selectedCaseModal.reviewedAt ? new Date(selectedCaseModal.reviewedAt).toLocaleString() : 'Recorded'}
+                        {selectedCaseModal.managementNotes && <span> — &quot;{selectedCaseModal.managementNotes}&quot;</span>}
+                      </p>
+                    ) : (
+                      <p className="italic">Case is currently awaiting management determination.</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* 5. Officer Action & Resolution Controls */}
+                <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2.5">
+                  <label className="block text-xs font-bold text-slate-800 dark:text-slate-200">Officer Resolution Rationale / Audit Note</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Content complies with community guidelines / removed for policy violation..."
+                    value={caseActionNote[selectedCaseModal.id] || ''}
+                    onChange={(e) => setCaseActionNote((prev) => ({ ...prev, [selectedCaseModal.id]: e.target.value }))}
+                    className="w-full px-3 py-2 text-xs border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-emerald-700"
+                  />
+
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await handleCaseAction(selectedCaseModal.id, 'kept');
+                          setSelectedCaseModal(null);
+                        }}
+                        className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all cursor-pointer flex items-center gap-1 shadow-xs"
+                      >
+                        <CheckCircle className="w-3.5 h-3.5" />
+                        <span>Keep Content (Approved)</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await handleCaseAction(selectedCaseModal.id, 'dismissed');
+                          setSelectedCaseModal(null);
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
+                      >
+                        <XCircle className="w-3.5 h-3.5 text-slate-500" />
+                        <span>Dismiss Flag (False Positive)</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await handleCaseAction(selectedCaseModal.id, 'removed');
+                          setSelectedCaseModal(null);
+                        }}
+                        className="px-3.5 py-1.5 rounded-xl bg-rose-700 hover:bg-rose-800 text-white text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Remove Content (Take Down)</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await handleCaseAction(selectedCaseModal.id, 'under_review');
+                          setSelectedCaseModal(null);
+                        }}
+                        className="px-3.5 py-1.5 rounded-xl bg-amber-100 dark:bg-amber-950/60 hover:bg-amber-200 text-amber-900 dark:text-amber-200 border border-amber-300 dark:border-amber-800 text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
+                      >
+                        <Search className="w-3.5 h-3.5 text-amber-700" />
+                        <span>Mark Under Review</span>
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCaseModal(null)}
+                      className="px-4 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold cursor-pointer"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -2097,243 +2433,238 @@ export default function ManagementView() {
       {/* ======================================================== */}
       {activeMgmtTab === 'incidents' && (
         <div className="space-y-6 animate-in fade-in duration-150">
-          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+          <div className="bg-white dark:bg-[#15181C] p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
               <div>
-                <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                <h3 className="text-sm font-extrabold text-slate-900 dark:text-slate-100 flex items-center gap-2">
                   <AlertTriangle className="w-4 h-4 text-rose-600" />
                   <span>Field Incident Verification & Response Operations</span>
                 </h3>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl shrink-0 overflow-x-auto">
                 <button
+                  type="button"
                   onClick={() => setIncidentSubTab('active')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                    incidentSubTab === 'active' ? 'bg-slate-900 text-white shadow-xs' : 'bg-slate-100 text-slate-700'
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    incidentSubTab === 'active'
+                      ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                   }`}
                 >
-                  Active Incidents ({activeIncidents.length})
+                  <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
+                  <span>Active ({activeIncidents.length})</span>
                 </button>
+
                 <button
-                  onClick={() => setIncidentSubTab('history')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                    incidentSubTab === 'history' ? 'bg-slate-900 text-white shadow-xs' : 'bg-slate-100 text-slate-700'
+                  type="button"
+                  onClick={() => setIncidentSubTab('pending')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    incidentSubTab === 'pending'
+                      ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                   }`}
                 >
-                  Archived / History ({incidents.filter((i) => i.isArchived).length})
+                  <Clock className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Pending Approval</span>
+                  {pendingIncidents.length > 0 && (
+                    <span className="px-1.5 py-0.2 bg-amber-500 text-white rounded-full text-[10px] font-bold">
+                      {pendingIncidents.length}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIncidentSubTab('duplicates');
+                    fetchIncidentDuplicates();
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    incidentSubTab === 'duplicates'
+                      ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-blue-500" />
+                  <span>AI Duplicate Merge</span>
+                  {duplicateAssessments.length > 0 && (
+                    <span className="px-1.5 py-0.2 bg-blue-600 text-white rounded-full text-[10px] font-bold">
+                      {duplicateAssessments.length}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIncidentSubTab('history')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    incidentSubTab === 'history'
+                      ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <Archive className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Archived ({incidents.filter((i) => i.isArchived).length})</span>
                 </button>
               </div>
             </div>
 
-            {/* Filter Row */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
-              <div className="relative min-w-0 w-full">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <input
-                  type="text"
-                  placeholder="Search incidents, locations, reporters..."
-                  value={incidentSearchQuery}
-                  onChange={(e) => setIncidentSearchQuery(e.target.value)}
-                  className="w-full h-9 sm:h-10 pl-9 pr-3 text-xs font-medium border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-[#9E1315]/20 focus:border-[#9E1315] bg-slate-50/50 dark:bg-slate-900 text-slate-900 dark:text-slate-100"
-                />
-              </div>
+            {/* Filter Row (Active & History views) */}
+            {(incidentSubTab === 'active' || incidentSubTab === 'history') && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
+                <div className="relative min-w-0 w-full">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="Search incidents, locations, reporters..."
+                    value={incidentSearchQuery}
+                    onChange={(e) => setIncidentSearchQuery(e.target.value)}
+                    className="w-full h-9 sm:h-10 pl-9 pr-3 text-xs font-medium border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-[#9E1315]/20 focus:border-[#9E1315] bg-slate-50/50 dark:bg-slate-900 text-slate-900 dark:text-slate-100"
+                  />
+                </div>
 
-              <div className="min-w-0 w-full">
-                <ManagementSelect
-                  value={incidentSeverityFilter}
-                  onChange={setIncidentSeverityFilter}
-                  ariaLabel="Filter by incident severity"
-                  options={[
-                    { value: 'all', label: 'All Severities' },
-                    { value: 'critical', label: 'Critical' },
-                    { value: 'high', label: 'High' },
-                    { value: 'medium', label: 'Medium' },
-                    { value: 'low', label: 'Low' },
-                  ]}
-                />
-              </div>
+                <div className="min-w-0 w-full">
+                  <ManagementSelect
+                    value={incidentSeverityFilter}
+                    onChange={setIncidentSeverityFilter}
+                    ariaLabel="Filter by incident severity"
+                    options={[
+                      { value: 'all', label: 'All Severities' },
+                      { value: 'critical', label: 'Critical' },
+                      { value: 'high', label: 'High' },
+                      { value: 'medium', label: 'Medium' },
+                      { value: 'low', label: 'Low' },
+                    ]}
+                  />
+                </div>
 
-              <div className="min-w-0 w-full">
-                <ManagementSelect
-                  value={incidentTypeFilter}
-                  onChange={setIncidentTypeFilter}
-                  ariaLabel="Filter by category or incident type"
-                  options={[
-                    { value: 'all', label: 'All Incident Types' },
-                    { value: 'flood', label: 'Flash Flood' },
-                    { value: 'tree_fall', label: 'Fallen Tree / Branch' },
-                    { value: 'power_outage', label: 'Power Outage' },
-                    { value: 'road_damage', label: 'Road Damage / Pothole' },
-                    { value: 'other', label: 'Other Hazard' },
-                  ]}
-                />
-              </div>
+                <div className="min-w-0 w-full">
+                  <ManagementSelect
+                    value={incidentTypeFilter}
+                    onChange={setIncidentTypeFilter}
+                    ariaLabel="Filter by category or incident type"
+                    options={[
+                      { value: 'all', label: 'All Incident Types' },
+                      { value: 'flood', label: 'Flash Flood' },
+                      { value: 'tree_fall', label: 'Fallen Tree / Branch' },
+                      { value: 'power_outage', label: 'Power Outage' },
+                      { value: 'road_damage', label: 'Road Damage / Pothole' },
+                      { value: 'other', label: 'Other Hazard' },
+                    ]}
+                  />
+                </div>
 
-              <div className="min-w-0 w-full">
-                <ManagementSelect
-                  value={incidentStatusFilter}
-                  onChange={setIncidentStatusFilter}
-                  ariaLabel="Filter by incident status"
-                  options={[
-                    { value: 'all', label: 'All Statuses' },
-                    { value: 'reported', label: 'Reported' },
-                    { value: 'under_review', label: 'Under Review' },
-                    { value: 'dispatched', label: 'Team Dispatched' },
-                    { value: 'resolved', label: 'Resolved' },
-                  ]}
-                />
+                <div className="min-w-0 w-full">
+                  <ManagementSelect
+                    value={incidentStatusFilter}
+                    onChange={setIncidentStatusFilter}
+                    ariaLabel="Filter by incident status"
+                    options={[
+                      { value: 'all', label: 'All Statuses' },
+                      { value: 'reported', label: 'Reported' },
+                      { value: 'under_review', label: 'Under Review' },
+                      { value: 'dispatched', label: 'Team Dispatched' },
+                      { value: 'resolved', label: 'Resolved' },
+                    ]}
+                  />
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
-          {/* Incidents Listing */}
-          <div className="space-y-4">
-            {incidents
-              .filter((inc) => {
-                if (incidentSubTab === 'active' && inc.isArchived) return false;
-                if (incidentSubTab === 'history' && !inc.isArchived && inc.status !== 'resolved') return false;
-                if (incidentSeverityFilter !== 'all' && inc.severity !== incidentSeverityFilter) return false;
-                if (incidentTypeFilter !== 'all' && inc.incidentType !== incidentTypeFilter) return false;
-                if (incidentStatusFilter !== 'all' && inc.status !== incidentStatusFilter) return false;
-                if (incidentSearchQuery.trim()) {
-                  const q = incidentSearchQuery.toLowerCase();
-                  const match = `${inc.title} ${inc.description} ${inc.locationName} ${inc.reporterName || ''}`.toLowerCase();
-                  if (!match.includes(q)) return false;
-                }
-                return true;
-              })
-              .map((inc) => {
-                const isExpanded = expandedTimelineId === inc.id;
-                return (
-                  <div key={inc.id} className="p-5 rounded-3xl border border-slate-200 bg-white shadow-xs space-y-3.5">
+          {/* SUBTAB: PENDING APPROVAL QUEUE */}
+          {incidentSubTab === 'pending' && (
+            <div className="space-y-4">
+              <div className="p-4 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/50 rounded-2xl flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div className="text-xs text-amber-900 dark:text-amber-200 space-y-1">
+                  <p className="font-bold">Approval-Only Resilience Workflow Active</p>
+                  <p className="text-[11px] leading-relaxed text-amber-800 dark:text-amber-300">
+                    Resident hazard reports require JMB Management authorization before appearing on the public community map and dashboard. Approve verified community hazards to coordinate public response, or decline unverified submissions to prevent panic.
+                  </p>
+                </div>
+              </div>
+
+              {pendingIncidents.length === 0 ? (
+                <div className="p-12 text-center text-slate-400 dark:text-slate-500 bg-white dark:bg-[#15181C] rounded-3xl border border-slate-200 dark:border-slate-800">
+                  <CheckCircle className="w-10 h-10 mx-auto mb-2 text-emerald-500 opacity-60" />
+                  <h4 className="text-sm font-bold text-slate-700 dark:text-slate-200">No Incidents Pending Approval</h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    All resident submissions have been reviewed. New community incident reports will arrive here in real time.
+                  </p>
+                </div>
+              ) : (
+                pendingIncidents.map((inc) => (
+                  <div key={inc.id} className="p-5 rounded-3xl border border-amber-200/70 dark:border-amber-900/50 bg-white dark:bg-[#15181C] shadow-xs space-y-3.5">
                     <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
                       <div>
                         <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          <span className="text-xs font-bold text-slate-900">{inc.title}</span>
-                          
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-800 uppercase">
+                          <span className="text-xs font-bold text-slate-900 dark:text-slate-100">{inc.title}</span>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 uppercase">
                             {inc.incidentType.replace('_', ' ')}
                           </span>
-
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                            inc.severity === 'critical' ? 'bg-rose-100 text-rose-800 border border-rose-200' :
-                            inc.severity === 'high' ? 'bg-orange-100 text-orange-800 border border-orange-200' :
-                            inc.severity === 'medium' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
-                            'bg-blue-100 text-blue-800 border border-blue-200'
+                            inc.severity === 'critical' ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-200 border border-rose-200 dark:border-rose-800' :
+                            inc.severity === 'high' ? 'bg-orange-100 dark:bg-orange-950/60 text-orange-800 dark:text-orange-200 border border-orange-200 dark:border-orange-800' :
+                            inc.severity === 'medium' ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-800' :
+                            'bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-200 border border-blue-200 dark:border-blue-800'
                           }`}>
                             Severity: {inc.severity.toUpperCase()}
                           </span>
-
-                          {inc.isVerified ? (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-blue-100 text-blue-900 border border-blue-300 px-2 py-0.5 rounded-full">
-                              <BadgeCheck className="w-3.5 h-3.5 text-blue-600" />
-                              <span>Verified Hazard</span>
-                            </span>
-                          ) : (
-                            <span className="text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-full">
-                              Pending Verification
-                            </span>
-                          )}
-
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                            inc.status === 'resolved' ? 'bg-emerald-100 text-emerald-800' :
-                            inc.status === 'dispatched' ? 'bg-indigo-100 text-indigo-800' :
-                            inc.status === 'under_review' ? 'bg-amber-100 text-amber-800' :
-                            'bg-rose-100 text-rose-800'
-                          }`}>
-                            {inc.status.replace('_', ' ').toUpperCase()}
+                          <span className="text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-900 dark:text-amber-200 border border-amber-300 dark:border-amber-800 px-2 py-0.5 rounded-full flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                            <span>Pending JMB Approval</span>
                           </span>
                         </div>
 
-                        <p className="text-xs text-slate-600 flex items-center gap-1.5 flex-wrap">
+                        <p className="text-xs text-slate-600 dark:text-slate-400 flex items-center gap-1.5 flex-wrap">
                           <MapPin className="w-3.5 h-3.5 text-[#9E1315] shrink-0" />
                           <span>{inc.locationName} ({inc.latitude.toFixed(4)}, {inc.longitude.toFixed(4)}) • Reporter: {inc.isAnonymous ? 'Anonymous Neighbor' : inc.reporterName} • {new Date(inc.createdAt).toLocaleString()}</span>
                         </p>
-
-                        {inc.isVerified && inc.verifiedByName && (
-                          <p className="text-[11px] text-blue-800 font-medium mt-1 flex items-center gap-1">
-                            <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
-                            <span>Verified by {inc.verifiedByName}: &quot;{inc.verificationNotes}&quot;</span>
-                          </p>
-                        )}
                       </div>
 
                       {/* Action buttons */}
                       <div className="flex flex-wrap items-center gap-2">
-                        {/* Deep link to Map */}
                         <button
+                          type="button"
                           onClick={() => {
                             setActiveTab('map');
                             navigateToItem({ tab: 'map', itemId: inc.id, itemType: 'incident' });
                           }}
-                          className="text-xs px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold flex items-center gap-1 cursor-pointer"
+                          className="text-xs px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold flex items-center gap-1 cursor-pointer"
                         >
                           <MapPin className="w-3.5 h-3.5 text-emerald-700" />
-                          <span>View on Map</span>
+                          <span>Preview on Map</span>
                         </button>
 
-                        {/* Verification toggle */}
-                        {!inc.isVerified ? (
-                          <button
-                            onClick={() => setVerifyingIncidentId(inc.id)}
-                            className="text-xs px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold flex items-center gap-1 shadow-xs cursor-pointer"
-                          >
-                            <BadgeCheck className="w-3.5 h-3.5" />
-                            <span>Verify Hazard</span>
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => setRejectingIncidentId(inc.id)}
-                            className="text-xs px-2.5 py-1.5 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold cursor-pointer"
-                          >
-                            Revoke
-                          </button>
-                        )}
-
-                        {/* Status workflow */}
                         <button
-                          onClick={() => updateIncidentStatus(inc.id, 'under_review', 'Reviewed by operations command room')}
-                          className={`text-xs px-2.5 py-1.5 rounded-xl font-bold cursor-pointer ${
-                            inc.status === 'under_review' ? 'bg-amber-500 text-white' : 'bg-amber-100 text-amber-900 hover:bg-amber-200'
-                          }`}
+                          type="button"
+                          onClick={() => handleApproveIncident(inc.id)}
+                          className="text-xs px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-all"
                         >
-                          Review
-                        </button>
-                        <button
-                          onClick={() => updateIncidentStatus(inc.id, 'dispatched', 'Response team dispatched to coordinate on-site', 'Rapid Response Team')}
-                          className={`text-xs px-2.5 py-1.5 rounded-xl font-bold cursor-pointer ${
-                            inc.status === 'dispatched' ? 'bg-indigo-600 text-white' : 'bg-indigo-100 text-indigo-900 hover:bg-indigo-200'
-                          }`}
-                        >
-                          Dispatch
-                        </button>
-                        <button
-                          onClick={() => updateIncidentStatus(inc.id, 'resolved', 'Resolution work verified complete on-site')}
-                          className={`text-xs px-2.5 py-1.5 rounded-xl font-bold cursor-pointer ${
-                            inc.status === 'resolved' ? 'bg-emerald-600 text-white' : 'bg-emerald-100 text-emerald-900 hover:bg-emerald-200'
-                          }`}
-                        >
-                          Resolve
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          <span>Approve & Publish to Map</span>
                         </button>
 
-                        {/* Archive button */}
-                        {inc.status === 'resolved' && !inc.isArchived && (
-                          <button
-                            onClick={() => setArchiveModalIncident(inc)}
-                            className="text-xs px-3 py-1.5 rounded-xl font-bold bg-slate-800 hover:bg-slate-900 text-white cursor-pointer flex items-center gap-1.5 shadow-xs"
-                          >
-                            <Archive className="w-3.5 h-3.5 text-amber-400" />
-                            <span>Archive</span>
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRejectingIncidentId(inc.id);
+                            setRejectionReason('');
+                          }}
+                          className="text-xs px-3 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/50 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800/60 font-bold flex items-center gap-1 cursor-pointer transition-all"
+                        >
+                          <XCircle className="w-3.5 h-3.5" />
+                          <span>Decline / Reject</span>
+                        </button>
                       </div>
                     </div>
 
                     {inc.imageUrl && (
                       <div className="pt-1">
                         <a href={inc.imageUrl} target="_blank" rel="noopener noreferrer" className="inline-block group">
-                          <div className="relative rounded-xl overflow-hidden border border-slate-200 w-36 h-24 bg-slate-100">
+                          <div className="relative rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 w-36 h-24 bg-slate-100 dark:bg-slate-800">
                             <img src={inc.imageUrl} alt={inc.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
                             <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-[10px] font-bold">
                               Full Photo
@@ -2343,47 +2674,375 @@ export default function ManagementView() {
                       </div>
                     )}
 
-                    <div className="text-xs text-slate-600 bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                    <div className="text-xs text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-900/60 p-3 rounded-2xl border border-slate-100 dark:border-slate-800/80">
                       <strong>Description:</strong> {inc.description}
                     </div>
                   </div>
-                );
-              })}
-          </div>
+                ))
+              )}
+            </div>
+          )}
+
+          {/* SUBTAB: AI-ASSISTED DUPLICATE MERGING */}
+          {incidentSubTab === 'duplicates' && (
+            <div className="space-y-4">
+              <div className="p-4 bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-800/50 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <Sparkles className="w-5 h-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                  <div className="text-xs text-blue-900 dark:text-blue-200 space-y-1">
+                    <p className="font-bold">AI-Assisted Spatial & Temporal Duplicate Incident Merging</p>
+                    <p className="text-[11px] leading-relaxed text-blue-800 dark:text-blue-300">
+                      Evaluates active incidents within a <strong>500m radius</strong> and <strong>7-day window</strong>. Gemini AI assesses hazard category and report context to detect redundant submissions. Merging links the duplicate report to the canonical record and hides duplicate map pins while preserving all reporter notes and evidence.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={isLoadingDuplicates}
+                  onClick={fetchIncidentDuplicates}
+                  className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-1.5 shrink-0 shadow-xs cursor-pointer transition-all disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isLoadingDuplicates ? 'animate-spin' : ''}`} />
+                  <span>Re-scan Proximity</span>
+                </button>
+              </div>
+
+              {isLoadingDuplicates ? (
+                <div className="p-12 text-center text-slate-400 bg-white dark:bg-[#15181C] rounded-3xl border border-slate-200 dark:border-slate-800 space-y-2">
+                  <RefreshCw className="w-8 h-8 mx-auto text-blue-500 animate-spin" />
+                  <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                    Analyzing geospatial coordinates and semantic descriptions with Gemini...
+                  </p>
+                </div>
+              ) : duplicateAssessments.length === 0 ? (
+                <div className="p-12 text-center text-slate-400 dark:text-slate-500 bg-white dark:bg-[#15181C] rounded-3xl border border-slate-200 dark:border-slate-800">
+                  <CheckCircle className="w-10 h-10 mx-auto mb-2 text-emerald-500 opacity-60" />
+                  <h4 className="text-sm font-bold text-slate-700 dark:text-slate-200">No Duplicate Reports Detected</h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-md mx-auto">
+                    All active field incident reports are spatially separated by &gt;500 meters or occurred outside the 7-day clustering window.
+                  </p>
+                </div>
+              ) : (
+                duplicateAssessments.map((pair, idx) => (
+                  <div key={idx} className="p-5 rounded-3xl border border-blue-200 dark:border-blue-900/50 bg-white dark:bg-[#15181C] shadow-xs space-y-4">
+                    {/* Header badge & similarity score */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase ${
+                          pair.matchConfidence === 'high' ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-200 border border-rose-300' :
+                          pair.matchConfidence === 'medium' ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-200 border border-amber-300' :
+                          'bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-200 border border-blue-300'
+                        }`}>
+                          {pair.matchConfidence} Confidence Match ({Math.round(pair.similarityScore * 100)}%)
+                        </span>
+
+                        <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1">
+                          <MapPin className="w-3.5 h-3.5 text-[#9E1315]" />
+                          <span>{Math.round(pair.distanceMeters)}m apart</span>
+                        </span>
+
+                        <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1">
+                          <Clock className="w-3.5 h-3.5 text-slate-400" />
+                          <span>{pair.daysDiff < 1 ? `${Math.round(pair.daysDiff * 24)}h apart` : `${pair.daysDiff.toFixed(1)} days apart`}</span>
+                        </span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMergeConfirmPair(pair);
+                          setMergeReasonInput(`Duplicate of #${pair.canonical.id.slice(0, 8)} (${pair.canonical.title})`);
+                        }}
+                        className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-all"
+                      >
+                        <Layers className="w-3.5 h-3.5" />
+                        <span>Review & Merge Reports</span>
+                      </button>
+                    </div>
+
+                    {/* Gemini AI Rationale */}
+                    <div className="p-3 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-100 dark:border-slate-800 text-xs space-y-1">
+                      <span className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5 text-[11px]">
+                        <Sparkles className="w-3.5 h-3.5 text-blue-500" />
+                        <span>Gemini Similarity Analysis:</span>
+                      </span>
+                      <p className="text-slate-600 dark:text-slate-400 text-[11px] leading-relaxed">
+                        {pair.rationale}
+                      </p>
+                    </div>
+
+                    {/* Side-by-side comparison */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                      {/* Left: Canonical Incident */}
+                      <div className="p-4 rounded-2xl border border-emerald-200 dark:border-emerald-900/40 bg-emerald-50/20 dark:bg-emerald-950/10 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 uppercase">
+                            Canonical Incident (Keeper)
+                          </span>
+                          <span className="text-[10px] font-mono text-slate-500">
+                            #{pair.canonical.id.slice(0, 8)}
+                          </span>
+                        </div>
+                        <h4 className="font-bold text-slate-900 dark:text-slate-100 text-sm">
+                          {pair.canonical.title}
+                        </h4>
+                        <div className="text-[11px] text-slate-600 dark:text-slate-400 space-y-0.5">
+                          <p><strong>Category:</strong> {pair.canonical.incidentType.replace('_', ' ')} • <strong>Severity:</strong> {pair.canonical.severity}</p>
+                          <p><strong>Location:</strong> {pair.canonical.locationName}</p>
+                          <p><strong>Reporter:</strong> {pair.canonical.isAnonymous ? 'Anonymous' : pair.canonical.reporterName} • {new Date(pair.canonical.createdAt).toLocaleDateString()}</p>
+                        </div>
+                        <div className="p-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 text-[11px] text-slate-700 dark:text-slate-300 italic">
+                          &ldquo;{pair.canonical.description}&rdquo;
+                        </div>
+                      </div>
+
+                      {/* Right: Potential Duplicate */}
+                      <div className="p-4 rounded-2xl border border-amber-200 dark:border-amber-900/40 bg-amber-50/20 dark:bg-amber-950/10 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 uppercase">
+                            Duplicate Report (Will Merge)
+                          </span>
+                          <span className="text-[10px] font-mono text-slate-500">
+                            #{pair.duplicate.id.slice(0, 8)}
+                          </span>
+                        </div>
+                        <h4 className="font-bold text-slate-900 dark:text-slate-100 text-sm">
+                          {pair.duplicate.title}
+                        </h4>
+                        <div className="text-[11px] text-slate-600 dark:text-slate-400 space-y-0.5">
+                          <p><strong>Category:</strong> {pair.duplicate.incidentType.replace('_', ' ')} • <strong>Severity:</strong> {pair.duplicate.severity}</p>
+                          <p><strong>Location:</strong> {pair.duplicate.locationName}</p>
+                          <p><strong>Reporter:</strong> {pair.duplicate.isAnonymous ? 'Anonymous' : pair.duplicate.reporterName} • {new Date(pair.duplicate.createdAt).toLocaleDateString()}</p>
+                        </div>
+                        <div className="p-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 text-[11px] text-slate-700 dark:text-slate-300 italic">
+                          &ldquo;{pair.duplicate.description}&rdquo;
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+          {/* SUBTAB: ACTIVE & HISTORY LISTING */}
+          {(incidentSubTab === 'active' || incidentSubTab === 'history') && (
+            <div className="space-y-4">
+              {incidents
+                .filter((inc) => {
+                  if (incidentSubTab === 'active') {
+                    if (inc.isArchived || inc.isMerged || inc.status === 'pending' || inc.status === 'rejected') return false;
+                  }
+                  if (incidentSubTab === 'history') {
+                    if (!inc.isArchived && inc.status !== 'resolved' && inc.status !== 'rejected') return false;
+                  }
+                  if (incidentSeverityFilter !== 'all' && inc.severity !== incidentSeverityFilter) return false;
+                  if (incidentTypeFilter !== 'all' && inc.incidentType !== incidentTypeFilter) return false;
+                  if (incidentStatusFilter !== 'all' && inc.status !== incidentStatusFilter) return false;
+                  if (incidentSearchQuery.trim()) {
+                    const q = incidentSearchQuery.toLowerCase();
+                    const match = `${inc.title} ${inc.description} ${inc.locationName} ${inc.reporterName || ''}`.toLowerCase();
+                    if (!match.includes(q)) return false;
+                  }
+                  return true;
+                })
+                .map((inc) => {
+                  return (
+                    <div key={inc.id} className="p-5 rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#15181C] shadow-xs space-y-3.5">
+                      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                        <div>
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
+                            <span className="text-xs font-bold text-slate-900 dark:text-slate-100">{inc.title}</span>
+                            
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 uppercase">
+                              {inc.incidentType.replace('_', ' ')}
+                            </span>
+
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                              inc.severity === 'critical' ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-200 border border-rose-200 dark:border-rose-800' :
+                              inc.severity === 'high' ? 'bg-orange-100 dark:bg-orange-950/60 text-orange-800 dark:text-orange-200 border border-orange-200 dark:border-orange-800' :
+                              inc.severity === 'medium' ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-800' :
+                              'bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-200 border border-blue-200 dark:border-blue-800'
+                            }`}>
+                              Severity: {inc.severity.toUpperCase()}
+                            </span>
+
+                            {inc.isVerified ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-blue-100 dark:bg-blue-950/60 text-blue-900 dark:text-blue-200 border border-blue-300 dark:border-blue-800 px-2 py-0.5 rounded-full">
+                                <BadgeCheck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                                <span>Verified Hazard</span>
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-bold bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 px-2 py-0.5 rounded-full">
+                                Pending Verification
+                              </span>
+                            )}
+
+                            {inc.isMerged && (
+                              <span className="text-[10px] font-bold bg-purple-100 dark:bg-purple-950/60 text-purple-900 dark:text-purple-200 border border-purple-300 dark:border-purple-800 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                <Layers className="w-3 h-3 text-purple-600" />
+                                <span>Merged Duplicate</span>
+                              </span>
+                            )}
+
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                              inc.status === 'resolved' ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-200' :
+                              inc.status === 'dispatched' ? 'bg-indigo-100 dark:bg-indigo-950/60 text-indigo-800 dark:text-indigo-200' :
+                              inc.status === 'under_review' ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-200' :
+                              inc.status === 'rejected' ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-200' :
+                              'bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-200'
+                            }`}>
+                              {inc.status.replace('_', ' ').toUpperCase()}
+                            </span>
+                          </div>
+
+                          <p className="text-xs text-slate-600 dark:text-slate-400 flex items-center gap-1.5 flex-wrap">
+                            <MapPin className="w-3.5 h-3.5 text-[#9E1315] shrink-0" />
+                            <span>{inc.locationName} ({inc.latitude.toFixed(4)}, {inc.longitude.toFixed(4)}) • Reporter: {inc.isAnonymous ? 'Anonymous Neighbor' : inc.reporterName} • {new Date(inc.createdAt).toLocaleString()}</span>
+                          </p>
+
+                          {inc.isVerified && inc.verifiedByName && (
+                            <p className="text-[11px] text-blue-800 dark:text-blue-300 font-medium mt-1 flex items-center gap-1">
+                              <ShieldCheck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                              <span>Verified by {inc.verifiedByName}: &quot;{inc.verificationNotes}&quot;</span>
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Action buttons */}
+                        <div className="flex flex-wrap items-center gap-2">
+                          {/* Deep link to Map */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveTab('map');
+                              navigateToItem({ tab: 'map', itemId: inc.id, itemType: 'incident' });
+                            }}
+                            className="text-xs px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold flex items-center gap-1 cursor-pointer"
+                          >
+                            <MapPin className="w-3.5 h-3.5 text-emerald-700" />
+                            <span>View on Map</span>
+                          </button>
+
+                          {/* Verification toggle */}
+                          {!inc.isVerified ? (
+                            <button
+                              type="button"
+                              onClick={() => setVerifyingIncidentId(inc.id)}
+                              className="text-xs px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold flex items-center gap-1 shadow-xs cursor-pointer"
+                            >
+                              <BadgeCheck className="w-3.5 h-3.5" />
+                              <span>Verify Hazard</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setRejectingIncidentId(inc.id)}
+                              className="text-xs px-2.5 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold cursor-pointer"
+                            >
+                              Revoke
+                            </button>
+                          )}
+
+                          {/* Status workflow */}
+                          <button
+                            type="button"
+                            onClick={() => updateIncidentStatus(inc.id, 'under_review', 'Reviewed by operations command room')}
+                            className={`text-xs px-2.5 py-1.5 rounded-xl font-bold cursor-pointer ${
+                              inc.status === 'under_review' ? 'bg-amber-500 text-white' : 'bg-amber-100 dark:bg-amber-950/60 text-amber-900 dark:text-amber-200 hover:bg-amber-200'
+                            }`}
+                          >
+                            Review
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => updateIncidentStatus(inc.id, 'dispatched', 'Response team dispatched to coordinate on-site', 'Rapid Response Team')}
+                            className={`text-xs px-2.5 py-1.5 rounded-xl font-bold cursor-pointer ${
+                              inc.status === 'dispatched' ? 'bg-indigo-600 text-white' : 'bg-indigo-100 dark:bg-indigo-950/60 text-indigo-900 dark:text-indigo-200 hover:bg-indigo-200'
+                            }`}
+                          >
+                            Dispatch
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => updateIncidentStatus(inc.id, 'resolved', 'Resolution work verified complete on-site')}
+                            className={`text-xs px-2.5 py-1.5 rounded-xl font-bold cursor-pointer ${
+                              inc.status === 'resolved' ? 'bg-emerald-600 text-white' : 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-900 dark:text-emerald-200 hover:bg-emerald-200'
+                            }`}
+                          >
+                            Resolve
+                          </button>
+
+                          {/* Archive button */}
+                          {inc.status === 'resolved' && !inc.isArchived && (
+                            <button
+                              type="button"
+                              onClick={() => setArchiveModalIncident(inc)}
+                              className="text-xs px-3 py-1.5 rounded-xl font-bold bg-slate-800 dark:bg-slate-700 hover:bg-slate-900 dark:hover:bg-slate-600 text-white cursor-pointer flex items-center gap-1.5 shadow-xs"
+                            >
+                              <Archive className="w-3.5 h-3.5 text-amber-400" />
+                              <span>Archive</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {inc.imageUrl && (
+                        <div className="pt-1">
+                          <a href={inc.imageUrl} target="_blank" rel="noopener noreferrer" className="inline-block group">
+                            <div className="relative rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 w-36 h-24 bg-slate-100 dark:bg-slate-800">
+                              <img src={inc.imageUrl} alt={inc.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                              <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-[10px] font-bold">
+                                Full Photo
+                              </div>
+                            </div>
+                          </a>
+                        </div>
+                      )}
+
+                      <div className="text-xs text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-900/60 p-3 rounded-2xl border border-slate-100 dark:border-slate-800/80">
+                        <strong>Description:</strong> {inc.description}
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          )}
 
           {/* Verification Modal */}
           {verifyingIncidentId && (
             <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-              <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+              <div className="bg-white dark:bg-[#15181C] rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
                   <div className="flex items-center gap-2">
                     <BadgeCheck className="w-5 h-5 text-blue-600" />
-                    <h4 className="text-sm font-bold text-slate-900">Verify Incident as Official Hazard Alert</h4>
+                    <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">Verify Incident as Official Hazard Alert</h4>
                   </div>
-                  <button onClick={() => setVerifyingIncidentId(null)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+                  <button onClick={() => setVerifyingIncidentId(null)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">
                     <X className="w-4 h-4" />
                   </button>
                 </div>
                 <form onSubmit={handleVerifyIncidentSubmit} className="space-y-3 text-xs">
-                  <p className="text-slate-600">
+                  <p className="text-slate-600 dark:text-slate-400">
                     This incident will be displayed with an official verified badge and highlighted on the community feed for all Elmina residents.
                   </p>
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">Officer Verification Notes</label>
+                    <label className="block font-bold text-slate-700 dark:text-slate-200 mb-1">Officer Verification Notes</label>
                     <textarea
                       required
                       rows={3}
                       value={verificationNotes}
                       onChange={(e) => setVerificationNotes(e.target.value)}
                       placeholder="e.g. Patrol team confirmed 0.3m water accumulation near junction..."
-                      className="w-full border border-slate-200 rounded-xl p-2.5 resize-none"
+                      className="w-full border border-slate-200 dark:border-slate-800 rounded-xl p-2.5 resize-none bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100"
                     />
                   </div>
-                  <div className="flex items-center justify-end gap-2 pt-2">
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                     <button
                       type="button"
                       onClick={() => setVerifyingIncidentId(null)}
-                      className="px-4 py-2 bg-slate-100 text-slate-700 font-bold rounded-xl cursor-pointer"
+                      className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold rounded-xl cursor-pointer"
                     >
                       Cancel
                     </button>
@@ -2399,39 +3058,188 @@ export default function ManagementView() {
             </div>
           )}
 
-          {/* Archive Modal */}
-          {archiveModalIncident && (
+          {/* Decline / Reject Incident Modal */}
+          {rejectingIncidentId && (
             <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-              <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="bg-white dark:bg-[#15181C] rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
                   <div className="flex items-center gap-2">
-                    <Archive className="w-5 h-5 text-amber-600" />
-                    <h4 className="text-sm font-bold text-slate-900">Archive Resolved Incident</h4>
+                    <XCircle className="w-5 h-5 text-rose-600" />
+                    <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">Decline Incident Report</h4>
                   </div>
-                  <button onClick={() => setArchiveModalIncident(null)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRejectingIncidentId(null);
+                      setRejectionReason('');
+                    }}
+                    className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                  >
                     <X className="w-4 h-4" />
                   </button>
                 </div>
-                <div className="space-y-2 text-xs text-slate-600">
+                <form onSubmit={handleRejectIncidentSubmit} className="space-y-3 text-xs">
+                  <p className="text-slate-600 dark:text-slate-400">
+                    Declining this incident keeps the report off the public map. The record is permanently preserved in the management audit log for accountability.
+                  </p>
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-slate-200 mb-1">Reason for Declining</label>
+                    <textarea
+                      required
+                      rows={3}
+                      value={rejectionReason}
+                      onChange={(e) => setRejectionReason(e.target.value)}
+                      placeholder="e.g. Issue already rectified upon field inspection / not an actionable hazard..."
+                      className="w-full border border-slate-200 dark:border-slate-800 rounded-xl p-2.5 resize-none bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-[#9E1315]/20 focus:border-[#9E1315]"
+                    />
+                  </div>
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRejectingIncidentId(null);
+                        setRejectionReason('');
+                      }}
+                      className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold rounded-xl cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl cursor-pointer shadow-xs"
+                    >
+                      Confirm & Decline
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* Merge Duplicate Confirmation Modal */}
+          {mergeConfirmPair && (
+            <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+              <div className="bg-white dark:bg-[#15181C] rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Layers className="w-5 h-5 text-blue-600" />
+                    <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">Confirm Incident Merge</h4>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={isMerging}
+                    onClick={() => {
+                      setMergeConfirmPair(null);
+                      setMergeReasonInput('');
+                    }}
+                    className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="space-y-3 text-xs text-slate-600 dark:text-slate-400">
+                  <p>
+                    You are consolidating 2 duplicate field reports into a single canonical incident.
+                  </p>
+
+                  <div className="p-3 bg-blue-50/60 dark:bg-blue-950/20 rounded-2xl border border-blue-200/60 dark:border-blue-800/40 space-y-1.5 text-[11px]">
+                    <div className="flex items-center justify-between text-slate-800 dark:text-slate-200">
+                      <strong>Canonical Record:</strong>
+                      <span className="font-mono">#{mergeConfirmPair.canonical.id.slice(0, 8)}</span>
+                    </div>
+                    <p className="font-semibold text-slate-900 dark:text-slate-100">{mergeConfirmPair.canonical.title}</p>
+                    <div className="border-t border-blue-200/50 dark:border-blue-800/40 my-1 pt-1 flex items-center justify-between text-slate-800 dark:text-slate-200">
+                      <strong>Duplicate To Merge:</strong>
+                      <span className="font-mono">#{mergeConfirmPair.duplicate.id.slice(0, 8)}</span>
+                    </div>
+                    <p className="font-semibold text-slate-900 dark:text-slate-100">{mergeConfirmPair.duplicate.title}</p>
+                  </div>
+
+                  <p className="p-2.5 bg-slate-50 dark:bg-slate-900/60 rounded-xl text-[11px] leading-relaxed">
+                    <strong>Audit Guarantee:</strong> Duplicate report will be marked as merged and hidden from the public map to prevent redundant dispatching. All photos, original descriptions, reporter identities, and timestamps are permanently retained and linked.
+                  </p>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-slate-200 mb-1">Merge Audit Rationale</label>
+                    <input
+                      type="text"
+                      value={mergeReasonInput}
+                      onChange={(e) => setMergeReasonInput(e.target.value)}
+                      placeholder="e.g. Duplicate report of fallen tree at Persiaran Elmina"
+                      className="w-full border border-slate-200 dark:border-slate-800 rounded-xl p-2.5 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <button
+                    type="button"
+                    disabled={isMerging}
+                    onClick={() => {
+                      setMergeConfirmPair(null);
+                      setMergeReasonInput('');
+                    }}
+                    className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold rounded-xl cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isMerging}
+                    onClick={() => handleExecuteMerge(mergeConfirmPair.canonical.id, mergeConfirmPair.duplicate.id, mergeReasonInput)}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl cursor-pointer shadow-xs flex items-center gap-1.5"
+                  >
+                    {isMerging ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Merging...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Confirm & Merge</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Archive Modal */}
+          {archiveModalIncident && (
+            <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+              <div className="bg-white dark:bg-[#15181C] rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Archive className="w-5 h-5 text-amber-600" />
+                    <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">Archive Resolved Incident</h4>
+                  </div>
+                  <button onClick={() => setArchiveModalIncident(null)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="space-y-2 text-xs text-slate-600 dark:text-slate-400">
                   <p>
                     Archiving incident <strong>&quot;{archiveModalIncident.title}&quot;</strong> will remove it from the public resilience map and community feed.
                   </p>
-                  <p className="p-3 bg-amber-50 text-amber-900 rounded-2xl border border-amber-200/70 text-[11px]">
+                  <p className="p-3 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 rounded-2xl border border-amber-200/70 dark:border-amber-800/50 text-[11px]">
                     <strong>Retention Guarantee:</strong> Incident records are never erased. Complete timeline logs, officer notes, and timestamps are permanently retained in Supabase.
                   </p>
                 </div>
-                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                   <button
                     disabled={archiveLoading}
                     onClick={() => setArchiveModalIncident(null)}
-                    className="px-4 py-2 bg-slate-100 text-slate-700 font-bold rounded-xl cursor-pointer text-xs"
+                    className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold rounded-xl cursor-pointer text-xs"
                   >
                     Cancel
                   </button>
                   <button
                     disabled={archiveLoading}
                     onClick={handleArchiveIncidentConfirm}
-                    className="px-4 py-2 bg-slate-900 hover:bg-black text-white font-bold rounded-xl cursor-pointer text-xs shadow-xs"
+                    className="px-4 py-2 bg-slate-900 hover:bg-black dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 font-bold rounded-xl cursor-pointer text-xs shadow-xs"
                   >
                     {archiveLoading ? 'Archiving...' : 'Confirm & Archive'}
                   </button>
@@ -2448,43 +3256,43 @@ export default function ManagementView() {
       {activeMgmtTab === 'residents' && (
         <div className="space-y-6 animate-in fade-in duration-150">
           {/* Pending ID Verifications Queue */}
-          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="bg-white dark:bg-[#15181C] p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <div>
-                <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-                  <UserCheck className="w-4 h-4 text-emerald-800" />
+                <h3 className="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                  <UserCheck className="w-4 h-4 text-emerald-800 dark:text-emerald-400" />
                   <span>Resident Identity Verification Queue</span>
                 </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                   Review proof of ownership or tenancy (S&P / Assessment Tax / Tenancy Agreement). All PII is masked for PDPA compliance.
                 </p>
               </div>
-              <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">
+              <span className="text-xs font-bold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-full">
                 Pending: {pendingVerificationProfiles.length}
               </span>
             </div>
 
             <div className="space-y-3">
               {pendingVerificationProfiles.length === 0 ? (
-                <div className="p-8 text-center text-slate-400 bg-slate-50 rounded-2xl">
+                <div className="p-8 text-center text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-900/40 rounded-2xl">
                   <UserCheck className="w-8 h-8 mx-auto mb-2 opacity-50" />
                   <p className="text-xs font-semibold">No pending resident verification requests at this time.</p>
                 </div>
               ) : (
                 pendingVerificationProfiles.map((p) => (
-                  <div key={p.id} className="p-4 rounded-2xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/50">
+                  <div key={p.id} className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/50 dark:bg-slate-900/40">
                     <div className="flex items-center gap-3">
                       <img
                         src={p.avatarUrl || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100'}
                         alt={p.fullName}
-                        className="w-12 h-12 rounded-full object-cover ring-2 ring-slate-200 shrink-0"
+                        className="w-12 h-12 rounded-full object-cover ring-2 ring-slate-200 dark:ring-slate-700 shrink-0"
                       />
                       <div>
-                        <h4 className="text-xs font-bold text-slate-900">{p.fullName}</h4>
-                        <p className="text-[11px] text-slate-500">
+                        <h4 className="text-xs font-bold text-slate-900 dark:text-white">{p.fullName}</h4>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
                           {p.townshipPrecinct} • Unit: {p.unitNumber || 'Verified in S&P record'}
                         </p>
-                        <p className="text-[11px] text-emerald-800 font-medium">
+                        <p className="text-[11px] text-emerald-800 dark:text-emerald-400 font-medium">
                           Phone: {p.phone || 'Protected'} (Verified via OTP)
                         </p>
                       </div>
@@ -2493,7 +3301,7 @@ export default function ManagementView() {
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => verifyResidentAccount(p.id, false)}
-                        className="flex items-center gap-1 bg-slate-100 hover:bg-rose-100 text-slate-700 hover:text-rose-900 px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer"
+                        className="flex items-center gap-1 bg-slate-100 hover:bg-rose-100 dark:bg-slate-800 dark:hover:bg-rose-950/40 text-slate-700 hover:text-rose-900 dark:text-slate-300 dark:hover:text-rose-300 px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-colors"
                       >
                         <XCircle className="w-3.5 h-3.5" />
                         <span>Decline Request</span>
@@ -2513,14 +3321,14 @@ export default function ManagementView() {
           </div>
 
           {/* Resident Directory & Role Governance */}
-          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+          <div className="bg-white dark:bg-[#15181C] p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
               <div>
-                <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-                  <Users className="w-4 h-4 text-emerald-800" />
+                <h3 className="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                  <Users className="w-4 h-4 text-emerald-800 dark:text-emerald-400" />
                   <span>Resident Directory & Governance</span>
                 </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                   Manage resident roles and account standing. Guarded against revoking the last management account.
                 </p>
               </div>
@@ -2565,7 +3373,7 @@ export default function ManagementView() {
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
-                  <tr className="border-b border-slate-200 text-slate-500">
+                  <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400">
                     <th className="py-2.5 px-3 font-bold">Resident</th>
                     <th className="py-2.5 px-3 font-bold">Precinct</th>
                     <th className="py-2.5 px-3 font-bold">Verification</th>
@@ -2574,7 +3382,7 @@ export default function ManagementView() {
                     <th className="py-2.5 px-3 font-bold">Account Action</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {availableProfiles
                     .filter((prof) => {
                       if (residentRoleFilter !== 'all' && prof.role !== residentRoleFilter) return false;
@@ -2585,29 +3393,29 @@ export default function ManagementView() {
                       return true;
                     })
                     .map((prof) => (
-                      <tr key={prof.id} className="hover:bg-slate-50">
+                      <tr key={prof.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/50">
                         <td className="py-3 px-3 whitespace-nowrap">
                           <div className="flex items-center gap-2.5">
                             <img src={prof.avatarUrl} alt={prof.fullName} className="w-7 h-7 rounded-full object-cover shrink-0" />
                             <div>
-                              <span className="font-bold text-slate-900 block">{prof.fullName}</span>
+                              <span className="font-bold text-slate-900 dark:text-slate-100 block">{prof.fullName}</span>
                               <span className="text-[10px] text-slate-400 font-mono">ID: {prof.id}</span>
                             </div>
                           </div>
                         </td>
-                        <td className="py-3 px-3 whitespace-nowrap text-slate-600">
+                        <td className="py-3 px-3 whitespace-nowrap text-slate-600 dark:text-slate-300">
                           {prof.townshipPrecinct}
                         </td>
                         <td className="py-3 px-3 whitespace-nowrap">
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            prof.verificationStatus === 'verified' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                            prof.verificationStatus === 'verified' ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300' : 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300'
                           }`}>
                             {prof.verificationStatus.toUpperCase()}
                           </span>
                         </td>
                         <td className="py-3 px-3 whitespace-nowrap">
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            prof.status === 'suspended' ? 'bg-rose-100 text-rose-800' : 'bg-emerald-50 text-emerald-800'
+                            prof.status === 'suspended' ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300' : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300'
                           }`}>
                             {prof.status === 'suspended' ? 'SUSPENDED' : 'ACTIVE'}
                           </span>
@@ -2632,14 +3440,14 @@ export default function ManagementView() {
                           {prof.status === 'suspended' ? (
                             <button
                               onClick={() => handleAccountStatusChange(prof.id, 'active')}
-                              className="text-xs font-bold text-emerald-700 hover:text-emerald-900 cursor-pointer"
+                              className="text-xs font-bold text-emerald-700 hover:text-emerald-900 dark:text-emerald-400 dark:hover:text-emerald-300 cursor-pointer"
                             >
                               Restore Account
                             </button>
                           ) : (
                             <button
                               onClick={() => setSuspendModalUser(prof)}
-                              className="text-xs font-bold text-rose-600 hover:text-rose-800 cursor-pointer"
+                              className="text-xs font-bold text-rose-600 hover:text-rose-800 dark:text-rose-400 dark:hover:text-rose-300 cursor-pointer"
                             >
                               Restrict / Suspend
                             </button>
@@ -2655,36 +3463,36 @@ export default function ManagementView() {
           {/* Suspend Modal */}
           {suspendModalUser && (
             <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-              <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="bg-white dark:bg-[#15181C] rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
                   <div className="flex items-center gap-2">
-                    <ShieldX className="w-5 h-5 text-rose-600" />
-                    <h4 className="text-sm font-bold text-slate-900">Suspend Resident Account</h4>
+                    <ShieldX className="w-5 h-5 text-rose-600 dark:text-rose-400" />
+                    <h4 className="text-sm font-bold text-slate-900 dark:text-white">Suspend Resident Account</h4>
                   </div>
-                  <button onClick={() => setSuspendModalUser(null)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+                  <button onClick={() => setSuspendModalUser(null)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">
                     <X className="w-4 h-4" />
                   </button>
                 </div>
                 <div className="space-y-3 text-xs">
-                  <p className="text-slate-600">
+                  <p className="text-slate-600 dark:text-slate-300">
                     Suspending <strong>{suspendModalUser.fullName}</strong> will temporarily restrict posting and exchange transactions.
                   </p>
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">Mandatory Officer Rationale</label>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Mandatory Officer Rationale</label>
                     <textarea
                       required
                       rows={3}
                       value={suspendReason}
                       onChange={(e) => setSuspendReason(e.target.value)}
                       placeholder="e.g. Repeated abusive comments in violation of section 4.2..."
-                      className="w-full border border-slate-200 rounded-xl p-2.5 resize-none"
+                      className="w-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded-xl p-2.5 resize-none"
                     />
                   </div>
                 </div>
-                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                   <button
                     onClick={() => setSuspendModalUser(null)}
-                    className="px-4 py-2 bg-slate-100 text-slate-700 font-bold rounded-xl cursor-pointer text-xs"
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold rounded-xl cursor-pointer text-xs"
                   >
                     Cancel
                   </button>
@@ -2706,11 +3514,11 @@ export default function ManagementView() {
       {/* ======================================================== */}
       {activeMgmtTab === 'notices' && (
         <div className="space-y-6 animate-in fade-in duration-150">
-          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+          <div className="bg-white dark:bg-[#15181C] p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
               <div>
-                <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-emerald-800" />
+                <h3 className="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-emerald-800 dark:text-emerald-400" />
                   <span>Official Township Notices Administration</span>
                 </h3>
               </div>
@@ -2727,26 +3535,26 @@ export default function ManagementView() {
             {/* Notices List */}
             <div className="space-y-3">
               {officialNoticesList.length === 0 ? (
-                <p className="p-8 text-center text-slate-400 bg-slate-50 rounded-2xl text-xs">
+                <p className="p-8 text-center text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-900/40 rounded-2xl text-xs">
                   No official notices currently published.
                 </p>
               ) : (
                 officialNoticesList.map((notice) => (
-                  <div key={notice.id} className="p-4 rounded-2xl border border-slate-200 bg-slate-50/50 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  <div key={notice.id} className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 flex flex-col md:flex-row md:items-center justify-between gap-3">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-slate-900">{notice.title}</span>
+                        <span className="text-xs font-bold text-slate-900 dark:text-white">{notice.title}</span>
                         {notice.isPinned && (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-900 flex items-center gap-1">
-                            <Pin className="w-3 h-3 text-emerald-700" />
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-900 dark:text-emerald-300 flex items-center gap-1">
+                            <Pin className="w-3 h-3 text-emerald-700 dark:text-emerald-400" />
                             <span>Pinned</span>
                           </span>
                         )}
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-800 uppercase">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 uppercase">
                           {notice.category}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-600 line-clamp-2">{notice.content}</p>
+                      <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2">{notice.content}</p>
                       <span className="text-[10px] text-slate-400 font-mono">
                         Published by {notice.authorName} • {new Date(notice.createdAt).toLocaleString()}
                       </span>
@@ -2755,7 +3563,7 @@ export default function ManagementView() {
                     <div className="flex items-center gap-2 shrink-0">
                       <button
                         onClick={() => togglePinPost(notice.id)}
-                        className="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer"
+                        className="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 cursor-pointer"
                       >
                         {notice.isPinned ? 'Unpin' : 'Pin to Top'}
                       </button>
@@ -2765,14 +3573,14 @@ export default function ManagementView() {
                           setEditNoticeTitle(notice.title);
                           setEditNoticeContent(notice.content);
                         }}
-                        className="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer flex items-center gap-1"
+                        className="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 cursor-pointer flex items-center gap-1"
                       >
                         <Edit3 className="w-3 h-3" />
                         <span>Edit</span>
                       </button>
                       <button
                         onClick={() => setDeleteConfirmItem({ type: 'post', id: notice.id, title: notice.title })}
-                        className="px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 cursor-pointer"
+                        className="px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 text-rose-700 dark:text-rose-300 cursor-pointer"
                       >
                         Archive
                       </button>
@@ -2786,10 +3594,10 @@ export default function ManagementView() {
           {/* Create Notice Modal */}
           {isCreateNoticeOpen && (
             <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-              <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <h4 className="text-sm font-bold text-slate-900">Publish Official Township Notice</h4>
-                  <button onClick={() => setIsCreateNoticeOpen(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+              <div className="bg-white dark:bg-[#15181C] rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-white">Publish Official Township Notice</h4>
+                  <button onClick={() => setIsCreateNoticeOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">
                     <X className="w-4 h-4" />
                   </button>
                 </div>
@@ -2807,42 +3615,42 @@ export default function ManagementView() {
                     />
                   </div>
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">Title</label>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Title</label>
                     <input
                       type="text"
                       required
                       placeholder="e.g. Schedule for Water Reservoir Maintenance"
                       value={noticeTitle}
                       onChange={(e) => setNoticeTitle(e.target.value)}
-                      className="w-full border border-slate-200 rounded-xl p-2.5 font-bold"
+                      className="w-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded-xl p-2.5 font-bold"
                     />
                   </div>
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">Notice Content</label>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Notice Content</label>
                     <textarea
                       required
                       rows={5}
                       placeholder="Details of the announcement, schedules, affected areas..."
                       value={noticeContent}
                       onChange={(e) => setNoticeContent(e.target.value)}
-                      className="w-full border border-slate-200 rounded-xl p-2.5 resize-none"
+                      className="w-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded-xl p-2.5 resize-none"
                     />
                   </div>
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">Cover Image URL (Optional)</label>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Cover Image URL (Optional)</label>
                     <input
                       type="url"
                       placeholder="https://..."
                       value={noticeImageUrl}
                       onChange={(e) => setNoticeImageUrl(e.target.value)}
-                      className="w-full border border-slate-200 rounded-xl p-2.5"
+                      className="w-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded-xl p-2.5"
                     />
                   </div>
-                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                     <button
                       type="button"
                       onClick={() => setIsCreateNoticeOpen(false)}
-                      className="px-4 py-2 bg-slate-100 text-slate-700 font-bold rounded-xl cursor-pointer"
+                      className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold rounded-xl cursor-pointer"
                     >
                       Cancel
                     </button>
@@ -2861,39 +3669,39 @@ export default function ManagementView() {
           {/* Edit Notice Modal */}
           {editingNotice && (
             <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-              <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <h4 className="text-sm font-bold text-slate-900">Edit Notice Content</h4>
-                  <button onClick={() => setEditingNotice(null)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+              <div className="bg-white dark:bg-[#15181C] rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-white">Edit Notice Content</h4>
+                  <button onClick={() => setEditingNotice(null)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">
                     <X className="w-4 h-4" />
                   </button>
                 </div>
                 <form onSubmit={handleUpdateNoticeSubmit} className="space-y-3 text-xs">
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">Title</label>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Title</label>
                     <input
                       type="text"
                       required
                       value={editNoticeTitle}
                       onChange={(e) => setEditNoticeTitle(e.target.value)}
-                      className="w-full border border-slate-200 rounded-xl p-2.5 font-bold"
+                      className="w-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded-xl p-2.5 font-bold"
                     />
                   </div>
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">Notice Content</label>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Notice Content</label>
                     <textarea
                       required
                       rows={5}
                       value={editNoticeContent}
                       onChange={(e) => setEditNoticeContent(e.target.value)}
-                      className="w-full border border-slate-200 rounded-xl p-2.5 resize-none"
+                      className="w-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded-xl p-2.5 resize-none"
                     />
                   </div>
-                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                     <button
                       type="button"
                       onClick={() => setEditingNotice(null)}
-                      className="px-4 py-2 bg-slate-100 text-slate-700 font-bold rounded-xl cursor-pointer"
+                      className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold rounded-xl cursor-pointer"
                     >
                       Cancel
                     </button>
@@ -2916,15 +3724,15 @@ export default function ManagementView() {
       {/* ======================================================== */}
       {activeMgmtTab === 'events' && (
         <div className="space-y-6 animate-in fade-in duration-150">
-          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+          <div className="bg-white dark:bg-[#15181C] p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
               <div>
-                <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-emerald-800" />
+                <h3 className="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-emerald-800 dark:text-emerald-400" />
                   <span>Township Events Administration</span>
                 </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Organize and publish community events for Elmina residents. Dates are scheduled in <code className="bg-slate-100 px-1 py-0.5 rounded font-mono">Asia/Kuala_Lumpur</code>.
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Organize and publish community events for Elmina residents. Dates are scheduled in <code className="bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 px-1 py-0.5 rounded font-mono">Asia/Kuala_Lumpur</code>.
                 </p>
               </div>
 
@@ -2940,12 +3748,12 @@ export default function ManagementView() {
             {/* Events List */}
             <div className="space-y-3">
               {upcomingEventsList.length === 0 ? (
-                <p className="p-8 text-center text-slate-400 bg-slate-50 rounded-2xl text-xs">
+                <p className="p-8 text-center text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-900/40 rounded-2xl text-xs">
                   No upcoming township events scheduled.
                 </p>
               ) : (
                 upcomingEventsList.map((ev) => (
-                  <div key={ev.id} className="p-4 rounded-2xl border border-slate-200 bg-slate-50/50 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  <div key={ev.id} className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 flex flex-col md:flex-row md:items-center justify-between gap-3">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-xs font-bold text-slate-900 dark:text-white">{ev.title}</span>
@@ -2970,7 +3778,7 @@ export default function ManagementView() {
                     <div className="flex items-center gap-2 shrink-0">
                       <button
                         onClick={() => setDeleteConfirmItem({ type: 'post', id: ev.id, title: ev.title })}
-                        className="px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 cursor-pointer"
+                        className="px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 text-rose-700 dark:text-rose-300 cursor-pointer"
                       >
                         Cancel / Archive
                       </button>
@@ -2984,83 +3792,83 @@ export default function ManagementView() {
           {/* Create Event Modal */}
           {isCreateEventOpen && (
             <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-              <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <h4 className="text-sm font-bold text-slate-900">Schedule New Community Event</h4>
-                  <button onClick={() => setIsCreateEventOpen(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+              <div className="bg-white dark:bg-[#15181C] rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-white">Schedule New Community Event</h4>
+                  <button onClick={() => setIsCreateEventOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">
                     <X className="w-4 h-4" />
                   </button>
                 </div>
                 <form onSubmit={handleCreateEventSubmit} className="space-y-3 text-xs">
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">Event Title</label>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Event Title</label>
                     <input
                       type="text"
                       required
                       placeholder="e.g. Elmina Valley Gotong-Royong Clean-Up"
                       value={eventTitle}
                       onChange={(e) => setEventTitle(e.target.value)}
-                      className="w-full border border-slate-200 rounded-xl p-2.5 font-bold"
+                      className="w-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded-xl p-2.5 font-bold"
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="block font-bold text-slate-700 mb-1">Start Date</label>
+                      <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Start Date</label>
                       <input
                         type="date"
                         required
                         value={eventDate}
                         onChange={(e) => setEventDate(e.target.value)}
-                        className="w-full border border-slate-200 rounded-xl p-2.5"
+                        className="w-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded-xl p-2.5"
                       />
                     </div>
                     <div>
-                      <label className="block font-bold text-slate-700 mb-1">Time</label>
+                      <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Time</label>
                       <input
                         type="text"
                         placeholder="e.g. 08:30 AM"
                         value={eventTime}
                         onChange={(e) => setEventTime(e.target.value)}
-                        className="w-full border border-slate-200 rounded-xl p-2.5"
+                        className="w-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded-xl p-2.5"
                       />
                     </div>
                   </div>
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">Venue / Gathering Point</label>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Venue / Gathering Point</label>
                     <input
                       type="text"
                       placeholder="e.g. Pavilion Field, Elmina Central Park"
                       value={eventVenue}
                       onChange={(e) => setEventVenue(e.target.value)}
-                      className="w-full border border-slate-200 rounded-xl p-2.5"
+                      className="w-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded-xl p-2.5"
                     />
                   </div>
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">Event Description</label>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Event Description</label>
                     <textarea
                       required
                       rows={4}
                       placeholder="What should residents bring? Schedule, refreshments, contact officer..."
                       value={eventDesc}
                       onChange={(e) => setEventDesc(e.target.value)}
-                      className="w-full border border-slate-200 rounded-xl p-2.5 resize-none"
+                      className="w-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded-xl p-2.5 resize-none"
                     />
                   </div>
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">Cover Image URL (Optional)</label>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Cover Image URL (Optional)</label>
                     <input
                       type="url"
                       placeholder="https://..."
                       value={eventImageUrl}
                       onChange={(e) => setEventImageUrl(e.target.value)}
-                      className="w-full border border-slate-200 rounded-xl p-2.5"
+                      className="w-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded-xl p-2.5"
                     />
                   </div>
-                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                     <button
                       type="button"
                       onClick={() => setIsCreateEventOpen(false)}
-                      className="px-4 py-2 bg-slate-100 text-slate-700 font-bold rounded-xl cursor-pointer"
+                      className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold rounded-xl cursor-pointer"
                     >
                       Cancel
                     </button>
@@ -3083,11 +3891,11 @@ export default function ManagementView() {
       {/* ======================================================== */}
       {activeMgmtTab === 'content' && (
         <div className="space-y-6 animate-in fade-in duration-150">
-          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+          <div className="bg-white dark:bg-[#15181C] p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
               <div>
-                <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-                  <Layers className="w-4 h-4 text-emerald-800" />
+                <h3 className="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-emerald-800 dark:text-emerald-400" />
                   <span>Township User-Generated Content Hub</span>
                 </h3>
               </div>
@@ -3131,16 +3939,16 @@ export default function ManagementView() {
                   })
                   .slice(0, 15)
                   .map((post) => (
-                    <div key={post.id} className="p-4 rounded-2xl border border-slate-200 bg-slate-50/50 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                    <div key={post.id} className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 flex flex-col md:flex-row md:items-center justify-between gap-3">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 uppercase">
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 uppercase">
                             POST
                           </span>
-                          <span className="text-xs font-bold text-slate-900">{post.title}</span>
+                          <span className="text-xs font-bold text-slate-900 dark:text-white">{post.title}</span>
                           <span className="text-[10px] text-slate-400 font-mono">ID: {post.id}</span>
                         </div>
-                        <p className="text-xs text-slate-600 line-clamp-1">{post.content}</p>
+                        <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-1">{post.content}</p>
                         <span className="text-[10px] text-slate-400">
                           By: {post.authorName} ({post.authorPrecinct}) • {new Date(post.createdAt).toLocaleString()}
                         </span>
@@ -3149,7 +3957,7 @@ export default function ManagementView() {
                       <div className="flex items-center gap-2 shrink-0">
                         <button
                           onClick={() => setDeleteConfirmItem({ type: 'post', id: post.id, title: post.title })}
-                          className="px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 cursor-pointer flex items-center gap-1"
+                          className="px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 text-rose-700 dark:text-rose-300 cursor-pointer flex items-center gap-1"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                           <span>Take Down</span>
@@ -3170,16 +3978,16 @@ export default function ManagementView() {
                   })
                   .slice(0, 10)
                   .map((item) => (
-                    <div key={item.id} className="p-4 rounded-2xl border border-slate-200 bg-slate-50/50 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                    <div key={item.id} className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 flex flex-col md:flex-row md:items-center justify-between gap-3">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 uppercase">
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 uppercase">
                             EXCHANGE
                           </span>
-                          <span className="text-xs font-bold text-slate-900">{item.title}</span>
+                          <span className="text-xs font-bold text-slate-900 dark:text-white">{item.title}</span>
                           <span className="text-[10px] text-slate-400 font-mono">ID: {item.id}</span>
                         </div>
-                        <p className="text-xs text-slate-600 line-clamp-1">{item.description}</p>
+                        <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-1">{item.description}</p>
                         <span className="text-[10px] text-slate-400">
                           By: {item.authorName} ({item.precinct}) • Status: {item.status.toUpperCase()}
                         </span>
@@ -3188,7 +3996,7 @@ export default function ManagementView() {
                       <div className="flex items-center gap-2 shrink-0">
                         <button
                           onClick={() => setDeleteConfirmItem({ type: 'exchange', id: item.id, title: item.title })}
-                          className="px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 cursor-pointer flex items-center gap-1"
+                          className="px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 text-rose-700 dark:text-rose-300 cursor-pointer flex items-center gap-1"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                           <span>Take Down</span>
@@ -3209,16 +4017,16 @@ export default function ManagementView() {
                   })
                   .slice(0, 10)
                   .map((serv) => (
-                    <div key={serv.id} className="p-4 rounded-2xl border border-slate-200 bg-slate-50/50 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                    <div key={serv.id} className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 flex flex-col md:flex-row md:items-center justify-between gap-3">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 uppercase">
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 uppercase">
                             SERVICE
                           </span>
-                          <span className="text-xs font-bold text-slate-900">{serv.title}</span>
+                          <span className="text-xs font-bold text-slate-900 dark:text-white">{serv.title}</span>
                           <span className="text-[10px] text-slate-400 font-mono">ID: {serv.id}</span>
                         </div>
-                        <p className="text-xs text-slate-600 line-clamp-1">{serv.description}</p>
+                        <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-1">{serv.description}</p>
                         <span className="text-[10px] text-slate-400">
                           Provider: {serv.authorName} ({serv.precinct}) • {serv.category}
                         </span>
@@ -3227,7 +4035,7 @@ export default function ManagementView() {
                       <div className="flex items-center gap-2 shrink-0">
                         <button
                           onClick={() => setDeleteConfirmItem({ type: 'service', id: serv.id, title: serv.title })}
-                          className="px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 cursor-pointer flex items-center gap-1"
+                          className="px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 text-rose-700 dark:text-rose-300 cursor-pointer flex items-center gap-1"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                           <span>Take Down</span>
@@ -3241,35 +4049,35 @@ export default function ManagementView() {
           {/* Delete Content Modal */}
           {deleteConfirmItem && (
             <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-              <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="bg-white dark:bg-[#15181C] rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
                   <div className="flex items-center gap-2">
-                    <Trash2 className="w-5 h-5 text-rose-600" />
-                    <h4 className="text-sm font-bold text-slate-900">Soft-Delete Content</h4>
+                    <Trash2 className="w-5 h-5 text-rose-600 dark:text-rose-400" />
+                    <h4 className="text-sm font-bold text-slate-900 dark:text-white">Soft-Delete Content</h4>
                   </div>
-                  <button onClick={() => setDeleteConfirmItem(null)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+                  <button onClick={() => setDeleteConfirmItem(null)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">
                     <X className="w-4 h-4" />
                   </button>
                 </div>
-                <div className="space-y-3 text-xs text-slate-600">
+                <div className="space-y-3 text-xs text-slate-600 dark:text-slate-300">
                   <p>
                     Are you sure you want to remove <strong>&quot;{deleteConfirmItem.title}&quot;</strong>? It will be immediately hidden from community views.
                   </p>
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">Auditor Removal Reason</label>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Auditor Removal Reason</label>
                     <textarea
                       rows={3}
                       value={deleteReasonNote}
                       onChange={(e) => setDeleteReasonNote(e.target.value)}
                       placeholder="e.g. Offensive language violation reported by multiple residents..."
-                      className="w-full border border-slate-200 rounded-xl p-2.5 resize-none"
+                      className="w-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded-xl p-2.5 resize-none"
                     />
                   </div>
                 </div>
-                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                   <button
                     onClick={() => setDeleteConfirmItem(null)}
-                    className="px-4 py-2 bg-slate-100 text-slate-700 font-bold rounded-xl cursor-pointer text-xs"
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold rounded-xl cursor-pointer text-xs"
                   >
                     Cancel
                   </button>
@@ -3292,13 +4100,13 @@ export default function ManagementView() {
       {activeMgmtTab === 'notifications' && (
         <div className="space-y-6 animate-in fade-in duration-150">
           {/* Section A: Emergency Broadcast Dispatcher */}
-          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs max-w-2xl mx-auto space-y-4">
+          <div className="bg-white dark:bg-[#15181C] p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs max-w-2xl mx-auto space-y-4">
             <div>
-              <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-                <Radio className="w-4 h-4 text-emerald-800" />
+              <h3 className="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                <Radio className="w-4 h-4 text-emerald-800 dark:text-emerald-400" />
                 <span>Township Emergency Broadcast Banner</span>
               </h3>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                 Official broadcasts are prominently pinned across all resident mobile and desktop views with high priority visual styling.
               </p>
             </div>
@@ -3318,26 +4126,26 @@ export default function ManagementView() {
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Official Broadcast Title</label>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Official Broadcast Title</label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. TNB Power Grid Upgrading Work Notification"
                   value={broadcastTitle}
                   onChange={(e) => setBroadcastTitle(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl p-2.5 font-bold"
+                  className="w-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded-xl p-2.5 font-bold"
                 />
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Broadcast Message Body</label>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Broadcast Message Body</label>
                 <textarea
                   required
                   rows={5}
                   placeholder="Detail the affected precincts, timelines, diversions, and emergency contacts..."
                   value={broadcastContent}
                   onChange={(e) => setBroadcastContent(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl p-2.5 resize-none"
+                  className="w-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded-xl p-2.5 resize-none"
                 />
               </div>
 
@@ -3353,22 +4161,22 @@ export default function ManagementView() {
           </div>
 
           {/* Section B: Operational Alerts Feed */}
-          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-3">
-            <h4 className="text-xs font-bold text-slate-900 flex items-center gap-2">
-              <Bell className="w-4 h-4 text-emerald-700" />
+          <div className="bg-white dark:bg-[#15181C] p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
+            <h4 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <Bell className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
               <span>Real-Time System & Moderation Operational Alerts</span>
             </h4>
 
             <div className="space-y-2">
               {operationalAlerts.map((alert) => (
-                <div key={alert.id} className="p-3 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between text-xs">
+                <div key={alert.id} className="p-3 bg-slate-50 dark:bg-slate-900/40 rounded-2xl border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs">
                   <div>
-                    <span className="font-bold text-slate-900">{alert.title}</span>
-                    <p className="text-[11px] text-slate-600">{alert.desc}</p>
+                    <span className="font-bold text-slate-900 dark:text-white">{alert.title}</span>
+                    <p className="text-[11px] text-slate-600 dark:text-slate-400">{alert.desc}</p>
                   </div>
                   <button
                     onClick={() => setActiveMgmtTab(alert.linkTab)}
-                    className="text-xs font-bold text-emerald-800 underline cursor-pointer"
+                    className="text-xs font-bold text-emerald-800 dark:text-emerald-400 underline cursor-pointer"
                   >
                     Inspect
                   </button>
@@ -3383,17 +4191,17 @@ export default function ManagementView() {
       {/* 5I: ACTIVITY & AUDIT LOGS                                */}
       {/* ======================================================== */}
       {activeMgmtTab === 'audit' && (
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-4 animate-in fade-in duration-150">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+        <div className="bg-white dark:bg-[#15181C] p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-4 animate-in fade-in duration-150">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
             <div>
-              <h3 className="text-sm font-extrabold text-slate-900">
+              <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">
                 Administration & Security Audit Trail
               </h3>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                 Tamper-evident record of consequential operations. Ordinary residents have zero access to this table.
               </p>
             </div>
-            <span className="text-xs text-slate-500 font-bold bg-slate-100 px-3 py-1 rounded-full">
+            <span className="text-xs text-slate-500 dark:text-slate-400 font-bold bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full">
               {auditLogs.length} events logged
             </span>
           </div>
@@ -3404,14 +4212,14 @@ export default function ManagementView() {
               placeholder="Search audit events, actors, actions..."
               value={auditSearchQuery}
               onChange={(e) => setAuditSearchQuery(e.target.value)}
-              className="px-3 py-1.5 text-xs border border-slate-200 rounded-xl bg-slate-50/50 flex-1 max-w-sm"
+              className="px-3 py-1.5 text-xs border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50/50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 flex-1 max-w-sm"
             />
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="border-b border-slate-200 text-slate-500">
+                <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400">
                   <th className="py-2.5 px-3 font-bold">Timestamp</th>
                   <th className="py-2.5 px-3 font-bold">Actor</th>
                   <th className="py-2.5 px-3 font-bold">Action</th>
@@ -3419,7 +4227,7 @@ export default function ManagementView() {
                   <th className="py-2.5 px-3 font-bold">Audit Details</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {auditLogs
                   .filter((log) => {
                     if (auditSearchQuery.trim()) {
@@ -3430,22 +4238,22 @@ export default function ManagementView() {
                     return true;
                   })
                   .map((log) => (
-                    <tr key={log.id} className="hover:bg-slate-50">
+                    <tr key={log.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/50">
                       <td className="py-2.5 px-3 whitespace-nowrap text-slate-500 font-mono text-[11px]">
                         {new Date(log.createdAt).toLocaleTimeString()}
                       </td>
-                      <td className="py-2.5 px-3 whitespace-nowrap font-bold text-slate-900">
+                      <td className="py-2.5 px-3 whitespace-nowrap font-bold text-slate-900 dark:text-white">
                         {log.actorName} <span className="text-slate-400 font-normal">({log.actorRole})</span>
                       </td>
                       <td className="py-2.5 px-3 whitespace-nowrap">
-                        <span className="font-mono bg-slate-100 text-emerald-950 px-2 py-0.5 rounded text-[10px] font-bold border border-slate-200">
+                        <span className="font-mono bg-slate-100 dark:bg-slate-800 text-emerald-950 dark:text-emerald-300 px-2 py-0.5 rounded text-[10px] font-bold border border-slate-200 dark:border-slate-700">
                           {log.action}
                         </span>
                       </td>
-                      <td className="py-2.5 px-3 whitespace-nowrap text-slate-600 font-mono text-[11px]">
+                      <td className="py-2.5 px-3 whitespace-nowrap text-slate-600 dark:text-slate-400 font-mono text-[11px]">
                         {log.targetType} ({log.targetId.slice(0, 8)})
                       </td>
-                      <td className="py-2.5 px-3 text-slate-500 truncate max-w-xs text-[11px] font-mono">
+                      <td className="py-2.5 px-3 text-slate-500 dark:text-slate-400 truncate max-w-xs text-[11px] font-mono">
                         {log.details ? JSON.stringify(log.details) : '-'}
                       </td>
                     </tr>
@@ -3468,20 +4276,20 @@ export default function ManagementView() {
       {/* ======================================================== */}
       {activeMgmtTab === 'settings' && (
         <div className="space-y-6 animate-in fade-in duration-150">
-          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-4">
-            <h3 className="text-sm font-extrabold text-slate-900">
+          <div className="bg-white dark:bg-[#15181C] p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+            <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">
               Community Moderation & Operational Configuration
             </h3>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
               System thresholds, AI moderation policies, and data retention guidelines. Privileged API keys and system credentials cannot be altered from this panel.
             </p>
 
             <div className="space-y-4 pt-2 text-xs">
               {/* Toggle 1: AI Moderation Engine */}
-              <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50/50 flex items-center justify-between">
+              <div className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 flex items-center justify-between">
                 <div>
-                  <h4 className="font-bold text-slate-900">AI Background Moderation Engine</h4>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
+                  <h4 className="font-bold text-slate-900 dark:text-white">AI Background Moderation Engine</h4>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
                     Evaluates eligible feed posts, comments, exchange listings, and services for community policy violations.
                   </p>
                 </div>
@@ -3491,7 +4299,7 @@ export default function ManagementView() {
                     showSuccess(`AI Moderation processing is now ${!aiEnabledSetting ? 'ENABLED' : 'PAUSED'}.`);
                   }}
                   className={`px-4 py-2 rounded-xl font-bold cursor-pointer transition-colors ${
-                    aiEnabledSetting ? 'bg-emerald-800 text-white' : 'bg-slate-200 text-slate-700'
+                    aiEnabledSetting ? 'bg-emerald-800 hover:bg-emerald-900 text-white' : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
                   }`}
                 >
                   {aiEnabledSetting ? 'Enabled' : 'Paused'}
@@ -3499,9 +4307,9 @@ export default function ManagementView() {
               </div>
 
               {/* Threshold Preset */}
-              <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50/50 space-y-2">
-                <h4 className="font-bold text-slate-900">AI Sensitivity & Threshold Preset</h4>
-                <p className="text-[11px] text-slate-500">
+              <div className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 space-y-2">
+                <h4 className="font-bold text-slate-900 dark:text-white">AI Sensitivity & Threshold Preset</h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
                   Calibrate the confidence threshold required before a human review flag is created.
                 </p>
                 <div className="flex gap-2">
@@ -3513,7 +4321,7 @@ export default function ManagementView() {
                         showSuccess(`Sensitivity preset changed to "${preset.toUpperCase()}".`);
                       }}
                       className={`px-3 py-1.5 rounded-xl font-bold capitalize cursor-pointer ${
-                        activeThresholdPreset === preset ? 'bg-slate-900 text-white shadow-xs' : 'bg-white border border-slate-200 text-slate-700'
+                        activeThresholdPreset === preset ? 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 shadow-xs' : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300'
                       }`}
                     >
                       {preset}
@@ -3523,9 +4331,9 @@ export default function ManagementView() {
               </div>
 
               {/* Policy Reference Box */}
-              <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200 text-xs text-emerald-950 space-y-2">
+              <div className="p-4 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/70 text-xs text-emerald-950 dark:text-emerald-200 space-y-2">
                 <span className="font-bold block">Protected Dialogue Policy Reference</span>
-                <p className="text-[11px] text-slate-700 leading-relaxed">
+                <p className="text-[11px] text-slate-700 dark:text-slate-300 leading-relaxed">
                   Under TESDH guidelines, criticisms of township management, complaints regarding gate delays, or reports on maintenance deficiencies are strictly categorized as <strong>legitimate civic feedback</strong>. AI models are constrained with negative guardrails to prevent false-positive suppression of resident complaints.
                 </p>
               </div>

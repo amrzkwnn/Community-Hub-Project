@@ -185,15 +185,14 @@ export default function Sidebar() {
             {/* Brand Header */}
             <div 
               onClick={() => setActiveTab('home')}
-              className="h-16 px-5 flex items-center gap-3 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-[#15181C] cursor-pointer group"
-              title="Community Hub"
+              className="h-16 px-4 flex items-center border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-[#15181C] cursor-pointer group"
+              title="Nadikomuniti — Connect & Relax"
             >
-              <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-[#9E1315] text-white p-1 shadow-xs group-hover:scale-105 transition-transform font-bold text-xs tracking-wider shrink-0">
-                SD
-              </div>
-              <span className="font-semibold text-slate-900 dark:text-slate-100 tracking-tight text-[15px] leading-tight group-hover:text-[#9E1315] dark:group-hover:text-rose-400 transition-colors truncate">
-                Community Hub
-              </span>
+              <img
+                src="/images/nadikomuniti-logo-transparent.png"
+                alt="Nadikomuniti — Connect & Relax"
+                className="h-8 w-auto object-contain max-w-[190px] group-hover:scale-[1.02] transition-transform"
+              />
             </div>
 
             {/* Navigation Links with Single Shared Sliding Active Indicator */}
@@ -482,18 +481,17 @@ export default function Sidebar() {
       >
         <div className="flex flex-col">
           {/* Mobile Drawer Brand Header & Close Button */}
-          <div className="h-16 px-5 flex items-center justify-between border-b border-slate-100 dark:border-slate-800">
+          <div className="h-16 px-4 flex items-center justify-between border-b border-slate-100 dark:border-slate-800">
             <div 
               onClick={() => handleNavClick('home', true)}
-              className="flex items-center gap-3 cursor-pointer group"
-              title="Community Hub"
+              className="flex items-center cursor-pointer group"
+              title="Nadikomuniti — Connect & Relax"
             >
-              <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-[#9E1315] text-white p-1 shadow-xs group-hover:scale-105 transition-transform font-bold text-xs tracking-wider shrink-0">
-                SD
-              </div>
-              <span className="font-semibold text-slate-900 dark:text-slate-100 tracking-tight text-[15px] leading-tight group-hover:text-[#9E1315] transition-colors truncate">
-                Community Hub
-              </span>
+              <img
+                src="/images/nadikomuniti-logo-transparent.png"
+                alt="Nadikomuniti — Connect & Relax"
+                className="h-7 w-auto object-contain max-w-[170px]"
+              />
             </div>
 
             <button

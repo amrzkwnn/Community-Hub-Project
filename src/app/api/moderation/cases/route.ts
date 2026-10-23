@@ -6,8 +6,11 @@ import {
   getManualReports, 
   getAiModerationQueue, 
   getFalsePositiveStats,
-  getModerationHealth 
+  getModerationHealth,
+  upsertDatabaseReports
 } from '@/lib/server/moderationStore';
+import { getSupabaseAdmin } from '@/lib/server/dbSync';
+import type { ModerationReport } from '@/types';
 
 async function getAuthenticatedUser(request: NextRequest): Promise<{ id: string; role: string; name: string } | null> {
   try {
@@ -62,6 +65,34 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  // 1. Durably synchronize with Supabase moderation_reports table
+  const supabase = getSupabaseAdmin();
+  if (supabase) {
+    try {
+      const { data: dbReports } = await supabase
+        .from('moderation_reports')
+        .select('*, reporter:public_profiles(full_name, township_precinct)');
+      if (Array.isArray(dbReports) && dbReports.length > 0) {
+        const mapped: ModerationReport[] = dbReports.map((r: any) => ({
+          id: r.id,
+          reporterId: r.reporter_id,
+          reporterName: r.reporter?.full_name || 'Resident',
+          targetType: r.target_type === 'comment' ? 'reply' : r.target_type,
+          targetId: r.target_id,
+          reason: r.reason,
+          details: r.details,
+          status: r.status,
+          reviewedBy: r.resolution_note ? 'Duty Management' : undefined,
+          resolutionNote: r.resolution_note,
+          createdAt: r.created_at,
+        }));
+        upsertDatabaseReports(mapped);
+      }
+    } catch (e) {
+      console.warn('[moderation/cases] Supabase sync warning:', e);
+    }
+  }
+
   const cases = getUnifiedCases();
   const reports = getManualReports();
   const aiQueue = getAiModerationQueue();
@@ -77,3 +108,4 @@ export async function GET(request: NextRequest) {
     health,
   });
 }
+
