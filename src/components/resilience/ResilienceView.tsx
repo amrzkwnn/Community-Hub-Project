@@ -461,6 +461,247 @@ export default function ResilienceView() {
 
   return (
     <div className="w-full h-full overflow-y-auto px-4 sm:px-8 py-6 space-y-6 text-slate-800 dark:text-slate-100 select-none">
+      {/* ========================================================================= */}
+      {/* MOBILE PHONE SECTION: Google Stitch Mobile Design Map                     */}
+      {/* ========================================================================= */}
+      <div className="block md:hidden w-full space-y-3">
+        {/* Mobile Header: Title & Live Township Feed */}
+        <div className="flex items-center justify-between px-1">
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+            Resilience Map
+          </h1>
+          <span className="flex items-center gap-1.5 text-xs font-semibold text-[#9E1315] dark:text-rose-400 bg-white/90 dark:bg-slate-900 px-2.5 py-1 rounded-full shadow-xs border border-slate-200/80 dark:border-slate-800">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#9E1315] animate-pulse" />
+            Live Township Feed
+          </span>
+        </div>
+
+        {/* Mobile Search Input */}
+        <div className="relative w-full">
+          <span className="material-symbols-outlined absolute left-3 top-2.5 text-[#9E1315] text-[18px]">search</span>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search address, spillway or precinct..."
+            className="w-full h-10 pl-9 pr-10 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-slate-900 dark:text-white text-xs placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#9E1315]/20 shadow-xs"
+          />
+          {searchQuery ? (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+            >
+              <span className="material-symbols-outlined text-sm">close</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setMapCenter([3.1802, 101.5165]);
+                setMapZoom(15);
+              }}
+              title="Recenter Map"
+              className="absolute right-2 top-1.5 w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-400 active:scale-95"
+            >
+              <span className="material-symbols-outlined text-sm">my_location</span>
+            </button>
+          )}
+        </div>
+
+        {/* Category Filter Pills (Horizontal Scroll) */}
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1 px-0.5">
+          <button
+            type="button"
+            onClick={() => {
+              setFilterCategory('all');
+              setFilterVerification('all');
+            }}
+            className={`flex items-center gap-1 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold shadow-xs active:scale-95 transition-all ${
+              filterCategory === 'all' && filterVerification === 'all'
+                ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900'
+                : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800'
+            }`}
+          >
+            All ({incidents.filter((i) => !i.isArchived).length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterCategory(filterCategory === 'flood' ? 'all' : 'flood')}
+            className={`flex items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-medium shadow-xs active:scale-95 transition-all ${
+              filterCategory === 'flood'
+                ? 'bg-[#9E1315] text-white'
+                : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800'
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-blue-500" />
+            Drainage ({incidents.filter((i) => !i.isArchived && (i.incidentType === 'flood' || i.incidentType === 'blocked_drain')).length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterCategory(filterCategory === 'pothole' ? 'all' : 'pothole')}
+            className={`flex items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-medium shadow-xs active:scale-95 transition-all ${
+              filterCategory === 'pothole'
+                ? 'bg-[#9E1315] text-white'
+                : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800'
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-amber-500" />
+            Roads ({incidents.filter((i) => !i.isArchived && i.incidentType === 'pothole').length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterCategory(filterCategory === 'street_light' ? 'all' : 'street_light')}
+            className={`flex items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-medium shadow-xs active:scale-95 transition-all ${
+              filterCategory === 'street_light'
+                ? 'bg-[#9E1315] text-white'
+                : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800'
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-yellow-500" />
+            Lighting ({incidents.filter((i) => !i.isArchived && i.incidentType === 'street_light').length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterVerification(filterVerification === 'verified' ? 'all' : 'verified')}
+            className={`flex items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-medium shadow-xs active:scale-95 transition-all ${
+              filterVerification === 'verified'
+                ? 'bg-blue-600 text-white'
+                : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800'
+            }`}
+          >
+            <span className="material-symbols-outlined text-xs">local_police</span>
+            Patrols ({incidents.filter((i) => !i.isArchived && i.isVerified).length})
+          </button>
+        </div>
+
+        {/* Mobile Map Canvas Container */}
+        <div className="relative w-full rounded-2xl overflow-hidden shadow-md border border-slate-200/80 dark:border-slate-800">
+          <ResilienceMapComponent
+            incidents={filteredIncidents}
+            selectedIncidentId={selectedIncident?.id}
+            onSelectIncident={(inc) => setSelectedIncident(inc)}
+            center={mapCenter}
+            zoom={mapZoom}
+            heightClass="h-[400px]"
+            isPinPlacementMode={isReportingPinMode}
+            placementPin={isReportingPinMode ? placementPin : null}
+            onPlacementPinChange={handlePlacementPinChange}
+          />
+
+          {/* Floating Report Incident Button */}
+          {!isReportingPinMode && (
+            <div className="absolute right-3 bottom-3 z-30">
+              <button
+                type="button"
+                onClick={handleOpenReportModal}
+                className="flex items-center gap-1.5 h-10 px-4 rounded-full bg-[#9E1315] hover:bg-[#841012] text-white font-bold text-xs shadow-lg active:scale-95 transition-all cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[18px]">add_location_alt</span>
+                <span>Report Incident</span>
+              </button>
+            </div>
+          )}
+
+          {/* Pin Dropper Mode Controls on Mobile */}
+          {isReportingPinMode && placementPin && isLocationValid && (
+            <div className="absolute bottom-3 inset-x-3 z-30 p-3 rounded-xl bg-white/95 dark:bg-[#15181C]/95 backdrop-blur-md shadow-xl border-t-2 border-[#9E1315] flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 block">Pin Placed</span>
+                <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate block">
+                  {newLocationName || 'Bandar Elmina Area'}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsReportingPinMode(false)}
+                  className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsReportModalOpen(true)}
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-[#9E1315]"
+                >
+                  Confirm & Details →
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Mobile Slide-Up Selected Incident Sheet */}
+        {selectedIncident && (
+          <div className="w-full bg-white dark:bg-[#15181C] rounded-2xl shadow-md border border-slate-200/80 dark:border-slate-800 p-4 space-y-3 animate-in fade-in duration-150">
+            <div className="w-8 h-1 rounded-full bg-slate-300 dark:bg-slate-700 mx-auto -mt-1" />
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 text-[10px] font-semibold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
+                  {selectedIncident.severity ? selectedIncident.severity.toUpperCase() : 'ALERT'}
+                </span>
+                {selectedIncident.isVerified && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 text-[10px] font-semibold">
+                    <span className="material-symbols-outlined text-xs text-blue-600">verified</span>
+                    Auxiliary Police Verified
+                  </span>
+                )}
+                <span className="text-[11px] text-slate-400">
+                  <TimeAgo date={selectedIncident.createdAt} />
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedIncident(null)}
+                className="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <span className="material-symbols-outlined text-sm">close</span>
+              </button>
+            </div>
+
+            <div>
+              <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 leading-snug">
+                {selectedIncident.title}
+              </h2>
+              <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400 text-xs mt-1">
+                <span className="material-symbols-outlined text-xs text-[#9E1315]">location_on</span>
+                <span className="truncate">{selectedIncident.locationName}</span>
+                <span className="text-[11px] font-mono text-slate-400 shrink-0">
+                  ({selectedIncident.latitude.toFixed(4)}° N, {selectedIncident.longitude.toFixed(4)}° E)
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-3 bg-slate-50 dark:bg-slate-900/60 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
+              {selectedIncident.description}
+            </p>
+
+            <div className="flex items-center justify-between pt-1 text-xs">
+              <span className="text-[11px] text-slate-400 font-semibold">
+                Status: <strong className="text-slate-700 dark:text-slate-200 uppercase">{selectedIncident.status}</strong>
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setMapCenter([selectedIncident.latitude, selectedIncident.longitude]);
+                  setMapZoom(16);
+                }}
+                className="font-semibold text-[#9E1315] dark:text-rose-400 hover:underline flex items-center gap-1"
+              >
+                Center on Map
+                <span className="material-symbols-outlined text-sm">explore</span>
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ========================================================================= */}
+      {/* DESKTOP / TABLET SECTION (>= 768px): Preserved 100% Unchanged            */}
+      {/* ========================================================================= */}
+      <div className="hidden md:block w-full space-y-6">
       {/* 1. Page Header & Action Bar (Matching Stitch Flagship) */}
       <div className="w-full">
         {/* Header Title & Primary Action Cluster */}
@@ -1081,6 +1322,7 @@ export default function ResilienceView() {
           )}
         </div>
       )}
+      </div>
 
       {/* 6. High-Fidelity Incident Reporting Modal (Matching Stitch Flagship) */}
       {isReportModalOpen && (

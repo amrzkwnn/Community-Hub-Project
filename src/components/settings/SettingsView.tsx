@@ -22,7 +22,14 @@ import {
   UserCheck,
   Sliders,
   Minimize2,
-  Maximize2
+  Maximize2,
+  PhoneCall,
+  FileText,
+  LogOut,
+  SlidersHorizontal,
+  EyeOff,
+  MessageSquare,
+  ArrowLeftRight
 } from 'lucide-react';
 import { UIScalePreset } from '@/types';
 
@@ -155,8 +162,8 @@ export default function SettingsView() {
         </div>
       )}
 
-      {/* ==================== TOP OPERATIONAL HEADER ==================== */}
-      <header className="shrink-0 z-10 border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-[#15181C]/95 backdrop-blur-md px-4 sm:px-8 py-4">
+      {/* ==================== TOP OPERATIONAL HEADER (Desktop Only) ==================== */}
+      <header className="hidden md:block shrink-0 z-10 border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-[#15181C]/95 backdrop-blur-md px-4 sm:px-8 py-4">
         <div className="flex items-center justify-between">
           <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-slate-100 tracking-tight">
             Settings &amp; Preferences
@@ -224,50 +231,434 @@ export default function SettingsView() {
           </div>
         </aside>
 
-        {/* ==================== MOBILE CATEGORY SELECTION MENU ==================== */}
-        {/* Shown on small/tablet viewports when user has not drilled into a category */}
-        <div className={`lg:hidden flex-1 min-h-0 overflow-y-auto px-4 py-6 space-y-3 ${mobileView === 'menu' ? 'block' : 'hidden'}`}>
-          <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-1 mb-2">
-            Select Configuration Section
+        {/* ==================== MOBILE STITCH SETTINGS MENU ==================== */}
+        {/* Exact match to Google Stitch Mobile Setting reference screen */}
+        <div className={`lg:hidden flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-4 pb-28 ${mobileView === 'menu' ? 'block' : 'hidden'}`}>
+          {/* Header Section */}
+          <div className="flex items-center justify-between pt-1">
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+              {isMalay ? 'Tetapan' : 'Settings'}
+            </h1>
+            <div className="w-9 h-9 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-[#ba1b1d] dark:text-[#ffb4ab]">
+              <SlidersHorizontal className="w-4 h-4" />
+            </div>
           </div>
 
-          {navItems.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => handleSelectSection(item.id)}
-              className="w-full flex items-center justify-between p-4 rounded-2xl bg-white dark:bg-[#15181C] border border-slate-200 dark:border-slate-800 shadow-2xs hover:border-slate-300 dark:hover:border-slate-700 transition-all text-left cursor-pointer active:scale-[0.99] focus:outline-hidden focus:ring-2 focus:ring-[#ba1b1d]"
-            >
-              <div className="flex items-center gap-3.5 min-w-0">
-                <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-[#ba1b1d] dark:text-rose-400 flex items-center justify-center shrink-0">
-                  {item.icon}
+          {/* Profile Card (Touch-friendly & verified badge) */}
+          <div 
+            onClick={() => handleSelectSection('account')}
+            className="bg-white dark:bg-[#15181C] rounded-xl shadow-xs border border-slate-200/80 dark:border-slate-800 p-4 flex items-center justify-between active:scale-[0.99] transition-transform cursor-pointer"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="relative shrink-0">
+                <div className="w-13 h-13 rounded-full bg-[#ffdad6] dark:bg-[#ba1b1d]/30 text-[#410002] dark:text-[#ffb4ab] flex items-center justify-center font-bold text-base shadow-xs">
+                  {(currentUser.fullName || 'AZ').slice(0, 2).toUpperCase()}
                 </div>
-                <div className="min-w-0">
-                  <div className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                    <span>{item.label}</span>
-                    {item.badge !== undefined && (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                        {item.badge}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">
-                    {item.description}
-                  </p>
+                <span className="absolute -bottom-0.5 -right-0.5 bg-[#ba1b1d] text-white w-5 h-5 rounded-full flex items-center justify-center shadow-xs">
+                  <Check className="w-3 h-3 stroke-[3]" />
+                </span>
+              </div>
+              <div className="flex flex-col min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold text-sm text-slate-900 dark:text-slate-100 truncate">
+                    {currentUser.fullName || 'Amir Zakaria'}
+                  </span>
+                </div>
+                <span className="text-[11px] text-[#ba1b1d] dark:text-[#ffb4ab] font-semibold">
+                  {isMalay ? 'Penduduk Disahkan' : 'Verified Resident'}
+                </span>
+                <span className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                  {currentUser.townshipPrecinct || 'Elmina West EV3-04-12'}
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center text-slate-400 pl-2">
+              <ChevronRight className="w-5 h-5" />
+            </div>
+          </div>
+
+          {/* Appearance Group */}
+          <div className="flex flex-col space-y-1.5">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-1">
+              {isMalay ? 'Rupa & Tema' : 'Appearance'}
+            </span>
+            <div className="bg-white dark:bg-[#15181C] rounded-xl shadow-xs border border-slate-200/80 dark:border-slate-800 p-4 space-y-4">
+              {/* Theme Switcher */}
+              <div className="flex flex-col space-y-2">
+                <div className="flex items-center gap-2 text-slate-800 dark:text-slate-200">
+                  <Sun className="w-4 h-4 text-[#ba1b1d] dark:text-[#ffb4ab]" />
+                  <span className="text-xs font-bold">{isMalay ? 'Tema Antara Muka' : 'Interface Theme'}</span>
+                </div>
+                <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => handleThemeChange('light')}
+                    className={`py-1.5 rounded-lg text-center text-xs transition-all flex items-center justify-center gap-1 font-semibold cursor-pointer ${
+                      theme === 'light'
+                        ? 'bg-white dark:bg-[#1E2226] text-[#ba1b1d] dark:text-[#ffb4ab] shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <Sun className="w-3.5 h-3.5" /> Light
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleThemeChange('dark')}
+                    className={`py-1.5 rounded-lg text-center text-xs transition-all flex items-center justify-center gap-1 font-semibold cursor-pointer ${
+                      theme === 'dark'
+                        ? 'bg-white dark:bg-[#1E2226] text-[#ba1b1d] dark:text-[#ffb4ab] shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <Moon className="w-3.5 h-3.5" /> Dark
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleThemeChange('system')}
+                    className={`py-1.5 rounded-lg text-center text-xs transition-all flex items-center justify-center gap-1 font-semibold cursor-pointer ${
+                      theme === 'system'
+                        ? 'bg-white dark:bg-[#1E2226] text-[#ba1b1d] dark:text-[#ffb4ab] shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <Laptop className="w-3.5 h-3.5" /> System
+                  </button>
                 </div>
               </div>
-              <ChevronRight className="w-4 h-4 text-slate-400 shrink-0 ml-2" />
-            </button>
-          ))}
 
-          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-850 border border-slate-200/80 dark:border-slate-800 space-y-1.5 text-xs mt-6">
-            <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-              <UserCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-              <span>Verified Civic Account</span>
+              {/* UI Scale Selector */}
+              <div className="flex flex-col space-y-2 pt-1 border-t border-slate-100 dark:border-slate-800">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-slate-800 dark:text-slate-200">
+                    <Sliders className="w-4 h-4 text-[#ba1b1d] dark:text-[#ffb4ab]" />
+                    <span className="text-xs font-bold">UI Scale</span>
+                  </div>
+                  <span className="text-[11px] text-[#ba1b1d] dark:text-[#ffb4ab] font-bold">
+                    {uiScale === 'compact' ? 'Compact · 90%' : uiScale === 'large' ? 'Large · 110%' : 'Default · 100%'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => handleUIScaleChange('compact')}
+                    className={`py-1.5 rounded-lg text-center text-xs transition-all font-semibold cursor-pointer ${
+                      uiScale === 'compact'
+                        ? 'bg-white dark:bg-[#1E2226] text-[#ba1b1d] dark:text-[#ffb4ab] shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    Compact (90%)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleUIScaleChange('default')}
+                    className={`py-1.5 rounded-lg text-center text-xs transition-all font-semibold cursor-pointer ${
+                      uiScale === 'default'
+                        ? 'bg-white dark:bg-[#1E2226] text-[#ba1b1d] dark:text-[#ffb4ab] shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    Default (100%)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleUIScaleChange('large')}
+                    className={`py-1.5 rounded-lg text-center text-xs transition-all font-semibold cursor-pointer ${
+                      uiScale === 'large'
+                        ? 'bg-white dark:bg-[#1E2226] text-[#ba1b1d] dark:text-[#ffb4ab] shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    Large (110%)
+                  </button>
+                </div>
+              </div>
             </div>
-            <p className="text-slate-500 dark:text-slate-400 text-[11px]">
-              {currentUser.fullName} • {currentUser.townshipPrecinct} • {currentUser.unitNumber || 'Verified Property'}
-            </p>
+          </div>
+
+          {/* Preferences Group */}
+          <div className="flex flex-col space-y-1.5">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-1">
+              {isMalay ? 'Keutamaan' : 'Preferences'}
+            </span>
+            <div className="bg-white dark:bg-[#15181C] rounded-xl shadow-xs border border-slate-200/80 dark:border-slate-800 divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden">
+              {/* Language Row */}
+              <div className="p-3.5 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300">
+                    <Globe className="w-4 h-4" />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                      {isMalay ? 'Bahasa' : 'Language'}
+                    </span>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                      English &amp; Bahasa Melayu
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-full p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => handleLanguageChange('en')}
+                    className={`px-2.5 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                      !isMalay
+                        ? 'bg-white dark:bg-[#1E2226] text-[#ba1b1d] dark:text-[#ffb4ab] shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    EN
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleLanguageChange('bm')}
+                    className={`px-2.5 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                      isMalay
+                        ? 'bg-white dark:bg-[#1E2226] text-[#ba1b1d] dark:text-[#ffb4ab] shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    BM
+                  </button>
+                </div>
+              </div>
+
+              {/* Township Alerts Toggle */}
+              <div className="p-3.5 flex items-center justify-between bg-slate-50/50 dark:bg-[#15181C]/50">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-rose-50 dark:bg-rose-950/40 flex items-center justify-center text-[#ba1b1d] dark:text-[#ffb4ab]">
+                    <Bell className="w-4 h-4" />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                      {isMalay ? 'Amaran Perbandaran' : 'Township Alerts'}
+                    </span>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Critical safety &amp; water notices
+                    </span>
+                  </div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={notificationSettings.incidentAlerts}
+                    onChange={() => updateNotificationSettings({ incidentAlerts: !notificationSettings.incidentAlerts })}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#ba1b1d]"></div>
+                </label>
+              </div>
+
+              {/* Chat Messages Toggle */}
+              <div className="p-3.5 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300">
+                    <MessageSquare className="w-4 h-4" />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                      {isMalay ? 'Mesej Sembang' : 'Chat Messages'}
+                    </span>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Direct resident communications
+                    </span>
+                  </div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={notificationSettings.directMessages}
+                    onChange={() => updateNotificationSettings({ directMessages: !notificationSettings.directMessages })}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#ba1b1d]"></div>
+                </label>
+              </div>
+
+              {/* Exchange Replies Toggle */}
+              <div className="p-3.5 flex items-center justify-between bg-slate-50/50 dark:bg-[#15181C]/50">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300">
+                    <ArrowLeftRight className="w-4 h-4" />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                      {isMalay ? 'Balasan Pertukaran' : 'Exchange Replies'}
+                    </span>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Marketplace &amp; borrow requests
+                    </span>
+                  </div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={notificationSettings.circularExchange}
+                    onChange={() => updateNotificationSettings({ circularExchange: !notificationSettings.circularExchange })}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#ba1b1d]"></div>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          {/* Privacy & Security Group */}
+          <div className="flex flex-col space-y-1.5">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-1">
+              {isMalay ? 'Privasi & Keselamatan' : 'Privacy & Security'}
+            </span>
+            <div className="bg-white dark:bg-[#15181C] rounded-xl shadow-xs border border-slate-200/80 dark:border-slate-800 divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden">
+              {/* Masked Address Toggle */}
+              <div className="p-3.5 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300">
+                    <EyeOff className="w-4 h-4" />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                      {isMalay ? 'Alamat Bertopeng' : 'Masked Street Address'}
+                    </span>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Show only sector in public posts
+                    </span>
+                  </div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    defaultChecked
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#ba1b1d]"></div>
+                </label>
+              </div>
+
+              {/* Blocked Residents Link */}
+              <div 
+                onClick={() => handleSelectSection('privacy')}
+                className="p-3.5 flex items-center justify-between bg-slate-50/50 dark:bg-[#15181C]/50 active:bg-slate-100 dark:active:bg-slate-800 cursor-pointer transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300">
+                    <UserX className="w-4 h-4" />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                      {isMalay ? 'Penduduk Disekat' : 'Blocked Residents'}
+                    </span>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                      {blockedUserIds.length} {isMalay ? 'akaun dihadkan' : 'restricted accounts'}
+                    </span>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400" />
+              </div>
+
+              {/* Gatehouse Intercom Access Link */}
+              <div 
+                onClick={() => showToast('Gatehouse VoIP bypass configured.')}
+                className="p-3.5 flex items-center justify-between active:bg-slate-100 dark:active:bg-slate-800 cursor-pointer transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300">
+                    <Home className="w-4 h-4" />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                      Gatehouse Intercom Access
+                    </span>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                      VoIP bypass &amp; QR guard passes
+                    </span>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400" />
+              </div>
+            </div>
+          </div>
+
+          {/* Township & Support Group */}
+          <div className="flex flex-col space-y-1.5">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-1">
+              {isMalay ? 'Perbandaran & Sokongan' : 'Township & Support'}
+            </span>
+            <div className="bg-white dark:bg-[#15181C] rounded-xl shadow-xs border border-slate-200/80 dark:border-slate-800 divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden">
+              {/* Auxiliary Police Desk Hotline (Branded highlight) */}
+              <a 
+                href="tel:0378452222"
+                className="p-3.5 flex items-center justify-between bg-rose-50/50 dark:bg-rose-950/20 active:bg-rose-100/50 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-[#ba1b1d] text-white flex items-center justify-center shadow-xs">
+                    <PhoneCall className="w-4 h-4" />
+                  </div>
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-bold text-[#ba1b1d] dark:text-[#ffb4ab]">
+                        {isMalay ? 'Meja Polis Bantuan' : 'Auxiliary Police Desk'}
+                      </span>
+                      <span className="bg-[#ba1b1d] text-white text-[9px] font-black px-1.5 py-0.2 rounded">
+                        24/7
+                      </span>
+                    </div>
+                    <span className="text-[11px] text-slate-600 dark:text-slate-300">
+                      Direct Hotline · 03-7845 2222
+                    </span>
+                  </div>
+                </div>
+                <div className="w-8 h-8 rounded-full bg-white dark:bg-slate-800 flex items-center justify-center text-[#ba1b1d] dark:text-[#ffb4ab] shadow-xs">
+                  <PhoneCall className="w-4 h-4" />
+                </div>
+              </a>
+
+              {/* Civic Conduct & Help Link */}
+              <div 
+                onClick={() => handleSelectSection('account')}
+                className="p-3.5 flex items-center justify-between active:bg-slate-100 dark:active:bg-slate-800 cursor-pointer transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300">
+                    <FileText className="w-4 h-4" />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                      {isMalay ? 'Syarat Tatakelakuan Sivik' : 'Terms of Civic Conduct & Help'}
+                    </span>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Township guidelines &amp; FAQ
+                    </span>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400" />
+              </div>
+            </div>
+          </div>
+
+          {/* Action & Version Area */}
+          <div className="pt-2 flex flex-col space-y-3">
+            {/* Log Out Button */}
+            <button
+              type="button"
+              onClick={() => showToast('Logged out of resident session.')}
+              className="w-full h-11 bg-slate-100 dark:bg-[#1E2226] text-[#ba1b1d] dark:text-[#ffb4ab] rounded-xl text-xs font-bold flex items-center justify-center gap-2 hover:bg-rose-50 dark:hover:bg-rose-950/40 active:scale-[0.98] transition-all cursor-pointer"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>{isMalay ? 'Log Keluar' : 'Log Out'}</span>
+            </button>
+
+            {/* Version & Civic Footer */}
+            <div className="flex flex-col items-center justify-center text-center space-y-0.5 pb-4">
+              <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#ba1b1d]"></span>
+                <span className="text-[11px] font-bold tracking-wider uppercase">
+                  TESDH Civic OS · v4.12.0
+                </span>
+              </div>
+              <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                Heritage Township Managed Network
+              </span>
+            </div>
           </div>
         </div>
 

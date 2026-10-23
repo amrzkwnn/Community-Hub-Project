@@ -39,6 +39,7 @@ import {
 } from 'lucide-react';
 import ImageUploadArea from '@/components/common/ImageUploadArea';
 import SuccessToast from '@/components/common/SuccessToast';
+import TimeAgo from '@/components/common/TimeAgo';
 import { useScrollHeader } from '@/lib/hooks/useScrollHeader';
 
 export default function ExchangeView() {
@@ -469,6 +470,193 @@ export default function ExchangeView() {
 
   return (
     <div className="w-full h-full flex flex-col min-h-0 overflow-hidden bg-[#F8F9FA] dark:bg-[#0F1113] relative">
+      {/* ========================================================================= */}
+      {/* MOBILE PHONE SECTION: Google Stitch Mobile Exchange                       */}
+      {/* ========================================================================= */}
+      <div className="block md:hidden flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-3">
+        {/* Mobile Header: Title & Create CTA */}
+        <div className="flex items-center justify-between pt-1">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+            Exchange
+          </h1>
+          <button
+            type="button"
+            onClick={() => setIsCreateOpen(true)}
+            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl bg-[#9E1315] hover:bg-[#841012] text-white font-semibold text-xs shadow-xs active:scale-95 transition-all cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+            <span>+ Create Listing</span>
+          </button>
+        </div>
+
+        {/* Search Bar */}
+        <div className="relative flex items-center w-full">
+          <Search className="w-4 h-4 absolute left-3 text-slate-400 pointer-events-none" aria-hidden="true" />
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search lawn mowers, planters, baby cots..."
+            className="w-full h-10 pl-9 pr-9 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-slate-900 dark:text-white text-xs placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#9E1315]/20 shadow-xs"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+
+        {/* Category Pills Scroller */}
+        <div className="py-1 overflow-x-auto no-scrollbar flex items-center gap-1.5 -mx-4 px-4 select-none">
+          <button
+            type="button"
+            onClick={() => { setSelectedCategory('all'); setSelectedTypeFilter('all'); }}
+            className={`shrink-0 h-8 px-3.5 rounded-full text-xs font-semibold flex items-center gap-1 shadow-xs active:scale-95 transition-transform ${
+              selectedCategory === 'all' && selectedTypeFilter === 'all'
+                ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900'
+                : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800'
+            }`}
+          >
+            All ({exchangeItems.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => { setSelectedCategory(selectedCategory === 'home & kitchen' ? 'all' : 'home & kitchen'); }}
+            className={`shrink-0 h-8 px-3.5 rounded-full text-xs font-medium flex items-center gap-1.5 shadow-xs active:scale-95 transition-all ${
+              selectedCategory === 'home & kitchen'
+                ? 'bg-[#9E1315] text-white'
+                : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800'
+            }`}
+          >
+            <span className="material-symbols-outlined text-sm text-[#9E1315]">yard</span>
+            Tools & Garden
+          </button>
+          <button
+            type="button"
+            onClick={() => { setSelectedCategory(selectedCategory === 'furniture' ? 'all' : 'furniture'); }}
+            className={`shrink-0 h-8 px-3.5 rounded-full text-xs font-medium flex items-center gap-1.5 shadow-xs active:scale-95 transition-all ${
+              selectedCategory === 'furniture'
+                ? 'bg-[#9E1315] text-white'
+                : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800'
+            }`}
+          >
+            <span className="material-symbols-outlined text-sm text-[#9E1315]">chair</span>
+            Furniture
+          </button>
+          <button
+            type="button"
+            onClick={() => { setSelectedCategory(selectedCategory === 'baby items' ? 'all' : 'baby items'); }}
+            className={`shrink-0 h-8 px-3.5 rounded-full text-xs font-medium flex items-center gap-1.5 shadow-xs active:scale-95 transition-all ${
+              selectedCategory === 'baby items'
+                ? 'bg-[#9E1315] text-white'
+                : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800'
+            }`}
+          >
+            <span className="material-symbols-outlined text-sm text-[#9E1315]">child_friendly</span>
+            Baby & Kids
+          </button>
+          <button
+            type="button"
+            onClick={() => { setSelectedTypeFilter(selectedTypeFilter === 'Free' ? 'all' : 'Free'); }}
+            className={`shrink-0 h-8 px-3.5 rounded-full text-xs font-medium flex items-center gap-1.5 shadow-xs active:scale-95 transition-all ${
+              selectedTypeFilter === 'Free'
+                ? 'bg-emerald-600 text-white'
+                : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800'
+            }`}
+          >
+            <span className="material-symbols-outlined text-sm text-emerald-600">volunteer_activism</span>
+            Free Items
+          </button>
+        </div>
+
+        {/* Results Count & Sort Indicator */}
+        <div className="py-1 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+          <span>Showing {filteredItems.length} neighbor listings in Elmina</span>
+          <span className="text-[#9E1315] font-semibold flex items-center gap-0.5">
+            Latest
+          </span>
+        </div>
+
+        {/* 2-Column Responsive Card Grid */}
+        <div className="grid grid-cols-2 gap-2.5 pb-20">
+          {filteredItems.map((item) => {
+            const isFree = item.listingType === 'giveaway';
+            const images = item.imageUrls && item.imageUrls.length > 0 ? item.imageUrls : [item.imageUrl || ''];
+            const displayImg = images[0] || 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=800';
+
+            return (
+              <div 
+                key={item.id}
+                className="flex flex-col bg-white dark:bg-[#15181C] rounded-xl overflow-hidden shadow-xs border border-slate-200/80 dark:border-slate-800 justify-between active:scale-[0.99] transition-transform"
+              >
+                <div className="relative w-full aspect-[4/3] bg-slate-100 dark:bg-slate-800">
+                  <img
+                    src={displayImg}
+                    alt={item.title}
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).src = 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=800';
+                    }}
+                  />
+                  <span className={`absolute top-2 left-2 px-2 py-0.5 rounded-md text-[10px] font-bold shadow-xs ${
+                    isFree ? 'bg-emerald-600 text-white' : 'bg-[#9E1315] text-white'
+                  }`}>
+                    {isFree ? 'FREE' : 'EXCHANGE'}
+                  </span>
+                  <span className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded bg-black/60 backdrop-blur-xs text-white text-[9px] font-mono">
+                    <TimeAgo date={item.createdAt} />
+                  </span>
+                </div>
+
+                <div className="p-2.5 flex flex-col flex-1 justify-between">
+                  <div>
+                    <h2 className="text-xs font-bold text-slate-900 dark:text-slate-100 line-clamp-2 leading-tight">
+                      {item.title}
+                    </h2>
+                    <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400 mt-1">
+                      <span className="material-symbols-outlined text-xs text-[#9E1315]">location_on</span>
+                      <span className="text-[10px] truncate">{item.precinct || 'Elmina West'}</span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 line-clamp-1 mt-0.5">
+                      {item.seekingItem || getConditionBadge(item.condition)}
+                    </p>
+                  </div>
+
+                  <div className="mt-2.5 pt-2 flex items-center justify-between gap-1.5 border-t border-slate-100 dark:border-slate-800">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        handleOpenDrawer(item, e.currentTarget);
+                      }}
+                      className="flex-1 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-800 dark:text-slate-200 text-[11px] font-semibold flex items-center justify-center active:scale-95 transition-transform cursor-pointer"
+                    >
+                      View
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleContactOwner(item)}
+                      aria-label="Contact neighbor"
+                      className="h-7 w-7 rounded-lg bg-[#9E1315] hover:bg-[#841012] text-white flex items-center justify-center active:scale-95 transition-transform shrink-0 cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-xs">chat</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* DESKTOP / TABLET SECTION (>= 768px): Preserved 100% Unchanged            */}
+      {/* ========================================================================= */}
+      <div className="hidden md:flex flex-col min-h-0 flex-1 overflow-hidden">
       {/* Synchronized Collapsing Header Outer Wrapper */}
       <div 
         ref={headerWrapperRef}
@@ -831,6 +1019,7 @@ export default function ExchangeView() {
         )}
       </div>
     </div>
+  </div>
   </div>
 
       {/* ==================== SLIDE-OVER DRAWER: ITEM DETAIL ==================== */}

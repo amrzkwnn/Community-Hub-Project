@@ -55,8 +55,8 @@ describe('TESDH Community Hub — Home Section & Interactive Navigation', () => 
     );
     assert.match(
       bottomNavContent,
-      /grid-cols-6/,
-      'BottomNav must accommodate Home in a 6-column mobile layout'
+      /justify-around|grid-cols-6/,
+      'BottomNav must accommodate Home in Stitch mobile layout'
     );
   });
 

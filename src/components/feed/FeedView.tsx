@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useApp } from '@/lib/context/AppContext';
 import { useScrollHeader } from '@/lib/hooks/useScrollHeader';
 import { PostCategory, CommunityPost, ModerationReason } from '@/types';
@@ -81,6 +81,67 @@ export default function FeedView() {
   const [deletePostReason, setDeletePostReason] = useState('');
   const [isDeletingPost, setIsDeletingPost] = useState(false);
 
+  // Individual Post Detail View Modal State (Section 11 Bug Fix - PC & Mobile Web)
+  const [selectedPostModal, setSelectedPostModal] = useState<CommunityPost | null>(null);
+
+  const openIndividualPost = useCallback((post: CommunityPost) => {
+    setSelectedPostModal(post);
+    if (typeof window !== 'undefined') {
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.set('tab', 'feed');
+        url.searchParams.set('id', post.id);
+        window.history.pushState({ postId: post.id }, '', url.pathname + url.search);
+      } catch {}
+    }
+  }, []);
+
+  const closeIndividualPost = useCallback(() => {
+    setSelectedPostModal(null);
+    if (typeof window !== 'undefined') {
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.set('tab', 'feed');
+        url.searchParams.delete('id');
+        window.history.pushState({}, '', url.pathname + url.search);
+      } catch {}
+    }
+  }, []);
+
+  // URL Synchronization & Browser History Navigation for Individual Posts
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const syncFromUrl = () => {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const tab = params.get('tab');
+        const id = params.get('id');
+        if (tab === 'feed' && id) {
+          const found = posts.find((p) => p.id === id);
+          if (found) {
+            setSelectedPostModal(found);
+          }
+        } else if (!id) {
+          setSelectedPostModal(null);
+        }
+      } catch {}
+    };
+
+    syncFromUrl();
+    window.addEventListener('popstate', syncFromUrl);
+    return () => window.removeEventListener('popstate', syncFromUrl);
+  }, [posts]);
+
+  // Keep selectedPostModal reference fresh if posts data updates
+  useEffect(() => {
+    if (selectedPostModal) {
+      const updated = posts.find((p) => p.id === selectedPostModal.id);
+      if (updated && updated !== selectedPostModal) {
+        setSelectedPostModal(updated);
+      }
+    }
+  }, [posts, selectedPostModal]);
+
   // Delete Comment Confirmation Modal State
   const [deleteReplyModal, setDeleteReplyModal] = useState<{
     id: string;
@@ -120,7 +181,7 @@ export default function FeedView() {
 
   // Lock background scroll when any overlay or modal is active
   useEffect(() => {
-    const isAnyModalOpen = isCreateOpen || !!deletePostModal || !!deleteReplyModal || !!reportTarget;
+    const isAnyModalOpen = isCreateOpen || !!deletePostModal || !!deleteReplyModal || !!reportTarget || !!selectedPostModal;
     if (isAnyModalOpen) {
       document.body.style.overflow = 'hidden';
     } else {
@@ -129,7 +190,7 @@ export default function FeedView() {
     return () => {
       document.body.style.overflow = '';
     };
-  }, [isCreateOpen, deletePostModal, deleteReplyModal, reportTarget]);
+  }, [isCreateOpen, deletePostModal, deleteReplyModal, reportTarget, selectedPostModal]);
 
   // Transient Search Highlight Tracking
   const highlightedElementRef = useRef<{ el: HTMLElement; classes: string[] } | null>(null);
@@ -189,6 +250,10 @@ export default function FeedView() {
         clearNavigationTarget();
       }, 250);
     } else if (targetItemId) {
+      const targetPost = posts.find((p) => p.id === targetItemId);
+      if (targetPost) {
+        openIndividualPost(targetPost);
+      }
       scrollTimer = setTimeout(() => {
         const postEl = document.getElementById(`post-${targetItemId}`);
         if (postEl) {
@@ -212,7 +277,7 @@ export default function FeedView() {
       clearTimeout(filterResetTimer);
       if (scrollTimer) clearTimeout(scrollTimer);
     };
-  }, [navigationTarget, clearNavigationTarget]);
+  }, [navigationTarget, posts, openIndividualPost, clearNavigationTarget]);
 
   // Clean up transient highlight and timer on unmount
   useEffect(() => {
@@ -525,10 +590,10 @@ export default function FeedView() {
 
   // Copy Direct Link
   const copyPostLink = (id: string) => {
-    const url = `${window.location.origin}/#post-${id}`;
+    const url = `${window.location.origin}/?tab=feed&id=${id}`;
     if (navigator.clipboard) {
       navigator.clipboard.writeText(url);
-      triggerSuccessSequence('Link Copied', 'Direct notice link copied to your clipboard.');
+      triggerSuccessSequence('Link Copied', 'Direct discussion link copied to your clipboard.');
     }
     setOpenMenuPostId(null);
   };
@@ -536,9 +601,394 @@ export default function FeedView() {
   return (
     <div className="flex justify-between w-full h-full overflow-hidden bg-[#F8F9FA] dark:bg-[#0F1113] relative">
       {/* ========================================================================= */}
-      {/* MAIN COMMUNITY FEED COLUMN (Independently Scrollable Region)              */}
+      {/* MOBILE FEED WORKSPACE (Mobile Phone Viewport <= 767px: Google Stitch)     */}
       {/* ========================================================================= */}
-      <div className="flex-1 flex flex-col h-full min-h-0 max-w-[860px] mx-auto overflow-hidden">
+      <div className="block md:hidden flex-1 min-h-0 overflow-y-auto w-full pb-28 bg-[#F9FAFB] dark:bg-[#0F1113]">
+        {/* Mobile Header Context & Filter Chips (Stitch 2_mobile_feed.html) */}
+        <div className="px-4 py-3 bg-white dark:bg-[#15181C] shadow-xs border-b border-slate-200/80 dark:border-slate-800">
+          <div className="pt-1 pb-2">
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+              Community Feed
+            </h1>
+          </div>
+          
+          {/* Top Filter Chips: Horizontal scrolling pill bar */}
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5 select-none -mx-4 px-4">
+            <button 
+              type="button"
+              onClick={() => setSelectedFilter('all')}
+              className={`filter-chip flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold shadow-xs active:scale-95 transition-all shrink-0 cursor-pointer ${
+                selectedFilter === 'all'
+                  ? 'bg-[#9E1315] text-white'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+              }`}
+            >
+              <span>All Feeds</span>
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${selectedFilter === 'all' ? 'bg-white/20' : 'bg-slate-200 dark:bg-slate-700'}`}>
+                {posts.length}
+              </span>
+            </button>
+            <button 
+              type="button"
+              onClick={() => setSelectedFilter('alerts')}
+              className={`filter-chip flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold active:scale-95 transition-all shrink-0 cursor-pointer ${
+                selectedFilter === 'alerts'
+                  ? 'bg-[#9E1315] text-white shadow-xs'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+              }`}
+            >
+              <span className="material-symbols-outlined text-sm text-[#9E1315]">campaign</span>
+              <span>Announcements</span>
+            </button>
+            <button 
+              type="button"
+              onClick={() => setSelectedFilter('discussion')}
+              className={`filter-chip flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold active:scale-95 transition-all shrink-0 cursor-pointer ${
+                selectedFilter === 'discussion'
+                  ? 'bg-[#9E1315] text-white shadow-xs'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+              }`}
+            >
+              <span>General</span>
+            </button>
+            <button 
+              type="button"
+              onClick={() => setSelectedFilter('sustainability')}
+              className={`filter-chip flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold active:scale-95 transition-all shrink-0 cursor-pointer ${
+                selectedFilter === 'sustainability'
+                  ? 'bg-[#9E1315] text-white shadow-xs'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+              }`}
+            >
+              <span className="material-symbols-outlined text-sm text-amber-600">thumb_up</span>
+              <span>Recommendations</span>
+            </button>
+            <button 
+              type="button"
+              onClick={() => setSelectedFilter('complaint')}
+              className={`filter-chip flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold active:scale-95 transition-all shrink-0 cursor-pointer ${
+                selectedFilter === 'complaint'
+                  ? 'bg-[#9E1315] text-white shadow-xs'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+              }`}
+            >
+              <span className="material-symbols-outlined text-sm text-blue-600">search_check</span>
+              <span>Lost &amp; Found</span>
+            </button>
+            <button 
+              type="button"
+              onClick={() => setSelectedFilter('complaint')}
+              className={`filter-chip flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold active:scale-95 transition-all shrink-0 cursor-pointer ${
+                selectedFilter === 'complaint'
+                  ? 'bg-[#9E1315] text-white shadow-xs'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+              }`}
+            >
+              <span className="material-symbols-outlined text-sm text-emerald-600">handyman</span>
+              <span>Infrastructure</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Mobile Feed Body */}
+        <div className="px-4 py-3 flex flex-col gap-3">
+          {/* Compact Create Post Trigger Card (Stitch 2_mobile_feed.html line 38) */}
+          <div className="w-full bg-white dark:bg-[#15181C] rounded-xl p-3 shadow-xs border border-slate-200/80 dark:border-slate-800 flex flex-col gap-2">
+            <div className="flex items-center gap-3">
+              <div className="relative shrink-0">
+                <div className="w-10 h-10 rounded-full bg-stone-100 dark:bg-stone-800 text-[#9E1315] dark:text-rose-400 border border-stone-200/80 dark:border-stone-700 flex items-center justify-center text-xs font-bold">
+                  {currentUser.displayName?.[0] || currentUser.fullName?.[0] || 'AZ'}
+                </div>
+                <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-[#15181C]" />
+              </div>
+              <button 
+                type="button"
+                id="quick-post-btn"
+                onClick={() => setIsCreateOpen(true)}
+                className="flex-1 text-left bg-slate-100 dark:bg-slate-800 hover:bg-slate-200/70 transition-colors px-3 py-2 rounded-lg text-slate-500 dark:text-slate-400 text-xs flex items-center justify-between cursor-pointer"
+              >
+                <span>Share an update with Elmina...</span>
+                <span className="material-symbols-outlined text-slate-400 text-lg">edit_square</span>
+              </button>
+            </div>
+            
+            <div className="flex items-center justify-between pt-1 px-1 text-slate-500 dark:text-slate-400 text-[11px] font-medium border-t border-slate-100 dark:border-slate-800">
+              <button 
+                type="button"
+                onClick={() => { setNewCategory('discussion'); setIsCreateOpen(true); }}
+                className="flex items-center gap-1.5 py-1 px-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-base text-[#9E1315]">photo_library</span>
+                <span>Photo / Media</span>
+              </button>
+              <button 
+                type="button"
+                onClick={() => { setNewCategory('complaint'); setIsCreateOpen(true); }}
+                className="flex items-center gap-1.5 py-1 px-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-base text-amber-600">report_problem</span>
+                <span>Civic Issue</span>
+              </button>
+              <button 
+                type="button"
+                onClick={() => { setNewCategory('event'); setIsCreateOpen(true); }}
+                className="flex items-center gap-1.5 py-1 px-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-base text-sky-600">event</span>
+                <span>Activity</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Mobile Feed Posts List */}
+          {filteredPosts.length === 0 ? (
+            <div className="bg-white dark:bg-[#15181C] rounded-xl p-8 text-center text-slate-400 dark:text-slate-500 border border-slate-200/80 dark:border-slate-800 shadow-xs">
+              <span className="material-symbols-outlined text-3xl text-slate-300 dark:text-slate-600 mb-2">forum</span>
+              <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">No dispatches found</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">Try selecting a different filter above.</p>
+            </div>
+          ) : (
+            filteredPosts.map((post) => {
+              const isOfficial = post.authorRole === 'management' || post.category === 'announcement' || post.category === 'security_alert';
+              const postReplies = getPostComments(post.id);
+              const isCommentsOpen = activeCommentsPostId === post.id;
+              const isMenuOpen = openMenuPostId === post.id;
+
+              return (
+                <article 
+                  key={`mobile-${post.id}`}
+                  className="w-full bg-white dark:bg-[#15181C] rounded-xl shadow-xs border border-slate-200/80 dark:border-slate-800 overflow-hidden flex flex-col"
+                >
+                  {/* Top authority color bar for official announcements (Stitch line 67) */}
+                  {isOfficial && <div className="h-1.5 w-full bg-[#9E1315]" />}
+
+                  <div className="p-4 flex flex-col gap-2.5">
+                    {/* Author Row */}
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-2.5">
+                        {isOfficial ? (
+                          <div className="w-10 h-10 rounded-xl bg-[#9E1315] text-white flex items-center justify-center shrink-0 shadow-xs">
+                            <span className="material-symbols-outlined text-xl">apartment</span>
+                          </div>
+                        ) : (
+                          <div className="w-10 h-10 rounded-full bg-stone-100 dark:bg-stone-800 text-[#9E1315] dark:text-rose-400 border border-stone-200/80 dark:border-stone-700 flex items-center justify-center text-xs font-bold shrink-0">
+                            {post.isAnonymous ? '?' : (post.authorName[0] || 'U')}
+                          </div>
+                        )}
+                        <div className="flex flex-col">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-semibold text-xs text-slate-900 dark:text-slate-100">
+                              {post.isAnonymous ? 'Anonymous Resident' : post.authorName}
+                            </span>
+                            {isOfficial && (
+                              <>
+                                <span className="material-symbols-outlined text-sm text-blue-600" style={{ fontVariationSettings: "'FILL' 1" }}>verified</span>
+                                <span className="px-1.5 py-0.2 rounded bg-rose-50 dark:bg-rose-950/60 text-[#9E1315] dark:text-rose-400 text-[9px] uppercase font-bold tracking-wider">Official</span>
+                              </>
+                            )}
+                            {!isOfficial && (
+                              <span className="px-1.5 py-0.2 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px] font-medium">
+                                {post.authorPrecinct || 'Elmina West'}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 text-[11px]">
+                            <TimeAgo date={post.createdAt} />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Options menu */}
+                      <div className="relative">
+                        <button 
+                          type="button"
+                          aria-label="Notice options"
+                          onClick={() => setOpenMenuPostId(isMenuOpen ? null : post.id)}
+                          className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 cursor-pointer"
+                        >
+                          <span className="material-symbols-outlined text-lg">more_horiz</span>
+                        </button>
+                        {isMenuOpen && (
+                          <div className="absolute right-0 mt-1 w-36 rounded-lg bg-white dark:bg-[#1C2025] border border-slate-200 dark:border-slate-700 shadow-lg py-1 z-30 text-[11px]">
+                            <button 
+                              type="button"
+                              onClick={() => toggleBookmark(post.id)}
+                              className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2 cursor-pointer"
+                            >
+                              <span className="material-symbols-outlined text-sm">
+                                {bookmarkedPosts.includes(post.id) ? 'bookmark' : 'bookmark_border'}
+                              </span>
+                              <span>{bookmarkedPosts.includes(post.id) ? 'Saved' : 'Save Post'}</span>
+                            </button>
+                            <button 
+                              type="button"
+                              onClick={() => copyPostLink(post.id)}
+                              className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2 cursor-pointer"
+                            >
+                              <span className="material-symbols-outlined text-sm">share</span>
+                              <span>Share Link</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Tag & Prominently Displayed Discussion Title */}
+                    <div>
+                      {post.category && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[10px] font-semibold mb-1">
+                          {post.category === 'security_alert' ? 'Security Alert' : post.category === 'announcement' ? 'Township Notice' : post.category === 'complaint' ? 'Help & Requests' : post.category === 'event' ? 'Events' : 'Discussion'}
+                        </span>
+                      )}
+                      {post.title && post.title.trim() && (
+                        <h2 
+                          onClick={() => openIndividualPost(post)}
+                          className="text-[15px] font-bold text-slate-900 dark:text-slate-100 leading-snug cursor-pointer hover:text-[#9E1315] dark:hover:text-rose-400 transition-colors"
+                        >
+                          {post.title}
+                        </h2>
+                      )}
+                    </div>
+
+                    {/* Content text */}
+                    <p 
+                      onClick={() => openIndividualPost(post)}
+                      className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed cursor-pointer"
+                    >
+                      {post.content}
+                    </p>
+
+                    {/* Attached Photo / Media */}
+                    {post.imageUrl && (
+                      <div 
+                        onClick={() => openIndividualPost(post)}
+                        className="rounded-xl overflow-hidden aspect-[16/10] bg-slate-100 dark:bg-slate-800 cursor-pointer border border-slate-200/60 dark:border-slate-800"
+                      >
+                        <img src={post.imageUrl} alt={post.title || 'Post image'} className="w-full h-full object-cover" />
+                      </div>
+                    )}
+
+                    {/* Municipal Call Banner for Official Notices */}
+                    {isOfficial && (
+                      <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60">
+                        <div className="flex items-center gap-2">
+                          <span className="material-symbols-outlined text-[#9E1315] text-base">support_agent</span>
+                          <div className="flex flex-col">
+                            <span className="text-[11px] text-slate-900 dark:text-slate-100 font-semibold">24/7 Control Centre</span>
+                            <span className="text-[10px] text-slate-500">03-7845 2222 (Direct Dispatch)</span>
+                          </div>
+                        </div>
+                        <a 
+                          href="tel:0378452222"
+                          className="px-2.5 py-1 rounded-md bg-[#9E1315] text-white text-[11px] font-semibold flex items-center gap-1 active:scale-95 transition-transform"
+                        >
+                          <span className="material-symbols-outlined text-xs">call</span>
+                          <span>Call</span>
+                        </a>
+                      </div>
+                    )}
+
+                    {/* Interaction Footer */}
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-800 text-slate-500 dark:text-slate-400 text-xs">
+                      <div className="flex items-center gap-2">
+                        <button 
+                          type="button"
+                          onClick={(e) => handleLikeClick(e, post.id)}
+                          className={`flex items-center gap-1 py-1 px-1.5 rounded hover:text-[#9E1315] active:scale-90 transition-transform cursor-pointer ${
+                            post.upvotedByCurrentUser ? 'text-[#9E1315] font-semibold' : ''
+                          }`}
+                        >
+                          <span className="material-symbols-outlined text-base">thumb_up</span>
+                          <span>{post.upvotesCount}</span>
+                        </button>
+                        <button 
+                          type="button"
+                          onClick={() => setActiveCommentsPostId(isCommentsOpen ? null : post.id)}
+                          className="flex items-center gap-1 py-1 px-1.5 rounded hover:text-slate-800 dark:hover:text-slate-200 active:scale-95 transition-transform cursor-pointer"
+                        >
+                          <span className="material-symbols-outlined text-base">chat_bubble_outline</span>
+                          <span>{postReplies.length}</span>
+                        </button>
+                        <button 
+                          type="button"
+                          onClick={() => copyPostLink(post.id)}
+                          className="flex items-center gap-1 py-1 px-1.5 rounded hover:text-slate-800 dark:hover:text-slate-200 active:scale-95 transition-transform cursor-pointer"
+                        >
+                          <span className="material-symbols-outlined text-base">share</span>
+                        </button>
+                      </div>
+
+                      <button 
+                        type="button"
+                        onClick={() => toggleBookmark(post.id)}
+                        className={`flex items-center gap-1 py-1 px-1.5 rounded hover:text-[#9E1315] active:scale-95 cursor-pointer ${
+                          bookmarkedPosts.includes(post.id) ? 'text-[#9E1315]' : ''
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-base">
+                          {bookmarkedPosts.includes(post.id) ? 'bookmark' : 'bookmark_border'}
+                        </span>
+                        <span className="text-[11px]">{bookmarkedPosts.includes(post.id) ? 'Saved' : 'Save'}</span>
+                      </button>
+                    </div>
+
+                    {/* Collapsible Comments Preview & Quick Reply */}
+                    {isCommentsOpen && (
+                      <div className="flex flex-col gap-2 pt-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl p-2.5">
+                        {postReplies.length === 0 ? (
+                          <p className="text-[11px] text-slate-400 py-1 text-center">No comments yet. Be the first to reply!</p>
+                        ) : (
+                          postReplies.map((reply) => (
+                            <div key={reply.id} className="flex items-start gap-2 text-xs">
+                              <div className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-[10px] font-bold shrink-0">
+                                {reply.authorName[0]}
+                              </div>
+                              <div className="flex-1 bg-white dark:bg-[#1C2025] p-2 rounded-lg text-slate-800 dark:text-slate-200 shadow-2xs">
+                                <div className="flex items-center justify-between">
+                                  <span className="font-semibold text-[11px]">{reply.authorName}</span>
+                                  <TimeAgo date={reply.createdAt} />
+                                </div>
+                                <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">{reply.content}</p>
+                              </div>
+                            </div>
+                          ))
+                        )}
+
+                        {/* Quick Reply Input */}
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <input
+                            type="text"
+                            value={replyInput[post.id] || ''}
+                            onChange={(e) => setReplyInput({ ...replyInput, [post.id]: e.target.value })}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleReplySubmit(post.id);
+                            }}
+                            placeholder="Write a civic reply..."
+                            className="flex-1 h-8 px-2.5 rounded-lg bg-white dark:bg-[#1C2025] border border-slate-200/80 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-[#9E1315]"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleReplySubmit(post.id)}
+                            disabled={submittingReply === post.id || !replyInput[post.id]?.trim()}
+                            className="h-8 px-2.5 rounded-lg bg-[#9E1315] text-white text-xs font-semibold flex items-center justify-center active:scale-95 disabled:opacity-50 cursor-pointer"
+                          >
+                            <span className="material-symbols-outlined text-sm">send</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </article>
+              );
+            })
+          )}
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* DESKTOP COMMUNITY FEED COLUMN (>= md) - 100% Preserved Desktop Layout     */}
+      {/* ========================================================================= */}
+      <div className="hidden md:flex flex-1 flex-col h-full min-h-0 max-w-[860px] mx-auto overflow-hidden">
         {/* Synchronized Collapsing Header Outer Wrapper */}
         <div 
           ref={headerWrapperRef}
@@ -1157,12 +1607,18 @@ export default function FeedView() {
 
                   {/* Post Content */}
                   <div className="space-y-1.5">
-                    {post.title && post.category !== 'discussion' && (
-                      <h3 className="text-[15px] font-bold text-slate-900 dark:text-slate-100 tracking-tight leading-snug">
+                    {post.title && post.title.trim() && (
+                      <h3 
+                        onClick={() => openIndividualPost(post)}
+                        className="text-[15px] font-bold text-slate-900 dark:text-slate-100 tracking-tight leading-snug cursor-pointer hover:text-[#9E1315] dark:hover:text-rose-400 transition-colors"
+                      >
                         {post.title}
                       </h3>
                     )}
-                    <p className="text-[14px] text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-line">
+                    <p 
+                      onClick={() => openIndividualPost(post)}
+                      className="text-[14px] text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-line cursor-pointer"
+                    >
                       {post.content}
                     </p>
                   </div>
@@ -1225,11 +1681,19 @@ export default function FeedView() {
 
                       <button 
                         type="button"
-                        onClick={() => setActiveCommentsPostId(isCommentsOpen ? null : post.id)}
+                        onClick={() => openIndividualPost(post)}
                         className="flex items-center gap-1.5 hover:text-slate-800 dark:hover:text-slate-200 transition-colors cursor-pointer"
                       >
                         <span className="material-symbols-outlined text-[16px]">chat_bubble_outline</span>
                         <span className="font-medium">{postReplies.length} comments</span>
+                      </button>
+
+                      <button 
+                        type="button"
+                        onClick={() => openIndividualPost(post)}
+                        className="hidden sm:inline-block text-[12px] font-medium text-slate-500 hover:text-[#9E1315] dark:hover:text-rose-400 transition-colors cursor-pointer"
+                      >
+                        View Discussion
                       </button>
                     </div>
 
@@ -1844,7 +2308,7 @@ export default function FeedView() {
             <div className="flex items-center justify-between mb-2">
               <h4 className="font-bold text-sm text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
                 <Flag className="w-4 h-4 text-[#9E1315] dark:text-rose-400" />
-                Report {reportTarget.targetType === 'post' ? 'Post' : 'Comment'} to Township Moderation
+                {reportTarget.targetType === 'post' ? 'Report Post to Moderator' : 'Report Comment to Moderator'}
               </h4>
               <button 
                 type="button" 
@@ -1926,6 +2390,274 @@ export default function FeedView() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* ========================================================================= */}
+      {/* INDIVIDUAL POST / DISCUSSION DETAIL VIEW (PC & MOBILE WEB)               */}
+      {/* ========================================================================= */}
+      {selectedPostModal && (
+        <div 
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="individual-post-title"
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-0 sm:p-4 overflow-y-auto"
+        >
+          <div className="bg-white dark:bg-[#17191C] w-full sm:max-w-2xl min-h-screen sm:min-h-0 sm:max-h-[90vh] sm:rounded-2xl shadow-2xl border-0 sm:border border-slate-200/80 dark:border-slate-800 flex flex-col overflow-hidden animate-in fade-in duration-200">
+            
+            {/* Top Header / Breadcrumb Bar */}
+            <div className="sticky top-0 z-20 bg-white/95 dark:bg-[#17191C]/95 backdrop-blur-md px-4 sm:px-6 py-3.5 border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={closeIndividualPost}
+                className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-[#9E1315] dark:text-rose-400 hover:text-[#841012] transition-colors cursor-pointer group"
+                aria-label="Back to Community Feed"
+              >
+                <span className="material-symbols-outlined text-[18px] group-hover:-translate-x-0.5 transition-transform">
+                  arrow_back
+                </span>
+                <span>Community Feed</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => copyPostLink(selectedPostModal.id)}
+                  className="p-1.5 rounded-lg text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                  title="Copy post link"
+                  aria-label="Share post"
+                >
+                  <span className="material-symbols-outlined text-[18px]">share</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={closeIndividualPost}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                  aria-label="Close post view"
+                >
+                  <span className="material-symbols-outlined text-[20px]">close</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Scrollable Post Content Body */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+              
+              {/* Discussion Title (Prominently displayed above post body, only if title exists and non-empty) */}
+              {selectedPostModal.title && selectedPostModal.title.trim() && (
+                <h1 
+                  id="individual-post-title"
+                  className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight leading-snug break-words"
+                >
+                  {selectedPostModal.title}
+                </h1>
+              )}
+
+              {/* Author & Timestamp Hierarchy */}
+              <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                    selectedPostModal.authorRole === 'management'
+                      ? 'bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900 text-[#9E1315] dark:text-rose-400'
+                      : selectedPostModal.category === 'complaint'
+                      ? 'bg-sky-50 dark:bg-sky-950/60 border border-sky-100 dark:border-sky-900 text-sky-800 dark:text-sky-300'
+                      : 'bg-amber-50 dark:bg-amber-950/60 border border-amber-200/80 dark:border-amber-900 text-amber-800 dark:text-amber-300'
+                  }`}>
+                    {selectedPostModal.isAnonymous ? '?' : (selectedPostModal.authorName[0] || 'U')}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[14px] font-semibold text-slate-900 dark:text-slate-100">
+                        {selectedPostModal.isAnonymous ? 'Anonymous Resident' : selectedPostModal.authorName}
+                      </span>
+                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[11px] font-medium">
+                        <span className="material-symbols-outlined text-[12px] text-slate-400 dark:text-slate-500">verified</span>
+                        {selectedPostModal.authorRole === 'management' ? 'Management' : 'Resident'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 text-[12px] mt-0.5">
+                      <span>{selectedPostModal.authorPrecinct || 'City of Elmina'}</span>
+                      <span className="text-slate-300 dark:text-slate-600">•</span>
+                      <span className="px-1.5 py-0.2 rounded bg-slate-50 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-[11px]">
+                        {selectedPostModal.category === 'security_alert' ? 'Security Alert' : selectedPostModal.category === 'announcement' ? 'Township Notice' : selectedPostModal.category === 'complaint' ? 'Help & Requests' : selectedPostModal.category === 'event' ? 'Events' : 'Discussion'}
+                      </span>
+                      <span className="text-slate-300 dark:text-slate-600">•</span>
+                      <TimeAgo date={selectedPostModal.createdAt} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Original Discussion Body */}
+              <div className="text-[14.5px] sm:text-[15px] text-slate-800 dark:text-slate-200 leading-relaxed whitespace-pre-line break-words">
+                {selectedPostModal.content}
+              </div>
+
+              {/* Attached Gallery Images */}
+              {selectedPostModal.galleryImages && selectedPostModal.galleryImages.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl overflow-hidden pt-2">
+                  {selectedPostModal.galleryImages.map((imgUrl, imgIdx) => (
+                    <div key={imgIdx} className="relative h-60 bg-slate-100 dark:bg-slate-800 rounded-lg overflow-hidden border border-slate-200/60 dark:border-slate-700">
+                      <img 
+                        src={imgUrl} 
+                        alt={selectedPostModal.title || 'Attached photo'} 
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  ))}
+                </div>
+              ) : selectedPostModal.imageUrl ? (
+                <div className="relative rounded-xl overflow-hidden max-h-96 bg-slate-100 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 pt-2">
+                  <img 
+                    src={selectedPostModal.imageUrl} 
+                    alt={selectedPostModal.title || 'Attached photo'} 
+                    className="w-full h-auto max-h-96 object-cover rounded-xl"
+                  />
+                </div>
+              ) : null}
+
+              {/* Engagement Stats & Actions Bar */}
+              <div className="flex items-center justify-between py-2 border-y border-slate-100 dark:border-slate-800 text-slate-500 dark:text-slate-400 text-xs sm:text-sm">
+                <div className="flex items-center gap-4">
+                  <button
+                    type="button"
+                    onClick={(e) => handleLikeClick(e, selectedPostModal.id)}
+                    className={`flex items-center gap-1.5 transition-colors cursor-pointer ${
+                      selectedPostModal.upvotedByCurrentUser ? 'text-[#9E1315] dark:text-rose-400 font-semibold' : 'hover:text-[#9E1315] dark:hover:text-rose-400'
+                    }`}
+                  >
+                    <span className={`material-symbols-outlined text-[18px] ${selectedPostModal.upvotedByCurrentUser ? 'text-[#9E1315] dark:text-rose-400' : ''}`}>
+                      {selectedPostModal.upvotedByCurrentUser ? 'favorite' : 'favorite_border'}
+                    </span>
+                    <span>{selectedPostModal.upvotesCount}</span>
+                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-[18px]">chat_bubble_outline</span>
+                    <span>{getPostComments(selectedPostModal.id).length} comments</span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setReportTarget({
+                    targetType: 'post',
+                    targetId: selectedPostModal.id,
+                    targetTitle: selectedPostModal.title || 'Community Post',
+                    targetContent: selectedPostModal.content,
+                  })}
+                  className="flex items-center gap-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[16px]">flag</span>
+                  <span className="text-xs">Report</span>
+                </button>
+              </div>
+
+              {/* Comments & Replies Thread */}
+              <div className="space-y-3 pt-2">
+                <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">
+                  Discussion Replies ({getPostComments(selectedPostModal.id).length})
+                </h3>
+
+                <div className="space-y-2.5">
+                  {getPostComments(selectedPostModal.id).map((reply) => {
+                    const isReplyAuthor = reply.authorId === currentUser.id;
+                    const canDelete = isReplyAuthor || currentUser.role === 'management';
+
+                    return (
+                      <div key={reply.id} id={`detail-comment-${reply.id}`} className="flex items-start gap-3 bg-slate-50 dark:bg-slate-900/60 p-3 rounded-xl border border-slate-200/60 dark:border-slate-800">
+                        <div className="w-7 h-7 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center text-[10px] font-semibold shrink-0">
+                          {reply.authorName[0]}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[12.5px] font-semibold text-slate-800 dark:text-slate-200">
+                                {reply.authorName}
+                              </span>
+                              {reply.authorId === selectedPostModal.authorId && (
+                                <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-amber-50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                                  Author
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                                <TimeAgo date={reply.createdAt} />
+                              </span>
+                              {canDelete && (
+                                <button
+                                  type="button"
+                                  onClick={() => setDeleteReplyModal({
+                                    id: reply.id,
+                                    postId: selectedPostModal.id,
+                                    authorName: reply.authorName,
+                                    isManagement: currentUser.role === 'management' && !isReplyAuthor,
+                                  })}
+                                  className="text-slate-400 hover:text-rose-600 transition-colors p-0.5 cursor-pointer"
+                                  title="Delete comment"
+                                >
+                                  <Trash2 className="w-3 h-3 text-rose-500" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          <p className="text-[13px] text-slate-700 dark:text-slate-300 mt-1 whitespace-pre-line break-words">
+                            {reply.content}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {getPostComments(selectedPostModal.id).length === 0 && (
+                    <p className="text-xs text-slate-400 dark:text-slate-500 py-3 text-center italic">
+                      No replies yet. Be the first neighbor to respond to this discussion!
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Sticky Bottom Reply Input Composer */}
+            <div className="sticky bottom-0 bg-white dark:bg-[#17191C] p-3 sm:p-4 border-t border-slate-200/80 dark:border-slate-800">
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  const text = replyInput[selectedPostModal.id]?.trim();
+                  if (!text) return;
+                  setSubmittingReply(selectedPostModal.id);
+                  try {
+                    await addReply(selectedPostModal.id, text);
+                    setReplyInput((prev) => ({ ...prev, [selectedPostModal.id]: '' }));
+                    triggerSuccessSequence('Reply Published', 'Your comment was posted to the discussion.');
+                  } finally {
+                    setSubmittingReply(null);
+                  }
+                }}
+                className="flex items-center gap-2"
+              >
+                <input
+                  type="text"
+                  value={replyInput[selectedPostModal.id] || ''}
+                  onChange={(e) => setReplyInput({ ...replyInput, [selectedPostModal.id]: e.target.value })}
+                  placeholder="Write a neighborly reply to this discussion..."
+                  className="flex-1 h-10 px-3.5 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 text-xs sm:text-sm border border-slate-200/80 dark:border-slate-700 focus:outline-none focus:border-[#9E1315]"
+                />
+                <button
+                  type="submit"
+                  disabled={submittingReply === selectedPostModal.id || !replyInput[selectedPostModal.id]?.trim()}
+                  className="h-10 px-4 rounded-xl bg-[#9E1315] hover:bg-[#841012] disabled:opacity-50 text-white text-xs sm:text-sm font-semibold flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                >
+                  {submittingReply === selectedPostModal.id ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <span className="material-symbols-outlined text-[16px]">send</span>
+                  )}
+                  <span className="hidden sm:inline">Reply</span>
+                </button>
+              </form>
+            </div>
+
           </div>
         </div>
       )}

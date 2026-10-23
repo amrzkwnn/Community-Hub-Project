@@ -32,6 +32,7 @@ export default function Header() {
     setIsAuthModalOpen,
     setIsProfileModalOpen,
     t, 
+    activeTab,
     setActiveTab,
     isSidebarCollapsed,
     toggleSidebar,
@@ -41,7 +42,22 @@ export default function Header() {
 
   const [roleMenuOpen, setRoleMenuOpen] = useState(false);
   const [isContactModalOpen, setIsContactModalOpen] = useState(false);
+  const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
   const roleMenuRef = useRef<HTMLDivElement>(null);
+
+  const getMobileSectionLabel = (tab: string) => {
+    switch (tab) {
+      case 'home': return 'Home';
+      case 'feed': return 'Feed';
+      case 'resilience': return 'Map';
+      case 'exchange': return 'Exchange';
+      case 'services': return 'Services';
+      case 'messages': return 'Messages';
+      case 'settings': return 'Settings';
+      case 'management': return 'Console';
+      default: return 'Home';
+    }
+  };
 
   // Close role dropdown on outside click
   useEffect(() => {
@@ -138,102 +154,129 @@ export default function Header() {
         {/* ========================================================================= */}
         <div className="relative z-10 px-4 lg:px-6 h-16 flex items-center justify-between gap-3 lg:gap-4 pointer-events-auto">
           
-          {/* Left Controls: Sidebar Toggle & Brand Logo */}
-          <div className="flex items-center gap-2.5 shrink-0">
-            {/* Desktop Sidebar Toggle */}
-            <button
-              type="button"
-              onClick={toggleSidebar}
-              aria-label={isSidebarCollapsed ? "Expand navigation sidebar" : "Collapse navigation sidebar"}
-              aria-expanded={!isSidebarCollapsed}
-              title={isSidebarCollapsed ? "Expand navigation sidebar" : "Collapse navigation sidebar"}
-              className="hidden lg:flex items-center justify-center w-9 h-9 rounded-lg border border-slate-200/80 dark:border-slate-800 bg-white/90 dark:bg-slate-800/90 hover:bg-slate-100 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 shadow-2xs hover:shadow-xs transition-all active:scale-95 cursor-pointer"
-            >
-              {isSidebarCollapsed ? (
-                <PanelLeft className="w-4.5 h-4.5" />
-              ) : (
-                <PanelLeftClose className="w-4.5 h-4.5" />
-              )}
-            </button>
-
-            {/* Mobile Navigation Drawer Toggle */}
-            <button
-              type="button"
-              onClick={toggleMobileNav}
-              aria-label={isMobileNavOpen ? "Close navigation menu" : "Open navigation menu"}
-              aria-expanded={isMobileNavOpen}
-              className="flex lg:hidden items-center justify-center w-9 h-9 rounded-lg border border-slate-200/80 dark:border-slate-800 bg-white/90 dark:bg-slate-800/90 hover:bg-slate-100 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 shadow-2xs transition-all active:scale-95 cursor-pointer"
-            >
-              <Menu className="w-4.5 h-4.5" />
-            </button>
-
-            {/* Brand Logo (Visible on mobile, where there is no permanent left sidebar) */}
-            <div 
-              onClick={() => setActiveTab('home')}
-              className="flex lg:hidden items-center gap-2.5 cursor-pointer select-none"
-              title="Community Hub"
-            >
-              <div className="w-8 h-8 rounded-lg bg-[#9E1315] text-white flex items-center justify-center font-bold text-xs shadow-xs hover:scale-105 transition-transform shrink-0">
-                SD
-              </div>
-              <span className="font-bold text-slate-900 dark:text-slate-100 text-sm tracking-tight truncate">
-                Community Hub
-              </span>
-            </div>
-          </div>
-
-          {/* Global Search Component across all modules */}
-          <div className="flex-1 max-w-lg min-w-0">
-            <GlobalSearch />
-          </div>
-
-          {/* Right Header Cluster: Contact Us, Notifications & Profile Menu */}
-          <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
-            
-            {/* Contact Us Button: Solid red rectangular button (8-10px radius) */}
-            <button
-              type="button"
-              onClick={() => setIsContactModalOpen(true)}
-              aria-haspopup="dialog"
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[#9E1315] hover:bg-[#841012] text-white text-xs font-semibold shadow-xs hover:shadow hover:brightness-105 active:scale-[0.98] transition-all cursor-pointer shrink-0"
-              title="Township Directory & Rapid Response Contacts"
-            >
-              <Phone className="w-3.5 h-3.5" />
-              <span>{t('contactUs') || 'Contact Us'}</span>
-            </button>
-
-            {/* Notification Center */}
-            <NotificationCenter />
-
-            {/* Profile Dropdown & Persona Switcher (Rounded rectangular trigger) */}
-            <div ref={roleMenuRef} className="relative z-50">
+          {/* MOBILE PHONE HEADER (< lg) - Exact Google Stitch Design */}
+          <div className="flex lg:hidden items-center justify-between w-full">
+            <div className="flex lg:hidden items-center gap-2.5">
               <button
                 type="button"
-                onClick={() => setRoleMenuOpen(!roleMenuOpen)}
-                className="flex items-center gap-2 p-1 pl-2.5 pr-2 rounded-xl border border-slate-200/80 dark:border-slate-700/80 hover:border-slate-300 dark:hover:border-slate-600 bg-white/90 dark:bg-slate-800/90 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer shadow-2xs"
-                title={`Profile: ${currentUser.displayName || currentUser.fullName} (${currentUser.role})`}
-                aria-label="Profile Menu"
-                aria-expanded={roleMenuOpen}
+                onClick={toggleMobileNav}
+                aria-label={isMobileNavOpen ? "Close navigation menu" : "Open navigation menu"}
+                aria-expanded={isMobileNavOpen}
+                className="w-10 h-10 flex items-center justify-center text-slate-800 dark:text-slate-100 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-transform cursor-pointer"
               >
-                <div className="text-right hidden md:block">
-                  <span className="text-xs font-semibold text-slate-900 dark:text-slate-100 block truncate max-w-[120px]">
-                    {currentUser.displayName || currentUser.fullName}
-                  </span>
-                  <div className="text-[10px] text-slate-500 dark:text-slate-400">
-                    <span className={`inline-block px-1.5 py-0.2 rounded border text-[9px] font-semibold ${roleInfo.bg}`}>
-                      {roleInfo.label}
-                    </span>
-                  </div>
-                </div>
+                <span className="material-symbols-outlined text-2xl">menu</span>
+              </button>
+              <div 
+                onClick={() => setActiveTab('home')}
+                className="flex flex-col ml-0.5 cursor-pointer select-none"
+              >
+                <span className="sr-only">Community Hub</span>
+                <span className="text-base font-bold text-[#9E1315] tracking-tight leading-none">TESDH</span>
+                <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mt-0.5">
+                  {getMobileSectionLabel(activeTab)}
+                </span>
+              </div>
+            </div>
 
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setIsMobileSearchOpen((prev) => !prev)}
+                aria-label="Global Search"
+                className="w-9 h-9 flex items-center justify-center text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-transform cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-xl">search</span>
+              </button>
+
+              <a
+                href="tel:0378452222"
+                aria-label="Emergency Hotline 03-7845 2222"
+                className="h-8 px-2.5 flex items-center gap-1 bg-[#9E1315] hover:bg-[#841012] text-white rounded-lg font-semibold text-xs shadow-xs active:scale-95 transition-transform"
+              >
+                <span className="material-symbols-outlined text-sm animate-pulse">e911_emergency</span>
+                <span className="font-bold text-[11px]">SOS</span>
+              </a>
+
+              <NotificationCenter />
+
+              <div
+                onClick={() => setRoleMenuOpen(!roleMenuOpen)}
+                className="w-8 h-8 rounded-[9999px] overflow-hidden ring-1 ring-slate-200 dark:ring-slate-700 cursor-pointer ml-1 shrink-0"
+              >
                 <img
                   src={currentUser.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
                   alt={currentUser.fullName}
-                  className="w-8 h-8 rounded-full object-cover ring-1 ring-slate-200 dark:ring-slate-700 shrink-0"
+                  className="w-full h-full object-cover"
                 />
+              </div>
+            </div>
+          </div>
 
-                <ChevronDown className={`w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform duration-200 ${roleMenuOpen ? 'rotate-180' : ''}`} />
+          {/* DESKTOP HEADER (>= lg) - 100% Preserved Desktop Layout */}
+          <div className="hidden lg:flex items-center justify-between w-full gap-4">
+            <div className="flex items-center gap-2.5 shrink-0">
+              <button
+                type="button"
+                onClick={toggleSidebar}
+                aria-label={isSidebarCollapsed ? "Expand navigation sidebar" : "Collapse navigation sidebar"}
+                aria-expanded={!isSidebarCollapsed}
+                title={isSidebarCollapsed ? "Expand navigation sidebar" : "Collapse navigation sidebar"}
+                className="flex items-center justify-center w-9 h-9 rounded-lg border border-slate-200/80 dark:border-slate-800 bg-white/90 dark:bg-slate-800/90 hover:bg-slate-100 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 shadow-2xs hover:shadow-xs transition-all active:scale-95 cursor-pointer"
+              >
+                {isSidebarCollapsed ? (
+                  <PanelLeft className="w-4.5 h-4.5" />
+                ) : (
+                  <PanelLeftClose className="w-4.5 h-4.5" />
+                )}
               </button>
+            </div>
+
+            <div className="flex-1 max-w-lg min-w-0">
+              <GlobalSearch />
+            </div>
+
+            <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsContactModalOpen(true)}
+                aria-haspopup="dialog"
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[#9E1315] hover:bg-[#841012] text-white text-xs font-semibold shadow-xs hover:shadow hover:brightness-105 active:scale-[0.98] transition-all cursor-pointer shrink-0"
+                title="Township Directory & Rapid Response Contacts"
+              >
+                <Phone className="w-3.5 h-3.5" />
+                <span>{t('contactUs') || 'Contact Us'}</span>
+              </button>
+
+              <NotificationCenter />
+
+              <div ref={roleMenuRef} className="relative z-50">
+                <button
+                  type="button"
+                  onClick={() => setRoleMenuOpen(!roleMenuOpen)}
+                  className="flex items-center gap-2 p-1 pl-2.5 pr-2 rounded-xl border border-slate-200/80 dark:border-slate-700/80 hover:border-slate-300 dark:hover:border-slate-600 bg-white/90 dark:bg-slate-800/90 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer shadow-2xs"
+                  title={`Profile: ${currentUser.displayName || currentUser.fullName} (${currentUser.role})`}
+                  aria-label="Profile Menu"
+                  aria-expanded={roleMenuOpen}
+                >
+                  <div className="text-right hidden md:block">
+                    <span className="text-xs font-semibold text-slate-900 dark:text-slate-100 block truncate max-w-[120px]">
+                      {currentUser.displayName || currentUser.fullName}
+                    </span>
+                    <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                      <span className={`inline-block px-1.5 py-0.2 rounded border text-[9px] font-semibold ${roleInfo.bg}`}>
+                        {roleInfo.label}
+                      </span>
+                    </div>
+                  </div>
+
+                  <img
+                    src={currentUser.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
+                    alt={currentUser.fullName}
+                    className="w-8 h-8 rounded-full object-cover ring-1 ring-slate-200 dark:ring-slate-700 shrink-0"
+                  />
+
+                  <ChevronDown className={`w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform duration-200 ${roleMenuOpen ? 'rotate-180' : ''}`} />
+                </button>
 
               {/* Persona Switcher & Auth Dropdown Menu */}
               {roleMenuOpen && (
@@ -359,6 +402,24 @@ export default function Header() {
 
           </div>
         </div>
+      </div>
+
+        {/* Mobile Search Overlay when search button tapped */}
+        {isMobileSearchOpen && (
+          <div className="lg:hidden relative z-20 px-4 py-2.5 bg-white/95 dark:bg-[#15181C]/95 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 pointer-events-auto flex items-center gap-2 animate-in slide-in-from-top-2 duration-150">
+            <div className="flex-1 min-w-0">
+              <GlobalSearch />
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsMobileSearchOpen(false)}
+              aria-label="Close search"
+              className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+            >
+              <span className="material-symbols-outlined text-lg">close</span>
+            </button>
+          </div>
+        )}
       </header>
 
       {/* Modals */}

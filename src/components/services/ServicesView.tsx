@@ -428,6 +428,247 @@ export default function ServicesView() {
 
   return (
     <div className="w-full h-full flex flex-col min-h-0 overflow-hidden bg-[#F8F9FA] dark:bg-[#0F1113] relative">
+      {/* ========================================================================= */}
+      {/* MOBILE PHONE SECTION: Google Stitch Mobile Local Service                  */}
+      {/* ========================================================================= */}
+      <div className="block md:hidden flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-3">
+        {/* Header Title & Context Action Button */}
+        <div className="flex items-center justify-between pt-1">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+            Local Services
+          </h1>
+          <button
+            type="button"
+            onClick={() => {
+              if (activeTab === 'services') {
+                setIsOfferServiceOpen(true);
+              } else {
+                setIsRequestHelpOpen(true);
+              }
+            }}
+            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl bg-[#9E1315] hover:bg-[#841012] text-white font-semibold text-xs shadow-xs active:scale-95 transition-all cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+            <span>{activeTab === 'services' ? '+ Offer Service' : '+ Request Help'}</span>
+          </button>
+        </div>
+
+        {/* Segmented Control Switcher */}
+        <div className="p-1 bg-slate-200/80 dark:bg-slate-800 rounded-full flex gap-1">
+          <button
+            type="button"
+            onClick={() => setActiveTabState('services')}
+            className={`flex-1 py-1.5 px-3 rounded-full text-xs text-center transition-all cursor-pointer ${
+              activeTab === 'services'
+                ? 'bg-white dark:bg-slate-900 text-[#9E1315] dark:text-rose-400 shadow-xs font-semibold'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+            }`}
+          >
+            Find Services ({services.filter((s) => s.type === 'offering').length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTabState('requests')}
+            className={`flex-1 py-1.5 px-3 rounded-full text-xs text-center transition-all cursor-pointer ${
+              activeTab === 'requests'
+                ? 'bg-white dark:bg-slate-900 text-[#9E1315] dark:text-rose-400 shadow-xs font-semibold'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+            }`}
+          >
+            Community Requests ({services.filter((s) => s.type === 'requesting').length})
+          </button>
+        </div>
+
+        {/* Search Input */}
+        <div className="relative flex items-center w-full">
+          <Search className="w-4 h-4 absolute left-3 text-slate-400 pointer-events-none" aria-hidden="true" />
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search handyman, gardening, tutor..."
+            className="w-full h-10 pl-9 pr-9 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-slate-900 dark:text-white text-xs placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#9E1315]/20 shadow-xs"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+
+        {/* Category Pills (Horizontal Scroll) */}
+        <div className="py-1 overflow-x-auto no-scrollbar flex items-center gap-1.5 -mx-4 px-4 select-none">
+          <button
+            type="button"
+            onClick={() => setSelectedCategory('all')}
+            className={`shrink-0 h-8 px-3.5 rounded-full text-xs font-semibold flex items-center gap-1 shadow-xs active:scale-95 transition-transform ${
+              selectedCategory === 'all'
+                ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900'
+                : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800'
+            }`}
+          >
+            All
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedCategory(selectedCategory === 'home_services' ? 'all' : 'home_services')}
+            className={`shrink-0 h-8 px-3.5 rounded-full text-xs font-medium flex items-center gap-1 shadow-xs active:scale-95 transition-all ${
+              selectedCategory === 'home_services'
+                ? 'bg-[#9E1315] text-white'
+                : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800'
+            }`}
+          >
+            Home Repair
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedCategory(selectedCategory === 'tech_help' ? 'all' : 'tech_help')}
+            className={`shrink-0 h-8 px-3.5 rounded-full text-xs font-medium flex items-center gap-1 shadow-xs active:scale-95 transition-all ${
+              selectedCategory === 'tech_help'
+                ? 'bg-[#9E1315] text-white'
+                : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800'
+            }`}
+          >
+            Electrical
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedCategory(selectedCategory === 'gardening' ? 'all' : 'gardening')}
+            className={`shrink-0 h-8 px-3.5 rounded-full text-xs font-medium flex items-center gap-1 shadow-xs active:scale-95 transition-all ${
+              selectedCategory === 'gardening'
+                ? 'bg-[#9E1315] text-white'
+                : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800'
+            }`}
+          >
+            Gardening
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedCategory(selectedCategory === 'childcare' ? 'all' : 'childcare')}
+            className={`shrink-0 h-8 px-3.5 rounded-full text-xs font-medium flex items-center gap-1 shadow-xs active:scale-95 transition-all ${
+              selectedCategory === 'childcare'
+                ? 'bg-[#9E1315] text-white'
+                : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800'
+            }`}
+          >
+            Pet Care
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedCategory(selectedCategory === 'tutoring' ? 'all' : 'tutoring')}
+            className={`shrink-0 h-8 px-3.5 rounded-full text-xs font-medium flex items-center gap-1 shadow-xs active:scale-95 transition-all ${
+              selectedCategory === 'tutoring'
+                ? 'bg-[#9E1315] text-white'
+                : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800'
+            }`}
+          >
+            Tutoring
+          </button>
+        </div>
+
+        {/* Results Count */}
+        <div className="py-1 text-xs text-slate-500 dark:text-slate-400">
+          Showing {filteredServices.length} resident services in Elmina Valley, Gardens &amp; Central
+        </div>
+
+        {/* Primary Services Cards Feed */}
+        <div className="space-y-3 pb-20">
+          {filteredServices.length === 0 ? (
+            <div className="p-8 text-center rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs text-slate-500">
+              No services found matching this category.
+            </div>
+          ) : (
+            filteredServices.map((serv) => (
+              <article
+                key={serv.id}
+                className="bg-white dark:bg-[#15181C] rounded-xl p-4 shadow-xs border border-slate-200/80 dark:border-slate-800 flex flex-col gap-3 relative overflow-hidden"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-3">
+                    <div className="relative">
+                      <div className="w-11 h-11 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center font-bold text-slate-700 dark:text-slate-300 overflow-hidden shadow-inner">
+                        {serv.imageUrl ? (
+                          <img src={serv.imageUrl} alt={serv.authorName} className="w-full h-full object-cover" />
+                        ) : (
+                          <span>{serv.authorName.charAt(0)}</span>
+                        )}
+                      </div>
+                      <span className="absolute -bottom-0.5 -right-0.5 bg-[#9E1315] text-white rounded-full w-4 h-4 flex items-center justify-center shadow-xs">
+                        <span className="material-symbols-outlined text-[10px]">verified</span>
+                      </span>
+                    </div>
+                    <div className="flex flex-col">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-xs text-slate-900 dark:text-slate-100">{serv.authorName}</span>
+                        <span className="bg-slate-100 dark:bg-slate-800 text-[#9E1315] dark:text-rose-400 text-[10px] px-1.5 py-0.2 rounded font-semibold">
+                          Resident
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5">
+                        <span className="material-symbols-outlined text-xs text-[#9E1315]">near_me</span>
+                        {serv.precinct}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end">
+                    <span className="text-xs font-bold text-[#9E1315] dark:text-rose-400 leading-tight">
+                      {serv.priceEstimate || 'Free / Barter'}
+                    </span>
+                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium mt-0.5 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                      {serv.availability || 'Available today'}
+                    </span>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="font-bold text-xs text-slate-900 dark:text-slate-100 leading-snug">
+                    {serv.title}
+                  </h3>
+                  <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-1 line-clamp-2">
+                    {serv.description}
+                  </p>
+                </div>
+
+                {/* Trust Bar & Action */}
+                <div className="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center gap-1 text-slate-500 text-xs">
+                    <span className="material-symbols-outlined text-amber-500 text-sm">star</span>
+                    <span className="font-bold text-slate-800 dark:text-slate-200 text-xs">4.9</span>
+                    <span className="text-[11px] text-slate-400">(24 reviews)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={(e) => handleOpenDetail(serv, e.currentTarget)}
+                      className="h-8 px-2.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold active:scale-95 transition-transform"
+                    >
+                      Details
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenContact(serv)}
+                      className="h-8 px-3 rounded-lg bg-[#9E1315] hover:bg-[#841012] text-white text-xs font-semibold flex items-center gap-1 shadow-xs active:scale-95 transition-transform"
+                    >
+                      <span className="material-symbols-outlined text-xs">chat_bubble</span>
+                      Book / Message
+                    </button>
+                  </div>
+                </div>
+              </article>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* DESKTOP / TABLET SECTION (>= 768px): Preserved 100% Unchanged            */}
+      {/* ========================================================================= */}
+      <div className="hidden md:flex flex-col min-h-0 flex-1 overflow-hidden">
       {/* Synchronized Collapsing Header Outer Wrapper */}
       <div 
         ref={headerWrapperRef}
@@ -985,6 +1226,7 @@ export default function ServicesView() {
       )}
       </div>
     </div>
+  </div>
   </div>
 
       {/* ==================== MODAL 1: OFFER A SERVICE ==================== */}

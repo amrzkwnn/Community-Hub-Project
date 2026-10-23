@@ -626,7 +626,7 @@ export default function ManagementView() {
           <div>
             <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white flex items-center gap-2.5">
               <LayoutDashboard className="w-5 h-5 text-[#9E1315]" />
-              <span>Management Overview</span>
+              <span>Community Administration & Security Console</span>
             </h1>
           </div>
 
@@ -676,7 +676,7 @@ export default function ManagementView() {
               <ShieldCheck className="w-4 h-4 text-[#9E1315]" />
               <div>
                 <span className="text-xs font-semibold text-white block leading-tight">
-                  {currentUser.fullName}
+                  {currentUser.fullName} (Duty Officer (Auditor))
                 </span>
                 <span className="text-[10px] text-slate-400 font-mono leading-tight">
                   {currentUser.role.toUpperCase()} • ID: {currentUser.id.slice(0, 8)}

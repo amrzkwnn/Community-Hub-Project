@@ -561,9 +561,9 @@ export const INITIAL_EXCHANGE_ITEMS: CircularExchangeItem[] = [
     title: 'Solid Teak 4-Seater Dining Chairs',
     description: 'Upgrading our dining set. Chairs are solid natural teak wood with minimal scuffs. Sturdy construction, ready for porch pickup.',
     condition: 'good',
-    imageUrl: 'https://images.unsplash.com/photo-1533090161767-e6ffed986b88?w=800&auto=format&fit=crop&q=80',
+    imageUrl: 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=800&auto=format&fit=crop&q=80',
     imageUrls: [
-      'https://images.unsplash.com/photo-1533090161767-e6ffed986b88?w=800&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=800&auto=format&fit=crop&q=80',
       'https://images.unsplash.com/photo-1503602642458-232111445657?w=800&auto=format&fit=crop&q=80'
     ],
     precinct: 'Elmina Green 1',

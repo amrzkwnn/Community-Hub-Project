@@ -1,0 +1,413 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"><meta content="mobile_tab" name="shell-type"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&amp;display=swap" rel="stylesheet"><style>@layer base{html,body{width:100vw;margin:0;padding:0;}body{overscroll-behavior:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "primary-fixed-dim": "#ffb4ab", "surface-variant": "#dae2fd", "on-secondary-fixed-variant": "#763300", "inverse-surface": "#283044", "brand-crimson": "#9E1315", "outline-variant": "#E5E7EB", "on-error": "#ffffff", "error-container": "#ffdad6", "secondary-container": "#fd8a42", "inverse-on-surface": "#eef0ff", "tertiary-container": "#003fc7", "tertiary": "#002c93", "surface-container-lowest": "#FFFFFF", "surface-container-highest": "#dae2fd", "secondary-fixed": "#ffdbca", "brand-crimson-hover": "#841012", "secondary": "#9b4500", "surface-container-high": "#F1F5F9", "on-background": "#131b2e", "on-surface": "#131b2e", "surface-dim": "#d2d9f4", "surface-container": "#eaedff", "inverse-primary": "#ffb4ab", "on-primary-container": "#ffaca2", "on-primary-fixed-variant": "#92060e", "on-tertiary-container": "#afbeff", "on-secondary-container": "#682c00", "on-surface-variant": "#64748B", "on-secondary": "#ffffff", "background": "#faf8ff", "surface": "#F9FAFB", "surface-container-low": "#f2f3ff", "tertiary-fixed-dim": "#b7c4ff", "secondary-fixed-dim": "#ffb68e", "on-error-container": "#93000a", "primary-container": "#9e1315", "on-secondary-fixed": "#331200", "tertiary-fixed": "#dce1ff", "error": "#ba1a1a", "on-tertiary-fixed": "#001551", "on-primary": "#ffffff", "surface-bright": "#faf8ff", "on-tertiary": "#ffffff", "primary": "#770007", "on-tertiary-fixed-variant": "#0039b5", "surface-tint": "#b42622", "outline": "#CBD5E1", "on-primary-fixed": "#410002", "primary-fixed": "#ffdad6" }, "borderRadius": { "DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem" }, "spacing": { "margin": "3rem", "gutter": "1.5rem", "space-md": "1rem", "space-lg": "1.5rem", "space-sm": "0.5rem", "space-xl": "2.5rem", "margin-mobile": "1rem", "gutter-mobile": "1rem", "space-xs": "0.25rem" }, "fontFamily": { "label-sm": ["Inter"], "body-md": ["Inter"], "headline-md": ["Inter"], "body-lg": ["Inter"], "headline-lg-mobile": ["Inter"], "headline-sm": ["Inter"], "label-md": ["Inter"], "title-md": ["Inter"], "display": ["Inter"], "body-sm": ["Inter"], "headline-lg": ["Inter"] }, "fontSize": { "label-sm": ["11px", { "lineHeight": "14px", "letterSpacing": "0.04em", "fontWeight": "500" }], "body-md": ["14px", { "lineHeight": "22px", "letterSpacing": "-0.005em", "fontWeight": "400" }], "headline-md": ["22px", { "lineHeight": "30px", "letterSpacing": "-0.02em", "fontWeight": "600" }], "body-lg": ["17px", { "lineHeight": "26px", "letterSpacing": "-0.01em", "fontWeight": "400" }], "headline-lg-mobile": ["26px", { "lineHeight": "34px", "letterSpacing": "-0.02em", "fontWeight": "700" }], "headline-sm": ["18px", { "lineHeight": "26px", "letterSpacing": "-0.015em", "fontWeight": "600" }], "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "500" }], "title-md": ["15px", { "lineHeight": "22px", "letterSpacing": "-0.01em", "fontWeight": "600" }], "display": ["42px", { "lineHeight": "50px", "letterSpacing": "-0.025em", "fontWeight": "700" }], "body-sm": ["13px", { "lineHeight": "18px", "letterSpacing": "0em", "fontWeight": "400" }], "headline-lg": ["30px", { "lineHeight": "38px", "letterSpacing": "-0.025em", "fontWeight": "700" }] } } } };</script></head><body class="bg-surface font-body-md text-on-surface flex flex-col min-h-screen selection:bg-brand-crimson selection:text-white"><input class="peer hidden" id="drawer-toggle" type="checkbox"><aside class="fixed inset-y-0 left-0 z-50 w-72 bg-surface-container-lowest shadow-[0_4px_24px_rgba(0,0,0,0.08)] transform -translate-x-full peer-checked:translate-x-0 transition-transform duration-300 ease-in-out flex flex-col pt-safe pb-safe"><div class="h-16 px-space-md flex items-center justify-between"><div class="flex items-center gap-space-sm"><div class="w-8 h-8 rounded-lg bg-brand-crimson text-white flex items-center justify-center font-headline-sm text-headline-sm">T</div><div class="flex flex-col"><span class="font-title-md text-title-md text-on-surface leading-tight">TESDH Civic</span><span class="font-label-sm text-label-sm text-on-surface-variant">Hub Management</span></div></div><label class="w-11 h-11 flex items-center justify-center text-on-surface-variant cursor-pointer active:scale-95 transition-transform" for="drawer-toggle"><span class="material-symbols-outlined text-lg">close</span></label></div><div class="px-space-md py-space-sm"><div class="p-space-sm bg-surface-container-high rounded-xl"><span class="font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant block mb-1">Township Zone</span><span class="font-title-md text-title-md text-on-surface flex items-center gap-1"><span class="material-symbols-outlined text-sm text-brand-crimson">location_on</span> Heritage Sector 4</span></div></div><div class="flex-1 px-space-sm py-space-md flex flex-col gap-space-xs"><a class="flex items-center gap-space-md px-space-md h-12 rounded-lg text-on-surface hover:bg-surface-container-high transition-colors" data-path="local-services" href="#"><span class="material-symbols-outlined text-on-surface-variant">local_police</span><span class="font-title-md text-title-md">Local Services</span></a><a class="flex items-center gap-space-md px-space-md h-12 rounded-lg text-on-surface hover:bg-surface-container-high transition-colors" data-path="management-console" href="#"><span class="material-symbols-outlined text-on-surface-variant">admin_panel_settings</span><span class="font-title-md text-title-md">Management Console</span></a><a class="flex items-center gap-space-md px-space-md h-12 rounded-lg text-on-surface hover:bg-surface-container-high transition-colors" data-path="settings" href="#"><span class="material-symbols-outlined text-on-surface-variant">settings</span><span class="font-title-md text-title-md">Settings</span></a></div><div class="p-space-md bg-surface-container-low"><a class="flex items-center justify-center gap-space-sm h-11 w-full bg-brand-crimson text-white rounded-lg active:scale-95 transition-transform font-title-md text-title-md" href="tel:0378452222"><span class="material-symbols-outlined text-sm">phone_in_talk</span> Hotline 03-7845 2222</a></div></aside><label class="fixed inset-0 bg-inverse-surface/40 backdrop-blur-sm z-40 hidden peer-checked:block transition-opacity duration-300" for="drawer-toggle"></label><header class="fixed top-0 inset-x-0 z-30 bg-surface/80 backdrop-blur-xl pt-safe shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 px-space-md flex items-center justify-between gap-space-xs"><div class="flex items-center gap-space-xs"><label class="w-11 h-11 flex items-center justify-center text-on-surface cursor-pointer rounded-lg hover:bg-surface-container-high active:scale-95 transition-transform" for="drawer-toggle"><span class="material-symbols-outlined">menu</span></label><div class="flex flex-col ml-1"><span class="font-headline-sm text-headline-sm text-brand-crimson tracking-tight">TESDH</span><span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Feed</span></div></div><div class="flex items-center gap-space-xs"><button aria-label="Global Search" class="w-11 h-11 flex items-center justify-center text-on-surface-variant rounded-lg hover:bg-surface-container-high active:scale-95 transition-transform"><span class="material-symbols-outlined">search</span></button><a aria-label="Emergency Hotline 03-7845 2222" class="h-9 px-space-sm flex items-center gap-1 bg-brand-crimson text-white rounded-lg font-label-md text-label-md active:scale-95 transition-transform" href="tel:0378452222"><span class="material-symbols-outlined text-sm animate-pulse">e911_emergency</span><span class="hidden sm:inline font-label-sm text-label-sm font-semibold">SOS</span></a><button aria-label="Civic Alerts" class="w-11 h-11 relative flex items-center justify-center text-on-surface-variant rounded-lg hover:bg-surface-container-high active:scale-95 transition-transform"><span class="material-symbols-outlined">notifications</span><span class="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-brand-crimson ring-2 ring-surface"></span></button><div class="flex items-center pl-1"><img alt="Profile" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida/AEtjO1WQyzOd2_9sCfoUmWV7Tk6NwrXi0mbXcCyhhIUGJTxvjbjr5GExtJfjmTe6g-xXX0ByiCXoBqGEikLzj3wphA89ghk-ZFjHK_8AogsK8HwodpIv9JZw_kSjxPqmPc1CRiPkc7Z-oKt06Lq0jxPU36Ain9IoHU9yQaBLbN6ouTxygncvznQJywrdBRRaMfogLgpDzOuj7AzhhwHr9aFy6weHpeVaSUN0HMXY0q5dKRT4etzJ0vV4HmeOzCq4Rd4ZCUAtnAL390deayE"></div></div></div></header><main class="flex flex-col relative w-full pt-16 pb-24 bg-surface min-h-screen"><div class="flex flex-col w-full">
+<!-- Interactive Status Bar & Feed Header Context -->
+<div class="px-space-md py-space-sm bg-surface-container-lowest shadow-sm">
+<div class="px-space-md pt-4 pb-2">
+  <h1 class="text-2xl font-bold text-slate-900 tracking-tight">Community Feed</h1>
+</div>
+<!-- Top Filter Chips: Horizontal scrolling pill bar -->
+<div class="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5">
+<button class="filter-chip active flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-brand-crimson text-white font-label-md text-label-md shadow-sm active:scale-95 transition-transform shrink-0" data-category="all">
+<span class="">All Feeds</span>
+<span class="px-1.5 py-0.2 rounded-full bg-white/20 text-[10px]">28</span>
+</button>
+<button class="filter-chip flex items-center gap-1 px-3 py-1.5 rounded-full bg-surface-container text-on-surface-variant font-label-md text-label-md hover:bg-surface-variant active:scale-95 transition-transform shrink-0" data-category="announcements">
+<span class="material-symbols-outlined text-sm text-brand-crimson">campaign</span>
+<span class="">Announcements</span>
+</button>
+<button class="filter-chip flex items-center gap-1 px-3 py-1.5 rounded-full bg-surface-container text-on-surface-variant font-label-md text-label-md hover:bg-surface-variant active:scale-95 transition-transform shrink-0" data-category="general">
+<span class="">General</span>
+</button>
+<button class="filter-chip flex items-center gap-1 px-3 py-1.5 rounded-full bg-surface-container text-on-surface-variant font-label-md text-label-md hover:bg-surface-variant active:scale-95 transition-transform shrink-0" data-category="recommendations">
+<span class="material-symbols-outlined text-sm text-amber-600">thumb_up</span>
+<span class="">Recommendations</span>
+</button>
+<button class="filter-chip flex items-center gap-1 px-3 py-1.5 rounded-full bg-surface-container text-on-surface-variant font-label-md text-label-md hover:bg-surface-variant active:scale-95 transition-transform shrink-0" data-category="lost-found">
+<span class="material-symbols-outlined text-sm text-tertiary">search_check</span>
+<span class="">Lost &amp; Found</span>
+</button>
+<button class="filter-chip flex items-center gap-1 px-3 py-1.5 rounded-full bg-surface-container text-on-surface-variant font-label-md text-label-md hover:bg-surface-variant active:scale-95 transition-transform shrink-0" data-category="infrastructure">
+<span class="material-symbols-outlined text-sm text-secondary">handyman</span>
+<span class="">Infrastructure</span>
+</button>
+</div>
+</div>
+<div class="px-space-md py-space-sm flex flex-col gap-space-md">
+<!-- Compact Create Post Trigger Card -->
+<div class="w-full bg-surface-container-lowest rounded-xl p-space-sm shadow-sm flex flex-col gap-space-xs transition-shadow hover:shadow-md">
+<div class="flex items-center gap-space-sm">
+<div class="relative shrink-0">
+<img class="w-10 h-10 rounded-full object-cover" data-alt="Warm portrait photograph of a friendly Southeast Asian female community resident smiling gently with soft morning daylight in an urban park, crisp depth of field with crimson and white accents" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA5PAUCg-P4UPYJdJsnNB-KHgUfD3qtQHd_3xXOtTgRR22ZnUL0rSfpG8TN25Xil_tpYeHOPsCSeyuHK7AEcaBGK1JVkEFAe5V4tdqwYVSanzQnKTVocIrjW9iLYtqX6K690-1Xxps8YeegFC-4c4dCAoCjFII3Ft5o9OUVz_3w6koVLNfbqRep3-qA-UbM8JacLdouU_4DYZhUbWO5pX8FRUriAXSpf1kznMXCgfbV2pk9Nw6s-4iCNw">
+<span class="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 ring-2 ring-white"></span>
+</div>
+<button class="flex-1 text-left bg-surface-container-high hover:bg-surface-variant/80 transition-colors px-space-sm py-2 rounded-lg text-on-surface-variant font-body-sm text-body-sm flex items-center justify-between" id="quick-post-btn">
+<span class="">Share an update with Elmina...</span>
+<span class="material-symbols-outlined text-on-surface-variant text-lg">edit_square</span>
+</button>
+</div>
+<div class="flex items-center justify-between pt-1 px-1 text-on-surface-variant font-label-sm text-label-sm">
+<button class="flex items-center gap-1.5 py-1 px-2 rounded-lg hover:bg-surface-container active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-base text-brand-crimson">photo_library</span>
+<span class="">Photo / Media</span>
+</button>
+<button class="flex items-center gap-1.5 py-1 px-2 rounded-lg hover:bg-surface-container active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-base text-secondary">report_problem</span>
+<span class="">Civic Issue</span>
+</button>
+<button class="flex items-center gap-1.5 py-1 px-2 rounded-lg hover:bg-surface-container active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-base text-tertiary">event</span>
+<span class="">Activity</span>
+</button>
+</div>
+</div>
+<!-- FEED POST 1: Official Municipal Notice (Sime Darby Property Township Management) -->
+<article class="w-full bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden flex flex-col transition-all">
+<!-- Top authority color bar -->
+<div class="h-1.5 w-full bg-brand-crimson"></div>
+<div class="p-space-md flex flex-col gap-space-sm">
+<!-- Author Row -->
+<div class="flex items-start justify-between">
+<div class="flex items-center gap-space-sm">
+<div class="w-11 h-11 rounded-xl bg-brand-crimson text-white flex items-center justify-center font-headline-sm text-headline-sm shrink-0 shadow-sm">
+<span class="material-symbols-outlined text-2xl">apartment</span>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center gap-1">
+<span class="font-title-md text-title-md text-on-surface">SDP Township Mgt</span>
+<span class="material-symbols-outlined text-base text-blue-600" style="font-variation-settings: 'FILL' 1;">verified</span>
+<span class="px-1.5 py-0.2 rounded bg-brand-crimson/10 text-brand-crimson font-label-sm text-[10px] uppercase font-bold tracking-wider">Official</span>
+</div>
+<div class="flex items-center gap-1.5 text-on-surface-variant font-label-sm text-label-sm">
+<span class="">Ref: ELM-ENG-2025/08</span>
+<span class="">•</span>
+<span class="text-on-surface-variant">2 hrs ago</span>
+</div>
+</div>
+</div>
+<button aria-label="Notice options" class="w-8 h-8 flex items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container active:scale-95">
+<span class="material-symbols-outlined text-lg">more_horiz</span>
+</button>
+</div>
+<!-- Tag & Headline -->
+<div>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-error-container text-on-error-container font-label-sm text-label-sm mb-1.5">
+<span class="material-symbols-outlined text-xs">construction</span>
+            Scheduled Infrastructure Resurfacing
+          </span>
+<h2 class="font-headline-sm text-headline-sm text-on-surface leading-snug">
+            Sub-Culvert &amp; Road Surface Remediation at Persiaran Elmina (Km 3.4)
+          </h2>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant">
+          In conjunction with Shah Alam City Council (MBSA), our township infrastructure team will conduct culvert maintenance to enhance storm runoff capacity. Temporary single-lane diversions will be in place tonight between 10:30 PM &amp; 5:00 AM.
+        </p>
+<!-- Media Showcase Grid -->
+<div class="grid grid-cols-2 gap-2 rounded-xl overflow-hidden mt-1">
+<div class="relative group cursor-pointer overflow-hidden rounded-lg aspect-video bg-surface-container">
+<img class="w-full h-full object-cover transition-transform group-hover:scale-105" data-alt="High-resolution aerial view of a clean Malaysian suburban avenue undergoing organized municipal asphalt maintenance with traffic cones and modern safety signage under bright golden hour light" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC2w8UOXIk4Xps-32-f0IvCnolxt3WlBIB4XmnyEdk6q7FPMbSDj_HtdwHiptMbU5oMqC1haK49FLVk7wRPJ5aUznq7XDOop-1keNYsSqzAYF8wASzZTDy6EBluB6lfPjh_vVFJFEmPIPhpMXxjBkamJm7tcVMbtp9g8s_peHchxITCdYRwUrYwDPtJuy4GQZuX2b0ChTT_1Pz4CMHtAjhUYsuzbsXHCgmqnVCBosMfPqhroj1z91NbTg">
+<div class="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-inverse-surface/80 backdrop-blur-sm text-inverse-on-surface font-label-sm text-label-sm">
+              Workzone A
+            </div>
+</div>
+<div class="relative group cursor-pointer overflow-hidden rounded-lg aspect-video bg-surface-container">
+<img class="w-full h-full object-cover transition-transform group-hover:scale-105" data-alt="Close up architectural plan rendering of concrete drainage culvert infrastructure engineering diagram with clear technical measurement annotations and municipal stamp" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBTar-RsiAuL1rey27fsT_PJAeWScJS5Vaho1j7o4_iPjAEcL66VRrAiivXpkIICDWP921aewVrHav6OaIVadA2o6-WD-NG4as949eEJQuVccljIwLtQO9o3MI26NzxooOgG4qd7_Fmy6-_u2b2bAh69VnAzYStlofo-P-TcOk13X7-QZtVI-qNZhJBbPrDfShQJKgQHlIMwTzUBrvux-6DEO31JSEROWWRJXbupQ_LZ6votjlK9xX5IA">
+<div class="absolute inset-0 bg-inverse-surface/30 flex items-center justify-center text-white font-title-md text-title-md">
+<span class="flex items-center gap-1 px-2.5 py-1 rounded-full bg-black/50 backdrop-blur-md">
+<span class="material-symbols-outlined text-sm">map</span>
+                Traffic Plan
+              </span>
+</div>
+</div>
+</div>
+<!-- Municipal Contact Banner -->
+<div class="flex items-center justify-between p-space-sm rounded-lg bg-surface-container-high">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-brand-crimson text-lg">support_agent</span>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface font-semibold">24/7 Control Centre</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">03-7845 2222 (Direct Dispatch)</span>
+</div>
+</div>
+<a class="px-3 py-1.5 rounded-lg bg-brand-crimson text-white font-label-md text-label-md font-medium active:scale-95 transition-transform flex items-center gap-1" href="tel:0378452222">
+<span class="material-symbols-outlined text-sm">call</span>
+            Call
+          </a>
+</div>
+<!-- Interaction Footer -->
+<div class="flex items-center justify-between pt-space-xs border-t-0 text-on-surface-variant font-label-md text-label-md">
+<div class="flex items-center gap-4">
+<button class="like-button flex items-center gap-1.5 py-1 px-1 rounded hover:text-brand-crimson active:scale-90 transition-transform">
+<span class="material-symbols-outlined text-lg like-icon">thumb_up</span>
+<span class="like-counter">42</span>
+</button>
+<button class="flex items-center gap-1.5 py-1 px-1 rounded hover:text-on-surface active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-lg">chat_bubble_outline</span>
+<span class="">8</span>
+</button>
+<button class="flex items-center gap-1.5 py-1 px-1 rounded hover:text-on-surface active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-lg">share</span>
+<span class="">15</span>
+</button>
+</div>
+<button class="flex items-center gap-1 text-on-surface-variant hover:text-brand-crimson active:scale-95">
+<span class="material-symbols-outlined text-lg">bookmark_border</span>
+<span class="">Save</span>
+</button>
+</div>
+<!-- Collapsible Official Comments Strip -->
+<div class="bg-surface-container rounded-lg p-2.5 flex items-start gap-2.5">
+<img class="w-7 h-7 rounded-full object-cover shrink-0" data-alt="Portrait of an authorized township community safety liaison wearing a high-visibility badge and navy polo shirt" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA1Pyi79jjhrVZ4VrptrRPQeNYAUKAJL5BXxgIDPKM0wijXQg86aO_ASLj7IdpZWJNhGNh2XqBWVovi3ZXEKzeKpxUveCQgkO635xMi2BNk-Xc9I0GCpUk-GlogGRZa_kXpKyqk3JPkgzZjBundVJUThE_T5cCe9efDz-4RmZrzBpEzHbAJgYHfivUhN0IeqdM9rZoaM5yt9fZ0LriIfFIhZ-JxTlWrwQfnIEHeS_oQz_Pv7f2YAsyh_A">
+<div class="flex-1 text-on-surface">
+<div class="flex items-center justify-between">
+<span class="font-label-md text-label-md font-semibold">Auxiliary Police Team</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">45m ago</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
+              Patrol cars will assist traffic sequencing from the Persiaran Atmosfera roundabout onwards.
+            </p>
+</div>
+</div>
+</div>
+</article>
+<!-- FEED POST 2: Resident Social Activity (Amir Zakaria) -->
+<article class="w-full bg-surface-container-lowest rounded-xl shadow-sm p-space-md flex flex-col gap-space-sm">
+<div class="flex items-start justify-between">
+<div class="flex items-center gap-space-sm">
+<div class="relative">
+<img class="w-11 h-11 rounded-full object-cover" data-alt="Portrait of a smiling 30-year-old Malaysian cyclist wearing aerodynamic sunglasses and a sleek cycling helmet outdoors with greenery background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBkpStPTOPFmABY1ZwibZwskVjRD8IYmv09yJNd8VxUEQXNNYZy2BWInSkRUMLAt_Yk1TXL9ohRM7Rp4z5xm9yFH039SdPXJh8sOSYee-4NCKYsxrspzcMZcjCKp_Ff76FmROqosQrF3CrTsI3AMpkdh_rc3zdIt6LiYixV5CU288vf2Eg2wz4v2sQV6j2-4Nt5LLOJdzQdIlwdoT0SkPVceZzUuXaZhq5piKJ0oV2WjFqVw06qhD6gYg">
+<span class="material-symbols-outlined absolute -bottom-1 -right-1 text-sm text-white bg-secondary p-0.5 rounded-full" title="Cycling Enthusiast">pedal_bike</span>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center gap-1.5">
+<span class="font-title-md text-title-md text-on-surface">Amir Zakaria</span>
+<span class="px-2 py-0.2 rounded-full bg-secondary-fixed text-on-secondary-fixed-variant font-label-sm text-[11px] font-medium">Elmina West</span>
+</div>
+<span class="text-on-surface-variant font-label-sm text-label-sm">4 hrs ago • Morning Community Ride</span>
+</div>
+</div>
+<button class="w-8 h-8 flex items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container active:scale-95">
+<span class="material-symbols-outlined text-lg">more_horiz</span>
+</button>
+</div>
+<div>
+<p class="font-body-md text-body-md text-on-surface">
+          Glorious sunrise peloton ride around Elmina Central Park track this Saturday! 🚴‍♂️ Fresh air, clean pavement, and no humidity before 7:30 AM. Planning another 25km loop tomorrow—all welcome to join from the Rainbow Bridge meeting spot at 6:45 AM.
+        </p>
+</div>
+<!-- High Quality Photographic Card Feature matching inspiration scenic vibes -->
+<div class="relative w-full rounded-xl overflow-hidden aspect-[16/10] bg-surface-container">
+<img class="w-full h-full object-cover" data-alt="Stunning aerial panoramic landscape of modern luxury suburban residential houses surrounded by lush green trees, curving paved streets, and a serene lake at sunrise with peaceful warm morning glow" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAxdCUBtPefupB5s86KmZAfchDR69jdEOjMKtq6MiCsbmkP9GqPg6J3sCd8W_0F5cGOeG8CBm_yqsrNBf6haN0Pv6f0tqnrfEZLtBmOVcqFC2tRO_JOzq5GeWhNl-sXtFRu3QHBBcscOERAU2jX1cvq9Onpx96WlGbtJg9YApE2vEOozk1tmX1uBy0XXPM62wjkC7mYmV5Xh5___J_sdIjysvR4Pr-tprRd_6LJEqQpYUHWt9gOqnUZbw">
+<div class="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/70 via-black/30 to-transparent flex items-end justify-between">
+<div class="flex flex-col text-white">
+<span class="font-label-md text-label-md font-semibold flex items-center gap-1">
+<span class="material-symbols-outlined text-sm text-amber-400">wb_sunny</span>
+              Elmina Central Park Lake Loop
+            </span>
+<span class="font-label-sm text-label-sm opacity-80">24.8 km • Avg Pace 22.4 km/h</span>
+</div>
+<button class="px-2.5 py-1 rounded-md bg-white/20 hover:bg-white/30 backdrop-blur-md text-white font-label-sm text-label-sm active:scale-95 transition-all flex items-center gap-1">
+<span class="material-symbols-outlined text-sm">route</span>
+            View Route
+          </button>
+</div>
+</div>
+<!-- Action / Reaction Bar with Heart, Helpful, Comment, Share -->
+<div class="flex items-center justify-between pt-1 text-on-surface-variant font-label-md text-label-md">
+<div class="flex items-center gap-1">
+<button class="heart-toggle flex items-center gap-1.5 py-1.5 px-2.5 rounded-lg hover:bg-surface-container active:scale-95 transition-all text-on-surface-variant">
+<span class="material-symbols-outlined text-lg heart-icon transition-transform">favorite_border</span>
+<span class="heart-count">36</span>
+</button>
+<button class="helpful-toggle flex items-center gap-1.5 py-1.5 px-2.5 rounded-lg hover:bg-surface-container active:scale-95 transition-all text-on-surface-variant">
+<span class="material-symbols-outlined text-lg helpful-icon">volunteer_activism</span>
+<span class="">Helpful (12)</span>
+</button>
+<button class="toggle-comment-view flex items-center gap-1.5 py-1.5 px-2.5 rounded-lg hover:bg-surface-container active:scale-95 transition-all">
+<span class="material-symbols-outlined text-lg">mode_comment</span>
+<span class="">19</span>
+</button>
+</div>
+<button class="p-2 rounded-lg hover:bg-surface-container active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-lg">share</span>
+</button>
+</div>
+<!-- Interactive Comments Thread Section -->
+<div class="comments-container flex flex-col gap-2 pt-2 bg-surface-container-high/60 rounded-xl p-3">
+<div class="flex items-start gap-2.5">
+<img class="w-7 h-7 rounded-full object-cover shrink-0" data-alt="Portrait of an active middle aged resident with warm smile outdoors in front of Malaysian townhouse landscaping" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAUBz15GglfoRhXM5aSHVNGXMRZS4IPkGEmzyS-iaaTiIQ0zLr8NkOzy3QZHAdcrL16837ep9hSuLRl3dmM5A5ITQvgiFQTmJZOr4d6lACf9i_2NKh6YuZ0-i-oZaJydCLD-BW-MWNTJMgPA3RJwxCFuWDoAf5YPzjpzcBp7cYsOK5cFeKcVpN6W_qOm_d9qPEHgHizZBGbcIdi8DNC5yycf6L4fk9tepgjoaap1Aiv0KWOsoRxpQCKpw">
+<div class="flex-1 bg-surface-container-lowest p-2 rounded-lg text-on-surface shadow-xs">
+<div class="flex items-center justify-between">
+<span class="font-title-md text-body-sm font-semibold">Nadia Sulaiman</span>
+<span class="font-label-sm text-[11px] text-on-surface-variant">1 hr ago</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
+              Is the route beginner-friendly for foldable bikes? Would love to bring my teens along.
+            </p>
+</div>
+</div>
+<div class="flex items-start gap-2.5 pl-6">
+<img class="w-6 h-6 rounded-full object-cover shrink-0" data-alt="Portrait of Amir Zakaria smiling friendly outdoors with cycling cap" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC_ipCgUDzpB97XvlNsnbvSYeNWC7mITYHDN1AckJ_oT9ra3LwJOgL3LV88c8Sn9VKA8K5WzZWJU3BI4VUJiLU68ITVOiwmO_qGXvjKWA88sr_dwEN39clS9G2DqdHfneDh_gwvZwRIJtQe62er45Ml9_DKDXbuge4uZxTttDC4s0xEAP62pPjgwB6T_3QaxxYXPwNY0VxynmTdC7Ukx3vZcn6bzjoqZE2A07sk4uVuuz59Fj7aB-jpTA">
+<div class="flex-1 bg-surface-container-lowest p-2 rounded-lg text-on-surface shadow-xs">
+<div class="flex items-center justify-between">
+<span class="font-title-md text-body-sm font-semibold text-brand-crimson">Amir Zakaria (Author)</span>
+<span class="font-label-sm text-[11px] text-on-surface-variant">40m ago</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
+              Totally! The lakeside circuit is fully tarmac and wide with dedicated lanes. See you there!
+            </p>
+</div>
+</div>
+<!-- Quick Reply Input inside card -->
+<div class="flex items-center gap-2 mt-1">
+<input class="flex-1 h-9 px-3 rounded-lg bg-surface-container-lowest text-on-surface font-body-sm text-body-sm outline-none placeholder:text-on-surface-variant focus:ring-1 focus:ring-brand-crimson" placeholder="Write a civic reply to Amir..." type="text">
+<button class="h-9 px-3 rounded-lg bg-brand-crimson text-white font-label-md text-label-md active:scale-95 transition-transform flex items-center justify-center">
+<span class="material-symbols-outlined text-sm">send</span>
+</button>
+</div>
+</div>
+</article>
+<!-- FEED POST 3: Community Incident / Advisory (Street Lamp Remediation) -->
+<article class="w-full bg-surface-container-lowest rounded-xl shadow-sm p-space-md flex flex-col gap-space-sm">
+<div class="flex items-start justify-between">
+<div class="flex items-center gap-space-sm">
+<div class="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center text-on-surface-variant shrink-0">
+<span class="material-symbols-outlined text-xl text-amber-600">lightbulb_circle</span>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center gap-1.5">
+<span class="font-title-md text-title-md text-on-surface">Daniel Khong</span>
+<span class="px-2 py-0.2 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-[11px]">Resident • Heritage Sector 2</span>
+</div>
+<span class="text-on-surface-variant font-label-sm text-label-sm">5 hrs ago • Civic Notice</span>
+</div>
+</div>
+<span class="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-label-sm text-label-sm flex items-center gap-1 font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
+          In Progress
+        </span>
+</div>
+<div>
+<h3 class="font-title-md text-title-md text-on-surface mb-1">
+          Flickering Streetlight along Persiaran Elmina (Near Gatehouse 3)
+        </h3>
+<p class="font-body-md text-body-md text-on-surface-variant">
+          Noticed two overhead lamps intermittently turning off after 8 PM. It gets slightly dim around the bend near the playground. Logged via TESDH Hub Ticket #7719.
+        </p>
+</div>
+<!-- Municipal Action Tracker Pill & Map Preview -->
+<div class="rounded-xl bg-surface-container p-space-sm flex flex-col gap-2">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-1.5 text-brand-crimson font-label-md text-label-md font-semibold">
+<span class="material-symbols-outlined text-base">domain_verification</span>
+<span class="">MBSA Work Order #7719 Dispatched</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">ETA: Today 4:00 PM</span>
+</div>
+<div class="w-full h-32 bg-cover bg-center rounded-lg relative overflow-hidden flex items-end p-2" data-location="Persiaran Elmina, Shah Alam" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuAiljgzstJeOf7xHiyHpoPyFK2hXnpk83F6-cYLvk0azLpk0WXPvvu5pj5IU_FlmxYo0RYvsCJBAk8IYmvZDc3OpROQhaseJFsZTuJYpIyxp1RYNmJgKINpdaqpBxHSaiO-tV9zWQjPVnFExbTkvBEet2Adn83eEJxDMEHm3ZtDrFVcMLzC2y0w6rgcyMp-Rw4Lp8zl_9lcutC8q2hfGdSX96TMlkDAeuVgOgls3oQjGl1_UxtcRB3baw')">
+<div class="bg-inverse-surface/85 backdrop-blur-md px-2.5 py-1 rounded text-inverse-on-surface font-label-sm text-label-sm flex items-center gap-1">
+<span class="material-symbols-outlined text-sm text-brand-crimson">pin_drop</span>
+<span class="">Location: Lamp Post No. EP-402</span>
+</div>
+</div>
+</div>
+<!-- Interactions -->
+<div class="flex items-center justify-between pt-1 text-on-surface-variant font-label-md text-label-md">
+<div class="flex items-center gap-3">
+<button class="helpful-toggle flex items-center gap-1 py-1 px-1.5 rounded hover:text-brand-crimson active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-base">verified</span>
+<span class="">Confirmed by 14 neighbors</span>
+</button>
+<button class="flex items-center gap-1 py-1 px-1.5 rounded hover:text-on-surface active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-base">forum</span>
+<span class="">5 remarks</span>
+</button>
+</div>
+<button class="text-brand-crimson hover:underline font-label-md text-label-md flex items-center gap-0.5">
+<span class="">Track Status</span>
+<span class="material-symbols-outlined text-sm">arrow_forward</span>
+</button>
+</div>
+</article>
+<!-- Delightful Empty State / Catch-up Announcement -->
+<div class="w-full py-space-lg flex flex-col items-center justify-center text-center px-space-md">
+<div class="w-12 h-12 rounded-full bg-brand-crimson/10 text-brand-crimson flex items-center justify-center mb-2">
+<span class="material-symbols-outlined text-2xl">check_circle</span>
+</div>
+<span class="font-title-md text-title-md text-on-surface">You're completely caught up!</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant max-w-xs mt-1">
+        All 28 verified updates for Elmina township have been viewed. Have a wonderful and safe day in our community.
+      </p>
+<button class="mt-3 px-4 py-1.5 rounded-full bg-surface-container hover:bg-surface-variant text-on-surface font-label-md text-label-md active:scale-95 transition-transform flex items-center gap-1.5">
+<span class="material-symbols-outlined text-sm">refresh</span>
+<span class="">Refresh Feed</span>
+</button>
+</div>
+</div>
+<!-- Interactive JavaScript Micro-interactions for Feed -->
+<script>
+    // 1. Filter Chips Selection Logic
+    const filterChips = document.querySelectorAll('.filter-chip');
+    filterChips.forEach(chip => {
+      chip.addEventListener('click', () => {
+        filterChips.forEach(c => {
+          c.classList.remove('bg-brand-crimson', 'text-white', 'shadow-sm');
+          c.classList.add('bg-surface-container', 'text-on-surface-variant');
+        });
+        chip.classList.remove('bg-surface-container', 'text-on-surface-variant');
+        chip.classList.add('bg-brand-crimson', 'text-white', 'shadow-sm');
+      });
+    });
+
+    // 2. Like Button Toggle
+    const likeButtons = document.querySelectorAll('.like-button');
+    likeButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const icon = btn.querySelector('.like-icon');
+        const counter = btn.querySelector('.like-counter');
+        const isLiked = btn.classList.toggle('text-brand-crimson');
+        let count = parseInt(counter.textContent, 10);
+        if (isLiked) {
+          icon.style.fontVariationSettings = "'FILL' 1";
+          counter.textContent = count + 1;
+        } else {
+          icon.style.fontVariationSettings = "'FILL' 0";
+          counter.textContent = count - 1;
+        }
+      });
+    });
+
+    // 3. Heart Icon Micro-interaction
+    const heartButtons = document.querySelectorAll('.heart-toggle');
+    heartButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const icon = btn.querySelector('.heart-icon');
+        const countSpan = btn.querySelector('.heart-count');
+        const isHearted = btn.classList.toggle('text-brand-crimson');
+        let count = parseInt(countSpan.textContent, 10);
+        if (isHearted) {
+          icon.textContent = 'favorite';
+          icon.style.fontVariationSettings = "'FILL' 1";
+          countSpan.textContent = count + 1;
+        } else {
+          icon.textContent = 'favorite_border';
+          icon.style.fontVariationSettings = "'FILL' 0";
+          countSpan.textContent = count - 1;
+        }
+      });
+    });
+
+    // 4. Quick Post Button Focus Micro-interaction
+    const quickPostBtn = document.getElementById('quick-post-btn');
+    if (quickPostBtn) {
+      quickPostBtn.addEventListener('click', () => {
+        const dummyText = prompt('Share a message with City of Elmina residents:');
+        if (dummyText && dummyText.trim() !== '') {
+          alert('Notice submitted to Civic Moderation Queue. Thank you for contributing!');
+        }
+      });
+    }
+  </script>
+</div></main><div class="fixed bottom-24 right-4 z-40"><button aria-label="Civic AI Assistant" class="w-14 h-14 rounded-full bg-brand-crimson text-white shadow-[0_4px_16px_rgba(158,19,21,0.35)] flex items-center justify-center active:scale-95 transition-all"><span class="material-symbols-outlined text-2xl">smart_toy</span></button></div><nav class="fixed bottom-0 inset-x-0 z-30 pb-safe bg-surface-container-lowest/90 backdrop-blur-xl shadow-[0_-2px_12px_rgba(0,0,0,0.04)]" data-active-classes="text-brand-crimson font-semibold"><div class="flex justify-around items-center h-16 px-space-xs"><a class="flex flex-col items-center justify-center gap-0.5 w-14 h-14 text-on-surface-variant transition-colors active:scale-95" data-path="home" href="#"><span class="material-symbols-outlined text-xl">home</span><span class="font-label-sm text-label-sm">Home</span></a><a aria-current="page" class="flex flex-col items-center justify-center gap-0.5 w-14 h-14 transition-colors active:scale-95 text-brand-crimson font-semibold" data-path="feed" href="#"><span class="material-symbols-outlined text-xl">newspaper</span><span class="font-label-sm text-label-sm">Feed</span></a><a class="flex flex-col items-center justify-center gap-0.5 w-14 h-14 text-on-surface-variant transition-colors active:scale-95" data-path="map" href="#"><span class="material-symbols-outlined text-xl">explore</span><span class="font-label-sm text-label-sm">Map</span></a><a class="flex flex-col items-center justify-center gap-0.5 w-14 h-14 text-on-surface-variant transition-colors active:scale-95" data-path="exchange" href="#"><span class="material-symbols-outlined text-xl">swap_horiz</span><span class="font-label-sm text-label-sm">Exchange</span></a><a class="flex flex-col items-center justify-center gap-0.5 w-14 h-14 text-on-surface-variant transition-colors active:scale-95" data-path="messages" href="#"><span class="material-symbols-outlined text-xl">chat_bubble</span><span class="font-label-sm text-label-sm">Messages</span></a></div></nav>
+
+</body></html>

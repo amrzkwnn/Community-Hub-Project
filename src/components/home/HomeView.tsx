@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useApp } from '@/lib/context/AppContext';
 import { CommunityPost } from '@/types';
 import TimeAgo from '@/components/common/TimeAgo';
@@ -527,6 +527,25 @@ export default function HomeView() {
     }
   };
 
+  // Mobile Stitch Carousel state & ref
+  const [mobileActiveIndex, setMobileActiveIndex] = useState(0);
+  const mobileScrollerRef = useRef<HTMLDivElement>(null);
+
+  const handleMobileScroll = () => {
+    if (!mobileScrollerRef.current) return;
+    const scrollLeft = mobileScrollerRef.current.scrollLeft;
+    const cardWidth = 260 + 12;
+    const index = Math.round(scrollLeft / cardWidth);
+    setMobileActiveIndex(Math.min(4, Math.max(0, index)));
+  };
+
+  const scrollToMobileCard = (idx: number) => {
+    if (!mobileScrollerRef.current) return;
+    const cardWidth = 260 + 12;
+    mobileScrollerRef.current.scrollTo({ left: idx * cardWidth, behavior: 'smooth' });
+    setMobileActiveIndex(idx);
+  };
+
   return (
     <div className="relative w-full h-full overflow-y-auto bg-[#F8F9FC] dark:bg-[#0F1113] select-none custom-scrollbar">
       {/* Content wrapper expanding to full content height for continuous background coverage */}
@@ -547,25 +566,371 @@ export default function HomeView() {
         </div>
 
         {/* Main Canvas Container (Foreground z-10 with pt-20 top clearance for transparent header) */}
-        <div className="pt-20 px-6 sm:px-8 max-w-[1400px] w-full mx-auto space-y-7 relative z-10 pb-24 lg:pb-12 flex-1">
+        <div className="pt-20 px-6 max-w-[1400px] w-full mx-auto space-y-7 relative z-10 pb-24 lg:pb-12 flex-1">
           
           {/* ========================================================================= */}
-          {/* 1. WELCOME HERO SECTION                                                   */}
+          {/* MOBILE PHONE SECTION: Google Stitch Mobile Design Home                    */}
           {/* ========================================================================= */}
-          <section 
-            className="relative pt-2 pb-1 px-1" 
-            data-purpose="home-hero-banner" 
-            aria-labelledby="home-welcome-heading"
-          >
-            <div className="max-w-2xl text-left">
-              <h1 
-                id="home-welcome-heading"
-                className="text-3xl sm:text-4xl font-bold tracking-tight text-white leading-tight antialiased"
-              >
-                {t('welcomeTitle') || 'Welcome to Your Community'}
+          <div className="block md:hidden w-full space-y-4">
+            {/* 1. Downward-Fading Blur Behind "Welcome to Your Community" Heading */}
+            <section className="relative px-1 pt-4 pb-2">
+              <div 
+                className="absolute inset-0 -top-20 bg-gradient-to-b from-black/70 via-black/30 to-transparent pointer-events-none -z-10" 
+                style={{
+                  backdropFilter: 'blur(12px)',
+                  WebkitBackdropFilter: 'blur(12px)',
+                  maskImage: 'linear-gradient(to bottom, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 0.8) 50%, rgba(0, 0, 0, 0) 100%)',
+                  WebkitMaskImage: 'linear-gradient(to bottom, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 0.8) 50%, rgba(0, 0, 0, 0) 100%)'
+                }}
+              />
+              <h1 className="text-2xl font-bold tracking-tight text-white drop-shadow-md text-left relative z-10 antialiased">
+                Welcome to Your Community
               </h1>
-            </div>
-          </section>
+            </section>
+
+            {/* 2. Mobile Swipeable Feature Carousel */}
+            <section className="pt-1 pb-2">
+              <div 
+                ref={mobileScrollerRef}
+                onScroll={handleMobileScroll}
+                id="featureScroller"
+                className="flex gap-3 overflow-x-auto no-scrollbar scroll-smooth snap-x snap-mandatory py-1"
+              >
+                {/* 1. Community Feed Card */}
+                <div 
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => handleCardClick('feed')}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleCardClick('feed'); }}
+                  className="min-w-[260px] max-w-[260px] snap-center bg-white/90 dark:bg-[#15181C]/90 backdrop-blur-md rounded-2xl p-4 shadow-[0_4px_20px_rgba(0,0,0,0.06)] flex flex-col justify-between border border-white/40 dark:border-slate-800 text-left active:scale-[0.98] transition-transform cursor-pointer"
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-10 h-10 rounded-xl bg-[#9E1315]/10 text-[#9E1315] flex items-center justify-center">
+                      <span className="material-symbols-outlined text-xl">newspaper</span>
+                    </div>
+                    <span className="px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs font-semibold">
+                      {posts.length} New
+                    </span>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-1">Community Feed</h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
+                      Discussions, safety bulletins, and local neighborhood announcements.
+                    </p>
+                  </div>
+                  <div className="mt-4 pt-3 flex items-center justify-between border-t border-slate-100 dark:border-slate-800 text-xs">
+                    <span className="font-semibold text-[#9E1315] dark:text-rose-400 inline-flex items-center gap-1">
+                      Browse Discussions <span className="material-symbols-outlined text-sm">arrow_forward</span>
+                    </span>
+                    <div className="flex -space-x-1.5">
+                      <span className="w-6 h-6 rounded-full bg-[#9E1315] text-white flex items-center justify-center text-[10px] font-bold">AZ</span>
+                      <span className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 flex items-center justify-center text-[10px] font-bold">MK</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Resilience Map Card */}
+                <div 
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => handleCardClick('resilience')}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleCardClick('resilience'); }}
+                  className="min-w-[260px] max-w-[260px] snap-center bg-white/90 dark:bg-[#15181C]/90 backdrop-blur-md rounded-2xl p-4 shadow-[0_4px_20px_rgba(0,0,0,0.06)] flex flex-col justify-between border border-white/40 dark:border-slate-800 text-left active:scale-[0.98] transition-transform cursor-pointer"
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-10 h-10 rounded-xl bg-orange-500/10 text-orange-600 flex items-center justify-center">
+                      <span className="material-symbols-outlined text-xl">explore</span>
+                    </div>
+                    <span className="px-2.5 py-0.5 rounded-full bg-orange-100 dark:bg-orange-950/60 text-orange-800 dark:text-orange-300 text-xs font-semibold">
+                      Live GPS
+                    </span>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-1">Resilience Map</h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
+                      AED stations, evacuation safe points, and active township patrol posts.
+                    </p>
+                  </div>
+                  <div className="mt-4 pt-3 flex items-center justify-between border-t border-slate-100 dark:border-slate-800 text-xs">
+                    <span className="font-semibold text-orange-600 dark:text-orange-400 inline-flex items-center gap-1">
+                      View Live Grid <span className="material-symbols-outlined text-sm">arrow_forward</span>
+                    </span>
+                    <span className="material-symbols-outlined text-orange-500 text-sm animate-pulse">radar</span>
+                  </div>
+                </div>
+
+                {/* 3. Circular Exchange Card */}
+                <div 
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => handleCardClick('exchange')}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleCardClick('exchange'); }}
+                  className="min-w-[260px] max-w-[260px] snap-center bg-white/90 dark:bg-[#15181C]/90 backdrop-blur-md rounded-2xl p-4 shadow-[0_4px_20px_rgba(0,0,0,0.06)] flex flex-col justify-between border border-white/40 dark:border-slate-800 text-left active:scale-[0.98] transition-transform cursor-pointer"
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-600 flex items-center justify-center">
+                      <span className="material-symbols-outlined text-xl">swap_horiz</span>
+                    </div>
+                    <span className="px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs font-semibold">
+                      {exchangeItems.length} Items
+                    </span>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-1">Circular Exchange</h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
+                      Lawn mowers, gardening tools, shared books, and free plant cuttings.
+                    </p>
+                  </div>
+                  <div className="mt-4 pt-3 flex items-center justify-between border-t border-slate-100 dark:border-slate-800 text-xs">
+                    <span className="font-semibold text-blue-600 dark:text-blue-400 inline-flex items-center gap-1">
+                      Browse Market <span className="material-symbols-outlined text-sm">arrow_forward</span>
+                    </span>
+                    <span className="material-symbols-outlined text-slate-400 text-sm">handshake</span>
+                  </div>
+                </div>
+
+                {/* 4. Local Services Card */}
+                <div 
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => handleCardClick('services')}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleCardClick('services'); }}
+                  className="min-w-[260px] max-w-[260px] snap-center bg-white/90 dark:bg-[#15181C]/90 backdrop-blur-md rounded-2xl p-4 shadow-[0_4px_20px_rgba(0,0,0,0.06)] flex flex-col justify-between border border-white/40 dark:border-slate-800 text-left active:scale-[0.98] transition-transform cursor-pointer"
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center">
+                      <span className="material-symbols-outlined text-xl">home_repair_service</span>
+                    </div>
+                    <span className="px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs font-semibold">
+                      Verified
+                    </span>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-1">Local Services</h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
+                      Recommended neighborhood plumbers, electricians, and pest control.
+                    </p>
+                  </div>
+                  <div className="mt-4 pt-3 flex items-center justify-between border-t border-slate-100 dark:border-slate-800 text-xs">
+                    <span className="font-semibold text-slate-800 dark:text-slate-200 inline-flex items-center gap-1">
+                      Directory <span className="material-symbols-outlined text-sm">arrow_forward</span>
+                    </span>
+                    <span className="material-symbols-outlined text-emerald-500 text-sm">verified</span>
+                  </div>
+                </div>
+
+                {/* 5. Secure Messages Card */}
+                <div 
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => handleCardClick('messages')}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleCardClick('messages'); }}
+                  className="min-w-[260px] max-w-[260px] snap-center bg-white/90 dark:bg-[#15181C]/90 backdrop-blur-md rounded-2xl p-4 shadow-[0_4px_20px_rgba(0,0,0,0.06)] flex flex-col justify-between border border-white/40 dark:border-slate-800 text-left active:scale-[0.98] transition-transform cursor-pointer"
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-10 h-10 rounded-xl bg-[#9E1315]/10 text-[#9E1315] flex items-center justify-center">
+                      <span className="material-symbols-outlined text-xl">chat</span>
+                    </div>
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#9E1315]"></span>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-1">Secure Messages</h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
+                      Direct private messaging with resident committee and guardhouse.
+                    </p>
+                  </div>
+                  <div className="mt-4 pt-3 flex items-center justify-between border-t border-slate-100 dark:border-slate-800 text-xs">
+                    <span className="font-semibold text-[#9E1315] dark:text-rose-400 inline-flex items-center gap-1">
+                      Open Chat <span className="material-symbols-outlined text-sm">arrow_forward</span>
+                    </span>
+                    <span className="material-symbols-outlined text-slate-400 text-sm">lock</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Carousel Pagination Dots */}
+              <div className="flex justify-center items-center gap-1.5 mt-3">
+                {[0, 1, 2, 3, 4].map((dotIndex) => (
+                  <button
+                    key={dotIndex}
+                    type="button"
+                    onClick={() => scrollToMobileCard(dotIndex)}
+                    aria-label={`Go to slide ${dotIndex + 1}`}
+                    className={`h-1.5 rounded-full transition-all duration-300 cursor-pointer ${
+                      mobileActiveIndex === dotIndex ? 'w-5 bg-[#9E1315]' : 'w-1.5 bg-white/40 dark:bg-slate-700'
+                    }`}
+                  />
+                ))}
+              </div>
+            </section>
+
+            {/* 3. Mobile Official Civic Notices Section */}
+            <section className="py-2">
+              <div className="flex items-center justify-between mb-3 px-0.5">
+                <div className="flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-[#9E1315] text-lg">campaign</span>
+                  <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 tracking-tight">Official Civic Notices</h2>
+                </div>
+                <button 
+                  type="button"
+                  onClick={() => setActiveTab('feed')}
+                  className="text-xs font-semibold text-[#9E1315] dark:text-rose-400 hover:underline cursor-pointer"
+                >
+                  View All ({officialNotices.length})
+                </button>
+              </div>
+              <div className="flex flex-col gap-3">
+                {officialNotices.slice(0, 2).map((notice) => (
+                  <article 
+                    key={notice.id}
+                    onClick={() => setSelectedNoticeModal(notice)}
+                    className="bg-white/90 dark:bg-[#15181C]/90 backdrop-blur-md rounded-2xl p-4 shadow-[0_2px_12px_rgba(0,0,0,0.04)] relative overflow-hidden transition-all active:scale-[0.99] border border-white/60 dark:border-slate-800 text-left cursor-pointer"
+                  >
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#9E1315]/10 text-[#9E1315] text-[10px] font-semibold uppercase">
+                          Notice
+                        </span>
+                        <span className="text-xs text-slate-500 dark:text-slate-400">
+                          {notice.category === 'security_alert' ? 'Sector Safety' : 'Infrastructure'}
+                        </span>
+                      </div>
+                      <span className="text-xs text-slate-400">
+                        <TimeAgo date={notice.createdAt} />
+                      </span>
+                    </div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 leading-snug mb-1">
+                      {notice.title}
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-3 line-clamp-2">
+                      {notice.content}
+                    </p>
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-800/80">
+                      <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 text-xs">
+                        <span className="material-symbols-outlined text-sm text-amber-600">schedule</span>
+                        <span>Township Advisory</span>
+                      </div>
+                      <span className="text-xs font-semibold text-[#9E1315] dark:text-rose-400 inline-flex items-center gap-0.5">
+                        Read Notice <span className="material-symbols-outlined text-sm">arrow_forward</span>
+                      </span>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+
+            {/* 4. Mobile Community Calendar & Events */}
+            <section className="py-2 mb-4">
+              <div className="flex items-center justify-between mb-3 px-0.5">
+                <div className="flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-[#9E1315] text-lg">event</span>
+                  <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 tracking-tight">Community Calendar</h2>
+                </div>
+                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  {viewingMonth ? formatMonthYearHeader(viewingMonth) : 'October 2026'}
+                </span>
+              </div>
+
+              {/* Day Chips Selector */}
+              <div className="bg-white/85 dark:bg-[#15181C]/85 backdrop-blur-md rounded-xl p-3 shadow-[0_2px_12px_rgba(0,0,0,0.04)] mb-3 border border-white/60 dark:border-slate-800">
+                <div className="flex justify-between items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
+                  {['23', '24', '25', '26', '27', '28'].map((dayNum, dIdx) => {
+                    const isSelected = dayNum === '25' || (selectedDateKey && selectedDateKey.endsWith(dayNum));
+                    return (
+                      <button
+                        key={dayNum}
+                        type="button"
+                        onClick={() => setSelectedDateKey(`2026-10-${dayNum}`)}
+                        className={`flex flex-col items-center justify-center min-w-[42px] py-2 rounded-lg transition-all active:scale-95 cursor-pointer ${
+                          isSelected
+                            ? 'bg-[#9E1315] text-white shadow-xs'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200'
+                        }`}
+                      >
+                        <span className={`text-[10px] uppercase font-medium ${isSelected ? 'text-white/90' : 'text-slate-400'}`}>
+                          {['Wed', 'Thu', 'Fri', 'Sat', 'Sun', 'Mon'][dIdx]}
+                        </span>
+                        <span className="text-sm font-bold mt-0.5">{dayNum}</span>
+                        <span className={`w-1 h-1 rounded-full mt-1 ${isSelected ? 'bg-white' : dIdx === 1 || dIdx === 3 ? 'bg-[#9E1315]' : 'bg-transparent'}`} />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Event Cards */}
+              <div className="flex flex-col gap-3">
+                {upcomingEvents.slice(0, 2).map((evt) => {
+                  const sched = getEventSchedule(evt);
+                  const isRsvpd = rsvpEvents.includes(evt.id);
+                  return (
+                    <div 
+                      key={evt.id}
+                      className="bg-white/90 dark:bg-[#15181C]/90 backdrop-blur-md rounded-xl p-3.5 shadow-[0_2px_12px_rgba(0,0,0,0.04)] flex gap-3.5 items-start border border-white/60 dark:border-slate-800 text-left"
+                    >
+                      <div className="w-14 h-16 rounded-lg bg-slate-100 dark:bg-slate-800 flex flex-col items-center justify-center shrink-0">
+                        <span className="text-[10px] font-bold text-[#9E1315] uppercase">{sched.month || 'OCT'}</span>
+                        <span className="text-lg font-bold text-slate-900 dark:text-slate-100 leading-tight">{sched.day || '26'}</span>
+                        <span className="text-[10px] text-slate-400 -mt-0.5">{sched.scheduleString?.slice(0, 3).toUpperCase() || 'SAT'}</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-[10px] font-semibold">
+                            Civic Green
+                          </span>
+                          <span className="text-[11px] text-slate-400">{sched.timeString || '08:00 AM - 11:30 AM'}</span>
+                        </div>
+                        <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
+                          {evt.title}
+                        </h4>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5 truncate">
+                          <span className="material-symbols-outlined text-xs text-[#9E1315]">location_on</span>
+                          {evt.eventVenue || 'Central Lake Pavilion A'}
+                        </p>
+                        <div className="flex items-center justify-between mt-3">
+                          <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400 text-xs">
+                            <span className="material-symbols-outlined text-sm text-[#9E1315]">group</span>
+                            <span>42 attending</span>
+                          </div>
+                          <button 
+                            type="button"
+                            onClick={() => toggleRsvpEvent(evt.id)}
+                            className={`h-8 px-3.5 rounded-lg text-xs font-semibold active:scale-95 transition-all shadow-xs cursor-pointer ${
+                              isRsvpd
+                                ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                                : 'bg-[#9E1315] hover:bg-[#841012] text-white'
+                            }`}
+                          >
+                            {isRsvpd ? 'RSVP Attend ✓' : 'RSVP Attend'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          </div>
+
+          {/* ========================================================================= */}
+          {/* DESKTOP / TABLET SECTION (>= 768px): Preserved 100% Unchanged            */}
+          {/* ========================================================================= */}
+          <div className="hidden md:block w-full space-y-7">
+            {/* 1. WELCOME HERO SECTION                                                   */}
+            <section 
+              className="relative pt-2 pb-1 px-1" 
+              data-purpose="home-hero-banner" 
+              aria-labelledby="home-welcome-heading"
+            >
+              <div className="max-w-2xl text-left">
+                <h1 
+                  id="home-welcome-heading"
+                  className="text-3xl sm:text-4xl font-bold tracking-tight text-white leading-tight antialiased"
+                >
+                  {t('welcomeTitle') || 'Welcome to Your Community'}
+                </h1>
+              </div>
+            </section>
 
         {/* ========================================================================= */}
         {/* 2. FEATURE NAVIGATION CAROUSEL (Center-Focused 3D Perspective Stage)      */}
@@ -1258,6 +1623,7 @@ export default function HomeView() {
           </div>
         </section>
 
+          </div>
       </div>
     </div>
 
