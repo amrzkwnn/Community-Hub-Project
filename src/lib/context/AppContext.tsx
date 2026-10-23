@@ -39,6 +39,9 @@ import {
   ManagementReport,
   ManagementReportType,
   ManagementAiChatMessage,
+  ResidentAddressRecord,
+  ResidenceType,
+  AddressVerificationStatus,
 } from '@/types';
 import { FEATURES } from '@/config/features';
 import { 
@@ -56,11 +59,12 @@ import {
   INITIAL_NOTIFICATIONS,
   INITIAL_AI_MODERATION_ITEMS,
   INITIAL_FALSE_POSITIVE_STATS,
+  INITIAL_ADDRESS_REGISTRATIONS,
 } from '@/lib/data/mockData';
 import { translations, Language } from '@/lib/i18n/translations';
 import { createClient } from '@/lib/supabase/client';
 import { validateElminaCoordinates } from '@/lib/utils/elminaBoundary';
-import { fromDatabaseUserId } from '@/lib/utils/idMapping';
+import { fromDatabaseUserId, toDatabaseUserId } from '@/lib/utils/idMapping';
 import type { User } from '@supabase/supabase-js';
 
 interface AppContextType {
@@ -242,7 +246,7 @@ interface AppContextType {
     initialMessage: string, 
     contextType?: 'service' | 'exchange' | 'management_inquiry' | 'general' | 'property_messaging'
   ) => string;
-  searchProperties: (query: string) => Promise<{ targetId: string; precinct: string; maskedProperty: string }[]>;
+  searchProperties: (query: string) => Promise<{ targetId: string; precinct: string; maskedProperty: string; residenceType?: string }[]>;
   sendPropertyMessageRequest: (data: {
     recipientId: string;
     propertyAddress: string;
@@ -254,6 +258,20 @@ interface AppContextType {
   acceptMessageRequest: (requestId: string) => Promise<string | null>;
   rejectMessageRequest: (requestId: string) => Promise<void>;
   blockPropertySender: (requestId: string) => Promise<void>;
+
+  // Resident Address Registration & JMB Approval System
+  addressRegistrations: ResidentAddressRecord[];
+  submitAddressRegistration: (data: {
+    precinct: string;
+    unitNumber: string;
+    streetName?: string;
+    residenceType: ResidenceType;
+    proofDocumentName?: string;
+    proofDocumentUrl?: string;
+  }) => Promise<{ success: boolean; error?: string; registration?: ResidentAddressRecord }>;
+  approveAddressRegistration: (registrationId: string) => Promise<{ success: boolean; error?: string }>;
+  rejectAddressRegistration: (registrationId: string, reason: string) => Promise<{ success: boolean; error?: string }>;
+  revokeAddressRegistration: (registrationId: string, reason?: string) => Promise<{ success: boolean; error?: string }>;
   
   // Community Notification Centre
   notifications: CommunityNotification[];
@@ -563,6 +581,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const CONVERSATIONS_CACHE_KEY = 'tesdh-persisted-conversations';
   const MESSAGES_CACHE_KEY = 'tesdh-persisted-messages';
   const MESSAGE_REQUESTS_CACHE_KEY = 'tesdh-persisted-message-requests';
+  const ADDRESS_REGISTRATIONS_CACHE_KEY = 'tesdh-persisted-address-registrations';
   const PROFILES_CACHE_KEY = 'tesdh-persisted-profiles';
   const ACTIVE_PROFILE_CACHE_KEY = 'tesdh-active-profile-id';
 
@@ -635,6 +654,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
   const [messageRequests, setMessageRequests] = useState<PropertyMessageRequest[]>(() =>
     getPersistedCache<PropertyMessageRequest[]>(MESSAGE_REQUESTS_CACHE_KEY, INITIAL_MESSAGE_REQUESTS)
+  );
+  const [addressRegistrations, setAddressRegistrations] = useState<ResidentAddressRecord[]>(() =>
+    getPersistedCache<ResidentAddressRecord[]>(ADDRESS_REGISTRATIONS_CACHE_KEY, INITIAL_ADDRESS_REGISTRATIONS)
   );
   const [notifications, setNotifications] = useState<CommunityNotification[]>(INITIAL_NOTIFICATIONS);
   const [moderationReports, setModerationReports] = useState<ModerationReport[]>(INITIAL_MODERATION_REPORTS);
@@ -1057,7 +1079,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (apiRes.ok) {
           const apiJson = await apiRes.json();
           if (apiJson?.success && apiJson?.data) {
-            const { incidents: sInc, posts: sPosts, comments: sComm, exchange: sEx, services: sServ, conversations: sConv, messages: sMsg, messageRequests: sMsgReq } = apiJson.data;
+            const { incidents: sInc, posts: sPosts, comments: sComm, exchange: sEx, services: sServ, conversations: sConv, messages: sMsg, messageRequests: sMsgReq, addressRegistrations: sAddr } = apiJson.data;
             if (sInc && sInc.length > 0) {
               setIncidents(sInc);
               try { localStorage.setItem(INCIDENTS_CACHE_KEY, JSON.stringify(sInc)); } catch {}
@@ -1105,6 +1127,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 sMsgReq.forEach((r: PropertyMessageRequest) => map.set(r.id, r));
                 const merged = Array.from(map.values());
                 try { localStorage.setItem(MESSAGE_REQUESTS_CACHE_KEY, JSON.stringify(merged)); } catch {}
+                return merged;
+              });
+            }
+            if (sAddr && sAddr.length > 0) {
+              setAddressRegistrations((prev) => {
+                const map = new Map<string, ResidentAddressRecord>();
+                prev.forEach((r) => map.set(r.id, r));
+                sAddr.forEach((r: ResidentAddressRecord) => map.set(r.id, r));
+                const merged = Array.from(map.values());
+                try { localStorage.setItem(ADDRESS_REGISTRATIONS_CACHE_KEY, JSON.stringify(merged)); } catch {}
                 return merged;
               });
             }
@@ -2724,12 +2756,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   // Private Property Messaging & Privacy Shield
-  const searchProperties = async (query: string) => {
+  const searchProperties = async (query: string): Promise<{ targetId: string; precinct: string; maskedProperty: string; residenceType?: string }[]> => {
     const clean = query.trim().toLowerCase();
     if (clean.length < 2) return [];
 
     // 1. Query remote registered properties from /api/sync
-    let remoteMatches: Array<{ targetId: string; precinct: string; maskedProperty: string }> = [];
+    let remoteMatches: Array<{ targetId: string; precinct: string; maskedProperty: string; residenceType?: string }> = [];
     try {
       const res = await fetch('/api/sync', {
         method: 'POST',
@@ -2772,34 +2804,73 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const normalizedQuery = norm(clean);
     const queryTokens = normalizedQuery.split(' ').filter(Boolean);
 
-    // 3. Search local profiles
-    const localMatches = profiles
-      .filter((p) => p.id !== currentUser.id)
-      .filter((p) => {
+    // 3. Search local verified address registrations ONLY (Pending or rejected are strictly excluded)
+    const localVerifiedMatches: Array<{ targetId: string; precinct: string; maskedProperty: string; residenceType?: string }> = [];
+
+    (addressRegistrations || []).forEach((reg) => {
+      // Must be verified only!
+      if (reg.status !== 'verified') return;
+      // Exclude self
+      if (reg.userId === currentUser.id || toDatabaseUserId(reg.userId) === toDatabaseUserId(currentUser.id)) return;
+
+      const normUnit = norm(reg.unitNumber || '');
+      const normPrecinct = norm(reg.precinct || '');
+      const normStreet = norm(reg.streetName || '');
+      const combined = `${normUnit} ${normPrecinct} ${normStreet}`;
+
+      if (combined.includes(normalizedQuery) || (normUnit && normUnit.includes(normalizedQuery))) {
+        localVerifiedMatches.push({
+          targetId: reg.userId,
+          precinct: reg.precinct,
+          maskedProperty: reg.unitNumber,
+          residenceType: reg.residenceType,
+        });
+      } else if (queryTokens.length > 0 && queryTokens.every((token) => combined.includes(token))) {
+        localVerifiedMatches.push({
+          targetId: reg.userId,
+          precinct: reg.precinct,
+          maskedProperty: reg.unitNumber,
+          residenceType: reg.residenceType,
+        });
+      }
+    });
+
+    // Also include verified profiles that have a registered unitNumber
+    profiles
+      .filter((p) => p.id !== currentUser.id && p.verificationStatus === 'verified' && Boolean(p.unitNumber))
+      .forEach((p) => {
+        if (localVerifiedMatches.some((m) => m.targetId === p.id)) return;
         const unit = p.unitNumber ? norm(p.unitNumber) : '';
         const precinct = norm(p.townshipPrecinct || '');
         const combined = `${unit} ${precinct}`;
 
         if (combined.includes(normalizedQuery) || (unit && unit.includes(normalizedQuery))) {
-          return true;
+          localVerifiedMatches.push({
+            targetId: p.id,
+            precinct: p.townshipPrecinct,
+            maskedProperty: p.unitNumber || `Residence ${p.townshipPrecinct}`,
+            residenceType: 'owner',
+          });
+        } else if (queryTokens.length > 0 && queryTokens.every((token) => combined.includes(token))) {
+          localVerifiedMatches.push({
+            targetId: p.id,
+            precinct: p.townshipPrecinct,
+            maskedProperty: p.unitNumber || `Residence ${p.townshipPrecinct}`,
+            residenceType: 'owner',
+          });
         }
-        return queryTokens.length > 0 && queryTokens.every((token) => combined.includes(token));
-      })
-      .map((p) => ({
-        targetId: p.id,
-        precinct: p.townshipPrecinct,
-        maskedProperty: p.unitNumber || `Residence ${p.townshipPrecinct}`,
-      }));
+      });
 
-    // 4. Merge remote and local matches without duplicates
-    const combined = [...remoteMatches];
-    localMatches.forEach((lm) => {
+    // 4. Merge remote and local matches without dropping multiple residents at same property
+    // We uniquely key by targetId (each resident has unique user ID)
+    const combined: Array<{ targetId: string; precinct: string; maskedProperty: string; residenceType?: string }> = [...remoteMatches];
+    localVerifiedMatches.forEach((lm) => {
       if (!combined.some((c) => c.targetId === lm.targetId)) {
         combined.push(lm);
       }
     });
 
-    return combined.slice(0, 8);
+    return combined.slice(0, 10);
   };
 
   const sendPropertyMessageRequest = async (data: {
@@ -3007,6 +3078,332 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return updated;
     });
     logAudit('BLOCK_PROPERTY_SENDER', 'property_message_requests', requestId);
+  };
+
+  // Resident Address Registration & JMB Approval System
+  const submitAddressRegistration = async (data: {
+    precinct: string;
+    unitNumber: string;
+    streetName?: string;
+    residenceType: ResidenceType;
+    proofDocumentName?: string;
+    proofDocumentUrl?: string;
+  }): Promise<{ success: boolean; error?: string; registration?: ResidentAddressRecord }> => {
+    // Check if resident already has a verified address
+    const existing = addressRegistrations.find(
+      (r) => (r.userId === currentUser.id || toDatabaseUserId(r.userId) === toDatabaseUserId(currentUser.id))
+    );
+
+    if (existing && existing.status === 'verified' && currentUser.role !== 'management') {
+      return {
+        success: false,
+        error: 'Your residential address is already verified by JMB. Unauthorized alterations are locked. Please contact JMB for relocation.',
+      };
+    }
+
+    const regId = existing?.id || `addr-${Date.now()}`;
+    const newRecord: ResidentAddressRecord = {
+      id: regId,
+      userId: currentUser.id,
+      fullName: currentUser.fullName,
+      precinct: data.precinct,
+      unitNumber: data.unitNumber,
+      streetName: data.streetName || '',
+      residenceType: data.residenceType,
+      proofDocumentName: data.proofDocumentName || 'Proof_Document.pdf',
+      proofDocumentUrl: data.proofDocumentUrl,
+      status: 'pending',
+      rejectionReason: undefined,
+      createdAt: existing?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    let savedRecord = newRecord;
+
+    try {
+      const syncRes = await fetch('/api/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tesdh-session': currentUser.id,
+        },
+        body: JSON.stringify({
+          action: 'SUBMIT_ADDRESS_REGISTRATION',
+          payload: {
+            ...data,
+            fullName: currentUser.fullName,
+          },
+          user: currentUser,
+        }),
+      });
+
+      if (syncRes.ok) {
+        const syncJson = await syncRes.json();
+        if (syncJson?.success && syncJson?.data?.registration) {
+          savedRecord = syncJson.data.registration;
+        } else if (!syncJson?.success && syncJson?.error) {
+          return { success: false, error: syncJson.error };
+        }
+      }
+    } catch (syncErr) {
+      console.warn('[Sync] /api/sync SUBMIT_ADDRESS_REGISTRATION fallback:', syncErr);
+    }
+
+    setAddressRegistrations((prev) => {
+      const updated = [savedRecord, ...prev.filter((r) => r.id !== savedRecord.id && r.userId !== currentUser.id)];
+      try {
+        localStorage.setItem(ADDRESS_REGISTRATIONS_CACHE_KEY, JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    // Update current profile unit and precinct
+    setCurrentUser((prev) => ({
+      ...prev,
+      unitNumber: data.unitNumber,
+      townshipPrecinct: data.precinct,
+      verificationStatus: 'pending',
+    }));
+
+    setProfiles((prev) =>
+      prev.map((p) =>
+        p.id === currentUser.id
+          ? { ...p, unitNumber: data.unitNumber, townshipPrecinct: data.precinct, verificationStatus: 'pending' as const }
+          : p
+      )
+    );
+
+    addNotification({
+      recipientId: currentUser.id,
+      type: 'official_announcement',
+      title: 'Residential Address Registered',
+      content: `Your address at ${data.unitNumber} (${data.precinct}) has been submitted and is currently Pending JMB Approval.`,
+      priority: 'normal',
+    });
+
+    logAudit('SUBMIT_ADDRESS_REGISTRATION', 'resident_address_registrations', savedRecord.id, {
+      precinct: data.precinct,
+      unitNumber: data.unitNumber,
+      residenceType: data.residenceType,
+    });
+
+    return { success: true, registration: savedRecord };
+  };
+
+  const approveAddressRegistration = async (registrationId: string): Promise<{ success: boolean; error?: string }> => {
+    const reg = addressRegistrations.find((r) => r.id === registrationId);
+    if (!reg) return { success: false, error: 'Registration record not found' };
+
+    const reviewerName = currentUser.fullName || 'Capt (B) Azman Salleh (JMB)';
+    const nowIso = new Date().toISOString();
+
+    const approvedRecord: ResidentAddressRecord = {
+      ...reg,
+      status: 'verified',
+      rejectionReason: undefined,
+      reviewedBy: currentUser.id,
+      reviewedByName: reviewerName,
+      reviewedAt: nowIso,
+      updatedAt: nowIso,
+    };
+
+    try {
+      await fetch('/api/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tesdh-session': currentUser.id,
+        },
+        body: JSON.stringify({
+          action: 'APPROVE_ADDRESS_REGISTRATION',
+          payload: { registrationId, registration: approvedRecord },
+          user: currentUser,
+        }),
+      });
+    } catch (syncErr) {
+      console.warn('[Sync] /api/sync APPROVE_ADDRESS_REGISTRATION fallback:', syncErr);
+    }
+
+    setAddressRegistrations((prev) => {
+      const updated = prev.map((r) => (r.id === registrationId ? approvedRecord : r));
+      try {
+        localStorage.setItem(ADDRESS_REGISTRATIONS_CACHE_KEY, JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    // Update target profile verification status and unit details
+    setProfiles((prev) =>
+      prev.map((p) =>
+        p.id === reg.userId || toDatabaseUserId(p.id) === toDatabaseUserId(reg.userId)
+          ? { ...p, verificationStatus: 'verified' as const, unitNumber: reg.unitNumber, townshipPrecinct: reg.precinct }
+          : p
+      )
+    );
+
+    if (currentUser.id === reg.userId || toDatabaseUserId(currentUser.id) === toDatabaseUserId(reg.userId)) {
+      setCurrentUser((prev) => ({
+        ...prev,
+        verificationStatus: 'verified',
+        unitNumber: reg.unitNumber,
+        townshipPrecinct: reg.precinct,
+      }));
+    }
+
+    addNotification({
+      recipientId: reg.userId,
+      senderId: currentUser.id,
+      type: 'official_announcement',
+      title: 'Residential Address Approved',
+      content: `Congratulations! Your address at ${reg.unitNumber} (${reg.precinct}) has been officially verified by JMB.`,
+      priority: 'urgent',
+    });
+
+    logAudit('APPROVE_ADDRESS_REGISTRATION', 'resident_address_registrations', registrationId, {
+      userId: reg.userId,
+      unitNumber: reg.unitNumber,
+    });
+
+    return { success: true };
+  };
+
+  const rejectAddressRegistration = async (registrationId: string, reason: string): Promise<{ success: boolean; error?: string }> => {
+    const reg = addressRegistrations.find((r) => r.id === registrationId);
+    if (!reg) return { success: false, error: 'Registration record not found' };
+
+    const reviewerName = currentUser.fullName || 'Capt (B) Azman Salleh (JMB)';
+    const nowIso = new Date().toISOString();
+
+    const rejectedRecord: ResidentAddressRecord = {
+      ...reg,
+      status: 'rejected',
+      rejectionReason: reason || 'Submitted documents do not match township municipal records.',
+      reviewedBy: currentUser.id,
+      reviewedByName: reviewerName,
+      reviewedAt: nowIso,
+      updatedAt: nowIso,
+    };
+
+    try {
+      await fetch('/api/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tesdh-session': currentUser.id,
+        },
+        body: JSON.stringify({
+          action: 'REJECT_ADDRESS_REGISTRATION',
+          payload: { registrationId, reason, registration: rejectedRecord },
+          user: currentUser,
+        }),
+      });
+    } catch (syncErr) {
+      console.warn('[Sync] /api/sync REJECT_ADDRESS_REGISTRATION fallback:', syncErr);
+    }
+
+    setAddressRegistrations((prev) => {
+      const updated = prev.map((r) => (r.id === registrationId ? rejectedRecord : r));
+      try {
+        localStorage.setItem(ADDRESS_REGISTRATIONS_CACHE_KEY, JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    setProfiles((prev) =>
+      prev.map((p) =>
+        p.id === reg.userId || toDatabaseUserId(p.id) === toDatabaseUserId(reg.userId)
+          ? { ...p, verificationStatus: 'rejected' as const }
+          : p
+      )
+    );
+
+    if (currentUser.id === reg.userId || toDatabaseUserId(currentUser.id) === toDatabaseUserId(reg.userId)) {
+      setCurrentUser((prev) => ({
+        ...prev,
+        verificationStatus: 'rejected',
+      }));
+    }
+
+    addNotification({
+      recipientId: reg.userId,
+      senderId: currentUser.id,
+      type: 'official_announcement',
+      title: 'Address Verification Requires Action',
+      content: `Your address application for ${reg.unitNumber} was not approved: "${reason}". You may update and resubmit.`,
+      priority: 'urgent',
+    });
+
+    logAudit('REJECT_ADDRESS_REGISTRATION', 'resident_address_registrations', registrationId, {
+      userId: reg.userId,
+      reason,
+    });
+
+    return { success: true };
+  };
+
+  const revokeAddressRegistration = async (registrationId: string, reason?: string): Promise<{ success: boolean; error?: string }> => {
+    const reg = addressRegistrations.find((r) => r.id === registrationId);
+    if (!reg) return { success: false, error: 'Registration record not found' };
+
+    const reviewerName = currentUser.fullName || 'Capt (B) Azman Salleh (JMB)';
+    const nowIso = new Date().toISOString();
+
+    const revokedRecord: ResidentAddressRecord = {
+      ...reg,
+      status: 'revoked',
+      rejectionReason: reason || 'Address verification revoked by JMB administration.',
+      reviewedBy: currentUser.id,
+      reviewedByName: reviewerName,
+      reviewedAt: nowIso,
+      updatedAt: nowIso,
+    };
+
+    try {
+      await fetch('/api/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tesdh-session': currentUser.id,
+        },
+        body: JSON.stringify({
+          action: 'REVOKE_ADDRESS_REGISTRATION',
+          payload: { registrationId, reason },
+          user: currentUser,
+        }),
+      });
+    } catch (syncErr) {
+      console.warn('[Sync] /api/sync REVOKE_ADDRESS_REGISTRATION fallback:', syncErr);
+    }
+
+    setAddressRegistrations((prev) => {
+      const updated = prev.map((r) => (r.id === registrationId ? revokedRecord : r));
+      try {
+        localStorage.setItem(ADDRESS_REGISTRATIONS_CACHE_KEY, JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    setProfiles((prev) =>
+      prev.map((p) =>
+        p.id === reg.userId || toDatabaseUserId(p.id) === toDatabaseUserId(reg.userId)
+          ? { ...p, verificationStatus: 'unverified' as const }
+          : p
+      )
+    );
+
+    if (currentUser.id === reg.userId || toDatabaseUserId(currentUser.id) === toDatabaseUserId(reg.userId)) {
+      setCurrentUser((prev) => ({
+        ...prev,
+        verificationStatus: 'unverified',
+      }));
+    }
+
+    logAudit('REVOKE_ADDRESS_REGISTRATION', 'resident_address_registrations', registrationId, {
+      userId: reg.userId,
+      reason,
+    });
+
+    return { success: true };
   };
 
   const sendMessage = (conversationId: string, content: string, isAnonymous = false, imageUrl?: string) => {
@@ -3824,6 +4221,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         acceptMessageRequest,
         rejectMessageRequest,
         blockPropertySender,
+        addressRegistrations,
+        submitAddressRegistration,
+        approveAddressRegistration,
+        rejectAddressRegistration,
+        revokeAddressRegistration,
         notifications,
         unreadNotificationCount,
         isNotificationCenterOpen,

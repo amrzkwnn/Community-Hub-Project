@@ -29,8 +29,8 @@ export default function PropertySearchModal({ isOpen, onClose }: PropertySearchM
   } = useApp();
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<{ targetId: string; precinct: string; maskedProperty: string }[]>([]);
-  const [selectedProperty, setSelectedProperty] = useState<{ targetId: string; precinct: string; maskedProperty: string } | null>(null);
+  const [searchResults, setSearchResults] = useState<{ targetId: string; precinct: string; maskedProperty: string; residenceType?: string }[]>([]);
+  const [selectedProperty, setSelectedProperty] = useState<{ targetId: string; precinct: string; maskedProperty: string; residenceType?: string } | null>(null);
 
   // Form fields
   const [subject, setSubject] = useState('');
@@ -87,9 +87,10 @@ export default function PropertySearchModal({ isOpen, onClose }: PropertySearchM
     }
   };
 
-  const handleSelectProperty = (prop: { targetId: string; precinct: string; maskedProperty: string }) => {
+  const handleSelectProperty = (prop: { targetId: string; precinct: string; maskedProperty: string; residenceType?: string }) => {
     setSelectedProperty(prop);
-    setSubject(`Neighbour Inquiry: ${prop.maskedProperty}`);
+    const typeLabel = prop.residenceType === 'tenant' ? ' (Tenant)' : prop.residenceType === 'household_member' ? ' (Household)' : '';
+    setSubject(`Neighbour Inquiry: ${prop.maskedProperty}${typeLabel}`);
     setErrorMessage(null);
   };
 
@@ -139,7 +140,7 @@ export default function PropertySearchModal({ isOpen, onClose }: PropertySearchM
             </div>
             <div>
               <h3 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white leading-tight">
-                Find Residence & Send Private Request
+                Find Residence &amp; Send Private Request
               </h3>
               <span className="text-[11px] text-slate-400">City of Elmina • Privacy-Shielded Protocol</span>
             </div>
@@ -156,7 +157,7 @@ export default function PropertySearchModal({ isOpen, onClose }: PropertySearchM
         <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-950/40 rounded-2xl border border-blue-200 dark:border-blue-900 text-xs text-blue-950 dark:text-blue-100 flex items-start gap-2.5">
           <Lock className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
           <div>
-            <strong className="block font-bold">Identity & Contact Number Privacy Protected</strong>
+            <strong className="block font-bold">Identity &amp; Contact Number Privacy Protected</strong>
             <span className="text-[11px] text-blue-900 dark:text-blue-200 leading-relaxed">
               Real phone numbers and personal emails are never exposed. The recipient resident must accept your request before a direct conversation channel unlocks.
             </span>
@@ -207,33 +208,48 @@ export default function PropertySearchModal({ isOpen, onClose }: PropertySearchM
                   Search Results ({searchResults.length})
                 </span>
               )}
-              {searchResults.map((res) => (
-                <div
-                  key={res.targetId}
-                  className="p-3 bg-slate-50 dark:bg-slate-900 hover:bg-rose-50/50 dark:hover:bg-slate-800 rounded-2xl border border-slate-200/80 dark:border-slate-800 transition-all flex items-center justify-between gap-3"
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="w-8 h-8 rounded-full bg-rose-100 dark:bg-rose-950/60 text-[#ba1b1d] flex items-center justify-center shrink-0">
-                      <Home className="w-4 h-4" />
-                    </div>
-                    <div className="truncate">
-                      <span className="text-xs font-bold text-slate-900 dark:text-white block truncate">
-                        {res.maskedProperty}
-                      </span>
-                      <span className="text-[11px] text-slate-500">
-                        {res.precinct} • Verified Resident
-                      </span>
-                    </div>
-                  </div>
+              {searchResults.map((res) => {
+                const resType = res.residenceType || 'owner';
+                const roleBadge = 
+                  resType === 'tenant'
+                    ? { label: 'Tenant', color: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300' }
+                    : resType === 'household_member'
+                      ? { label: 'Household', color: 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300' }
+                      : { label: 'Owner', color: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' };
 
-                  <button
-                    onClick={() => handleSelectProperty(res)}
-                    className="bg-[#ba1b1d] hover:bg-[#94000c] text-white text-xs font-bold px-3 py-1.5 rounded-xl transition-colors cursor-pointer shrink-0"
+                return (
+                  <div
+                    key={`${res.targetId}-${resType}`}
+                    className="p-3 bg-slate-50 dark:bg-slate-900 hover:bg-rose-50/50 dark:hover:bg-slate-800 rounded-2xl border border-slate-200/80 dark:border-slate-800 transition-all flex items-center justify-between gap-3"
                   >
-                    Select
-                  </button>
-                </div>
-              ))}
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-full bg-rose-100 dark:bg-rose-950/60 text-[#ba1b1d] flex items-center justify-center shrink-0">
+                        <Home className="w-4 h-4" />
+                      </div>
+                      <div className="truncate">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                            {res.maskedProperty}
+                          </span>
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${roleBadge.color}`}>
+                            {roleBadge.label}
+                          </span>
+                        </div>
+                        <span className="text-[11px] text-slate-500">
+                          {res.precinct} • Verified Resident Contact
+                        </span>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => handleSelectProperty(res)}
+                      className="bg-[#ba1b1d] hover:bg-[#94000c] text-white text-xs font-bold px-3 py-1.5 rounded-xl transition-colors cursor-pointer shrink-0"
+                    >
+                      Select
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </div>
         ) : (
@@ -242,12 +258,19 @@ export default function PropertySearchModal({ isOpen, onClose }: PropertySearchM
             <div className="p-3 bg-slate-100 dark:bg-slate-900 rounded-2xl flex items-center justify-between text-xs border border-slate-200/80 dark:border-slate-800">
               <div>
                 <span className="text-[10px] text-slate-500 uppercase font-bold block">Target Recipient:</span>
-                <span className="font-bold text-slate-900 dark:text-white">{selectedProperty.maskedProperty} ({selectedProperty.precinct})</span>
+                <span className="font-bold text-slate-900 dark:text-white">
+                  {selectedProperty.maskedProperty} ({selectedProperty.precinct})
+                  {selectedProperty.residenceType && (
+                    <span className="ml-1.5 px-2 py-0.5 rounded-full text-[10px] bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                      {selectedProperty.residenceType === 'tenant' ? 'Tenant' : selectedProperty.residenceType === 'household_member' ? 'Household' : 'Homeowner'}
+                    </span>
+                  )}
+                </span>
               </div>
               <button
                 type="button"
                 onClick={() => setSelectedProperty(null)}
-                className="text-xs text-[#ba1b1d] font-bold hover:underline cursor-pointer"
+                className="text-[11px] font-bold text-[#ba1b1d] hover:underline cursor-pointer"
               >
                 Change
               </button>

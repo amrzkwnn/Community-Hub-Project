@@ -10,7 +10,10 @@ import {
   CircularExchangeItem, 
   LocalService, 
   UserProfile, 
-  UnifiedModerationCase 
+  UnifiedModerationCase,
+  ResidentAddressRecord,
+  ResidenceType,
+  AddressVerificationStatus
 } from '@/types';
 import { 
   ShieldAlert, 
@@ -19,6 +22,7 @@ import {
   FileText, 
   Clock, 
   CheckCircle, 
+  CheckCircle2,
   XCircle, 
   Send, 
   Radio, 
@@ -33,6 +37,10 @@ import {
   Archive, 
   Search, 
   History, 
+  Home,
+  Building,
+  FileCheck,
+  Eye, 
   ChevronDown, 
   ChevronUp, 
   BarChart3, 
@@ -116,7 +124,11 @@ export default function ManagementView() {
     acknowledgeOperationalAlert,
     activeManagementFilter,
     setActiveManagementFilter,
-    navigateToManagementTab
+    navigateToManagementTab,
+    addressRegistrations,
+    approveAddressRegistration,
+    rejectAddressRegistration,
+    revokeAddressRegistration
   } = useApp();
 
   // Navigation tab state (12 core sections)
@@ -205,6 +217,15 @@ export default function ManagementView() {
   // ==========================================
   // SECTION 5D: RESIDENT MANAGEMENT STATE
   // ==========================================
+  const [residentSubTab, setResidentSubTab] = useState<'address_verification' | 'directory'>('address_verification');
+  const [addressFilterStatus, setAddressFilterStatus] = useState<'all' | 'pending' | 'verified' | 'rejected' | 'revoked'>('all');
+  const [addressSearchQuery, setAddressSearchQuery] = useState('');
+  const [rejectingAddressRecord, setRejectingAddressRecord] = useState<ResidentAddressRecord | null>(null);
+  const [addressRejectReason, setAddressRejectReason] = useState('');
+  const [revokingAddressRecord, setRevokingAddressRecord] = useState<ResidentAddressRecord | null>(null);
+  const [addressRevokeReason, setAddressRevokeReason] = useState('');
+  const [viewProofRecord, setViewProofRecord] = useState<ResidentAddressRecord | null>(null);
+  const [isProcessingAddress, setIsProcessingAddress] = useState(false);
   const [residentSearchQuery, setResidentSearchQuery] = useState('');
   const [residentRoleFilter, setResidentRoleFilter] = useState('all');
   const [residentStatusFilter, setResidentStatusFilter] = useState('all');
@@ -313,6 +334,36 @@ export default function ManagementView() {
   const failedModerationJobs = moderationHealth?.recentJobs?.filter((j: any) => j.status === 'failed') || [];
 
   const pendingVerificationProfiles = availableProfiles.filter((p) => p.verificationStatus === 'pending');
+  const pendingAddressRegistrations = useMemo(() => 
+    (addressRegistrations || []).filter((r) => r.status === 'pending'),
+    [addressRegistrations]
+  );
+  const verifiedAddressRegistrations = useMemo(() => 
+    (addressRegistrations || []).filter((r) => r.status === 'verified'),
+    [addressRegistrations]
+  );
+  const rejectedAddressRegistrations = useMemo(() => 
+    (addressRegistrations || []).filter((r) => r.status === 'rejected'),
+    [addressRegistrations]
+  );
+  const revokedAddressRegistrations = useMemo(() => 
+    (addressRegistrations || []).filter((r) => r.status === 'revoked'),
+    [addressRegistrations]
+  );
+  const filteredAddressRegistrations = useMemo(() => {
+    return (addressRegistrations || []).filter((reg) => {
+      if (addressFilterStatus !== 'all' && reg.status !== addressFilterStatus) return false;
+      if (addressSearchQuery.trim()) {
+        const q = addressSearchQuery.toLowerCase();
+        const nameMatch = (reg.fullName || reg.userName || '').toLowerCase().includes(q);
+        const unitMatch = (reg.unitNumber || '').toLowerCase().includes(q);
+        const streetMatch = (reg.streetName || '').toLowerCase().includes(q);
+        const precinctMatch = (reg.precinct || '').toLowerCase().includes(q);
+        if (!nameMatch && !unitMatch && !streetMatch && !precinctMatch) return false;
+      }
+      return true;
+    });
+  }, [addressRegistrations, addressFilterStatus, addressSearchQuery]);
   const activeIncidents = incidents.filter((i) => !i.isArchived && !i.isMerged && i.status !== 'pending' && i.status !== 'rejected');
   const pendingIncidents = incidents.filter((i) => !i.isArchived && i.status === 'pending');
   const unverifiedIncidents = incidents.filter((i) => !i.isArchived && !i.isVerified);
@@ -383,20 +434,21 @@ export default function ManagementView() {
       });
     }
 
-    // Resident verifications
-    if (pendingVerificationProfiles.length > 0) {
+    // Resident & Address verifications
+    const totalPendingResidents = pendingVerificationProfiles.length + pendingAddressRegistrations.length;
+    if (totalPendingResidents > 0) {
       list.push({
         id: 'pending-residents',
         type: 'resident',
-        title: `${pendingVerificationProfiles.length} Resident Verification Applications`,
-        desc: 'New resident documents pending ownership or tenancy validation.',
-        time: 'Queue',
+        title: `${totalPendingResidents} Resident / Address Applications Pending`,
+        desc: `${pendingAddressRegistrations.length} residential address proofs and ${pendingVerificationProfiles.length} resident profile verifications awaiting JMB review.`,
+        time: 'Immediate',
         linkTab: 'residents',
       });
     }
 
     return list;
-  }, [failedModerationJobs, unifiedCases, unverifiedIncidents, pendingVerificationProfiles]);
+  }, [failedModerationJobs, unifiedCases, unverifiedIncidents, pendingVerificationProfiles, pendingAddressRegistrations]);
 
   // ==========================================
   // HANDLERS
@@ -554,6 +606,65 @@ export default function ManagementView() {
       setSuspendReason('');
     } else {
       showError(res.error || 'Failed to change account status.');
+    }
+  };
+
+  // Address Verification Handlers (JMB)
+  const handleApproveAddress = async (regId: string) => {
+    setIsProcessingAddress(true);
+    try {
+      const res = await approveAddressRegistration(regId);
+      if (res.success) {
+        showSuccess('Residential address verified! Address is now eligible for property messaging.');
+      } else {
+        showError(res.error || 'Failed to approve address.');
+      }
+    } catch (err: any) {
+      showError(err.message || 'Error approving address.');
+    } finally {
+      setIsProcessingAddress(false);
+    }
+  };
+
+  const handleConfirmRejectAddress = async () => {
+    if (!rejectingAddressRecord) return;
+    if (!addressRejectReason.trim()) {
+      showError('Please provide a mandatory reason for rejecting this address application.');
+      return;
+    }
+    setIsProcessingAddress(true);
+    try {
+      const res = await rejectAddressRegistration(rejectingAddressRecord.id, addressRejectReason.trim());
+      if (res.success) {
+        showSuccess(`Address application for ${rejectingAddressRecord.unitNumber} rejected. Resident notified with reason.`);
+        setRejectingAddressRecord(null);
+        setAddressRejectReason('');
+      } else {
+        showError(res.error || 'Failed to reject address.');
+      }
+    } catch (err: any) {
+      showError(err.message || 'Error rejecting address.');
+    } finally {
+      setIsProcessingAddress(false);
+    }
+  };
+
+  const handleConfirmRevokeAddress = async () => {
+    if (!revokingAddressRecord) return;
+    setIsProcessingAddress(true);
+    try {
+      const res = await revokeAddressRegistration(revokingAddressRecord.id, addressRevokeReason.trim() || undefined);
+      if (res.success) {
+        showSuccess(`Residential verification for ${revokingAddressRecord.unitNumber} revoked.`);
+        setRevokingAddressRecord(null);
+        setAddressRevokeReason('');
+      } else {
+        showError(res.error || 'Failed to revoke address.');
+      }
+    } catch (err: any) {
+      showError(err.message || 'Error revoking address.');
+    } finally {
+      setIsProcessingAddress(false);
     }
   };
 
@@ -847,9 +958,9 @@ export default function ManagementView() {
           >
             <Users className="w-3.5 h-3.5" />
             <span>Resident Management</span>
-            {pendingVerificationProfiles.length > 0 && (
-              <span className="px-1.5 py-0.2 bg-emerald-400 text-emerald-950 rounded-full text-[10px] font-bold">
-                {pendingVerificationProfiles.length}
+            {(pendingVerificationProfiles.length + pendingAddressRegistrations.length) > 0 && (
+              <span className="px-1.5 py-0.2 bg-amber-400 text-slate-950 rounded-full text-[10px] font-bold">
+                {pendingVerificationProfiles.length + pendingAddressRegistrations.length}
               </span>
             )}
           </button>
@@ -3251,259 +3362,937 @@ export default function ManagementView() {
       )}
 
       {/* ======================================================== */}
-      {/* 5D: RESIDENT MANAGEMENT                                  */}
+      {/* 5D: RESIDENT MANAGEMENT & ADDRESS VERIFICATION          */}
       {/* ======================================================== */}
       {activeMgmtTab === 'residents' && (
         <div className="space-y-6 animate-in fade-in duration-150">
-          {/* Pending ID Verifications Queue */}
-          <div className="bg-white dark:bg-[#15181C] p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-              <div>
-                <h3 className="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-                  <UserCheck className="w-4 h-4 text-emerald-800 dark:text-emerald-400" />
-                  <span>Resident Identity Verification Queue</span>
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Review proof of ownership or tenancy (S&P / Assessment Tax / Tenancy Agreement). All PII is masked for PDPA compliance.
-                </p>
-              </div>
-              <span className="text-xs font-bold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-full">
-                Pending: {pendingVerificationProfiles.length}
-              </span>
-            </div>
+          {/* Sub-navigation Tabs: Address Verification vs Resident Directory */}
+          <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
+            <button
+              onClick={() => setResidentSubTab('address_verification')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                residentSubTab === 'address_verification'
+                  ? 'bg-[#9E1315] text-white shadow-xs'
+                  : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
+              }`}
+            >
+              <Home className="w-3.5 h-3.5" />
+              <span>Residential Address &amp; JMB Approval</span>
+              {pendingAddressRegistrations.length > 0 && (
+                <span className="px-1.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-400 text-slate-950">
+                  {pendingAddressRegistrations.length}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => setResidentSubTab('directory')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                residentSubTab === 'directory'
+                  ? 'bg-[#9E1315] text-white shadow-xs'
+                  : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span>Resident Directory &amp; Roles</span>
+              {pendingVerificationProfiles.length > 0 && (
+                <span className="px-1.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-400 text-emerald-950">
+                  {pendingVerificationProfiles.length}
+                </span>
+              )}
+            </button>
+          </div>
 
-            <div className="space-y-3">
-              {pendingVerificationProfiles.length === 0 ? (
-                <div className="p-8 text-center text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-900/40 rounded-2xl">
-                  <UserCheck className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                  <p className="text-xs font-semibold">No pending resident verification requests at this time.</p>
+          {/* ======================================================== */}
+          {/* SUB-VIEW 1: JMB RESIDENTIAL ADDRESS VERIFICATION        */}
+          {/* ======================================================== */}
+          {residentSubTab === 'address_verification' && (
+            <div className="space-y-6">
+              {/* Header & Metrics */}
+              <div className="bg-white dark:bg-[#15181C] p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
+                  <div>
+                    <h3 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                      <Home className="w-5 h-5 text-[#ba1b1d]" />
+                      <span>JMB Residential Address Verification System</span>
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      Review registered addresses and ownership/tenancy documentation. Approved addresses become searchable in secure property messaging.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full">
+                      Total Registered: {addressRegistrations.length}
+                    </span>
+                  </div>
                 </div>
-              ) : (
-                pendingVerificationProfiles.map((p) => (
-                  <div key={p.id} className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/50 dark:bg-slate-900/40">
-                    <div className="flex items-center gap-3">
-                      <img
-                        src={p.avatarUrl || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100'}
-                        alt={p.fullName}
-                        className="w-12 h-12 rounded-full object-cover ring-2 ring-slate-200 dark:ring-slate-700 shrink-0"
+
+                {/* 4 KPI Metric Cards */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <button
+                    onClick={() => setAddressFilterStatus('pending')}
+                    className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
+                      addressFilterStatus === 'pending'
+                        ? 'border-amber-500 bg-amber-50/80 dark:bg-amber-950/40 ring-2 ring-amber-500/20'
+                        : 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 hover:bg-slate-100/60'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-amber-800 dark:text-amber-400 uppercase tracking-wider">Pending Review</span>
+                      <Clock className="w-4 h-4 text-amber-700 dark:text-amber-400" />
+                    </div>
+                    <div className="mt-2 flex items-baseline gap-2">
+                      <span className="text-2xl font-black text-slate-900 dark:text-white">{pendingAddressRegistrations.length}</span>
+                      <span className="text-[11px] text-slate-500 font-medium">Awaiting action</span>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => setAddressFilterStatus('verified')}
+                    className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
+                      addressFilterStatus === 'verified'
+                        ? 'border-emerald-500 bg-emerald-50/80 dark:bg-emerald-950/40 ring-2 ring-emerald-500/20'
+                        : 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 hover:bg-slate-100/60'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-emerald-800 dark:text-emerald-400 uppercase tracking-wider">Verified</span>
+                      <ShieldCheck className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
+                    </div>
+                    <div className="mt-2 flex items-baseline gap-2">
+                      <span className="text-2xl font-black text-slate-900 dark:text-white">{verifiedAddressRegistrations.length}</span>
+                      <span className="text-[11px] text-slate-500 font-medium">Chat eligible</span>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => setAddressFilterStatus('rejected')}
+                    className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
+                      addressFilterStatus === 'rejected'
+                        ? 'border-rose-500 bg-rose-50/80 dark:bg-rose-950/40 ring-2 ring-rose-500/20'
+                        : 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 hover:bg-slate-100/60'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-rose-800 dark:text-rose-400 uppercase tracking-wider">Rejected</span>
+                      <XCircle className="w-4 h-4 text-rose-700 dark:text-rose-400" />
+                    </div>
+                    <div className="mt-2 flex items-baseline gap-2">
+                      <span className="text-2xl font-black text-slate-900 dark:text-white">{rejectedAddressRegistrations.length}</span>
+                      <span className="text-[11px] text-slate-500 font-medium">Need resubmission</span>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => setAddressFilterStatus('revoked')}
+                    className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
+                      addressFilterStatus === 'revoked'
+                        ? 'border-slate-500 bg-slate-200/80 dark:bg-slate-800/80 ring-2 ring-slate-500/20'
+                        : 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 hover:bg-slate-100/60'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-slate-700 dark:text-slate-400 uppercase tracking-wider">Revoked</span>
+                      <History className="w-4 h-4 text-slate-600 dark:text-slate-400" />
+                    </div>
+                    <div className="mt-2 flex items-baseline gap-2">
+                      <span className="text-2xl font-black text-slate-900 dark:text-white">{revokedAddressRegistrations.length}</span>
+                      <span className="text-[11px] text-slate-500 font-medium">Audit records</span>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Pending Address Applications Action Queue */}
+              {(addressFilterStatus === 'all' || addressFilterStatus === 'pending') && pendingAddressRegistrations.length > 0 && (
+                <div className="bg-amber-50/60 dark:bg-amber-950/20 p-6 rounded-3xl border border-amber-200 dark:border-amber-900/60 shadow-xs space-y-4">
+                  <div className="flex items-center justify-between border-b border-amber-200/60 dark:border-amber-900/40 pb-3">
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-amber-700 dark:text-amber-400" />
+                      <h4 className="text-sm font-extrabold text-amber-950 dark:text-amber-200">
+                        Pending Address Applications Awaiting JMB Action ({pendingAddressRegistrations.length})
+                      </h4>
+                    </div>
+                    <span className="text-[11px] font-bold text-amber-800 dark:text-amber-300">
+                      Requires JMB officer verification
+                    </span>
+                  </div>
+
+                  <div className="space-y-3">
+                    {pendingAddressRegistrations.map((reg) => (
+                      <div
+                        key={reg.id}
+                        className="p-4 rounded-2xl border border-amber-200/80 dark:border-amber-900/60 bg-white dark:bg-[#15181C] shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4"
+                      >
+                        <div className="flex items-start gap-3">
+                          <img
+                            src={reg.userAvatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
+                            alt={reg.fullName || 'Resident'}
+                            className="w-10 h-10 rounded-full object-cover ring-2 ring-amber-300 dark:ring-amber-700 shrink-0 mt-0.5"
+                          />
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-sm font-bold text-slate-900 dark:text-white">
+                                {reg.fullName || reg.userName || 'Resident'}
+                              </span>
+                              <span className="font-mono text-[10px] text-slate-400">ID: {reg.userId}</span>
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                                  reg.residenceType === 'owner'
+                                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                                    : reg.residenceType === 'tenant'
+                                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300'
+                                    : 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300'
+                                }`}
+                              >
+                                {reg.residenceType === 'owner' ? 'Owner' : reg.residenceType === 'tenant' ? 'Tenant' : 'Household Member'}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+                              <span className="font-extrabold text-[#ba1b1d]">{reg.unitNumber}</span>
+                              <span>•</span>
+                              <span>{reg.precinct}</span>
+                              {reg.streetName && <span>• {reg.streetName}</span>}
+                            </div>
+
+                            <div className="flex items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400">
+                              <button
+                                type="button"
+                                onClick={() => setViewProofRecord(reg)}
+                                className="inline-flex items-center gap-1 text-[#ba1b1d] hover:underline font-semibold cursor-pointer"
+                              >
+                                <FileText className="w-3.5 h-3.5" />
+                                <span>{reg.proofDocumentName || 'Proof_Document.pdf'}</span>
+                                <Eye className="w-3 h-3 ml-0.5" />
+                              </button>
+                              <span>• Submitted <TimeAgo date={reg.createdAt} /></span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 self-end md:self-center shrink-0">
+                          <button
+                            type="button"
+                            disabled={isProcessingAddress}
+                            onClick={() => {
+                              setRejectingAddressRecord(reg);
+                              setAddressRejectReason('');
+                            }}
+                            className="px-3.5 py-2 rounded-xl text-xs font-bold text-rose-700 hover:text-rose-900 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                          >
+                            <XCircle className="w-3.5 h-3.5" />
+                            <span>Reject</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={isProcessingAddress}
+                            onClick={() => handleApproveAddress(reg.id)}
+                            className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-emerald-800 hover:bg-emerald-900 transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-50"
+                          >
+                            <CheckCircle className="w-3.5 h-3.5" />
+                            <span>Approve Address</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Filter & Search Bar + Complete Address Records Table */}
+              <div className="bg-white dark:bg-[#15181C] p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+                  <div>
+                    <h3 className="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                      <Building className="w-4 h-4 text-emerald-800 dark:text-emerald-400" />
+                      <span>Address Verification Registry &amp; Audit Trail</span>
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      Server-persisted register of verified, pending, and revoked residential associations.
+                    </p>
+                  </div>
+
+                  {/* Search and Filters */}
+                  <div className="flex items-center gap-2 min-w-0 flex-wrap sm:flex-nowrap">
+                    <div className="relative min-w-0 flex-1 sm:w-56">
+                      <input
+                        type="text"
+                        placeholder="Search unit, name, street..."
+                        value={addressSearchQuery}
+                        onChange={(e) => setAddressSearchQuery(e.target.value)}
+                        className="w-full h-9 px-3 text-xs border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50/50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-[#9E1315]/20 focus:border-[#9E1315]"
                       />
+                    </div>
+                    <div className="min-w-0 w-36 sm:w-40 shrink-0">
+                      <ManagementSelect
+                        value={addressFilterStatus}
+                        onChange={(v) => setAddressFilterStatus(v as any)}
+                        ariaLabel="Filter by status"
+                        options={[
+                          { value: 'all', label: `All (${addressRegistrations.length})` },
+                          { value: 'pending', label: `Pending (${pendingAddressRegistrations.length})` },
+                          { value: 'verified', label: `Verified (${verifiedAddressRegistrations.length})` },
+                          { value: 'rejected', label: `Rejected (${rejectedAddressRegistrations.length})` },
+                          { value: 'revoked', label: `Revoked (${revokedAddressRegistrations.length})` },
+                        ]}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400">
+                        <th className="py-2.5 px-3 font-bold">Unit &amp; Precinct</th>
+                        <th className="py-2.5 px-3 font-bold">Resident</th>
+                        <th className="py-2.5 px-3 font-bold">Type</th>
+                        <th className="py-2.5 px-3 font-bold">Status</th>
+                        <th className="py-2.5 px-3 font-bold">Proof Document</th>
+                        <th className="py-2.5 px-3 font-bold">JMB Audit Record</th>
+                        <th className="py-2.5 px-3 font-bold text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {filteredAddressRegistrations.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="py-8 text-center text-slate-400 dark:text-slate-500">
+                            No address registrations match your search or filter.
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredAddressRegistrations.map((reg) => (
+                          <tr key={reg.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/50">
+                            <td className="py-3 px-3 whitespace-nowrap">
+                              <div>
+                                <span className="font-extrabold text-slate-900 dark:text-slate-100 block">{reg.unitNumber}</span>
+                                <span className="text-[11px] text-slate-500 dark:text-slate-400">{reg.precinct}</span>
+                                {reg.streetName && <span className="text-[10px] text-slate-400 block">{reg.streetName}</span>}
+                              </div>
+                            </td>
+
+                            <td className="py-3 px-3 whitespace-nowrap">
+                              <div className="flex items-center gap-2">
+                                <img
+                                  src={reg.userAvatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
+                                  alt={reg.fullName || 'Resident'}
+                                  className="w-7 h-7 rounded-full object-cover shrink-0"
+                                />
+                                <div>
+                                  <span className="font-bold text-slate-900 dark:text-slate-100 block">{reg.fullName || reg.userName || 'Resident'}</span>
+                                  <span className="text-[10px] text-slate-400 font-mono">ID: {reg.userId}</span>
+                                </div>
+                              </div>
+                            </td>
+
+                            <td className="py-3 px-3 whitespace-nowrap">
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                  reg.residenceType === 'owner'
+                                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                                    : reg.residenceType === 'tenant'
+                                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300'
+                                    : 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300'
+                                }`}
+                              >
+                                {reg.residenceType === 'owner' ? 'Owner' : reg.residenceType === 'tenant' ? 'Tenant' : 'Household'}
+                              </span>
+                            </td>
+
+                            <td className="py-3 px-3 whitespace-nowrap">
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold inline-flex items-center gap-1 ${
+                                  reg.status === 'verified'
+                                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                                    : reg.status === 'pending'
+                                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                                    : reg.status === 'rejected'
+                                    ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
+                                    : 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                                }`}
+                              >
+                                {reg.status === 'verified' && <CheckCircle className="w-3 h-3" />}
+                                {reg.status === 'pending' && <Clock className="w-3 h-3" />}
+                                {reg.status === 'rejected' && <XCircle className="w-3 h-3" />}
+                                {reg.status === 'revoked' && <History className="w-3 h-3" />}
+                                <span>{reg.status.toUpperCase()}</span>
+                              </span>
+                            </td>
+
+                            <td className="py-3 px-3 whitespace-nowrap">
+                              <button
+                                type="button"
+                                onClick={() => setViewProofRecord(reg)}
+                                className="text-[11px] font-bold text-[#ba1b1d] hover:underline flex items-center gap-1 cursor-pointer"
+                              >
+                                <FileText className="w-3.5 h-3.5" />
+                                <span className="max-w-[120px] truncate">{reg.proofDocumentName || 'Document.pdf'}</span>
+                              </button>
+                            </td>
+
+                            <td className="py-3 px-3">
+                              <div className="text-[11px] space-y-0.5 max-w-[220px]">
+                                <div className="text-slate-700 dark:text-slate-300 font-semibold truncate">
+                                  {reg.reviewedByName || reg.reviewedBy || 'Pending Review'}
+                                </div>
+                                {reg.reviewedAt && (
+                                  <div className="text-[10px] text-slate-400">
+                                    <TimeAgo date={reg.reviewedAt} />
+                                  </div>
+                                )}
+                                {reg.rejectionReason && (
+                                  <div className="text-[10px] text-rose-800 dark:text-rose-300 italic truncate" title={reg.rejectionReason}>
+                                    &quot;{reg.rejectionReason}&quot;
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+
+                            <td className="py-3 px-3 whitespace-nowrap text-right">
+                              {reg.status === 'verified' && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setRevokingAddressRecord(reg);
+                                    setAddressRevokeReason('');
+                                  }}
+                                  className="text-xs font-bold text-rose-600 hover:text-rose-800 dark:text-rose-400 dark:hover:text-rose-300 cursor-pointer"
+                                >
+                                  Revoke
+                                </button>
+                              )}
+
+                              {reg.status === 'pending' && (
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleApproveAddress(reg.id)}
+                                    className="px-2.5 py-1 bg-emerald-800 hover:bg-emerald-900 text-white rounded-lg text-[11px] font-bold cursor-pointer"
+                                  >
+                                    Approve
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setRejectingAddressRecord(reg);
+                                      setAddressRejectReason('');
+                                    }}
+                                    className="px-2.5 py-1 bg-rose-100 hover:bg-rose-200 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 rounded-lg text-[11px] font-bold cursor-pointer"
+                                  >
+                                    Reject
+                                  </button>
+                                </div>
+                              )}
+
+                              {(reg.status === 'rejected' || reg.status === 'revoked') && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleApproveAddress(reg.id)}
+                                  className="text-xs font-bold text-emerald-700 hover:text-emerald-900 dark:text-emerald-400 dark:hover:text-emerald-300 cursor-pointer"
+                                >
+                                  Reinstate &amp; Approve
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Reject Address Modal */}
+              {rejectingAddressRecord && (
+                <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+                  <div className="bg-white dark:bg-[#15181C] rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+                    <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                      <div className="flex items-center gap-2">
+                        <XCircle className="w-5 h-5 text-rose-600 dark:text-rose-400" />
+                        <h4 className="text-sm font-bold text-slate-900 dark:text-white">Reject Address Application</h4>
+                      </div>
+                      <button
+                        onClick={() => setRejectingAddressRecord(null)}
+                        className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <div className="space-y-3 text-xs">
+                      <p className="text-slate-600 dark:text-slate-300">
+                        Rejecting application for <strong>{rejectingAddressRecord.unitNumber}</strong> by <strong>{rejectingAddressRecord.fullName || 'Resident'}</strong>. The resident will be notified and permitted to resubmit.
+                      </p>
+
                       <div>
-                        <h4 className="text-xs font-bold text-slate-900 dark:text-white">{p.fullName}</h4>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                          {p.townshipPrecinct} • Unit: {p.unitNumber || 'Verified in S&P record'}
-                        </p>
-                        <p className="text-[11px] text-emerald-800 dark:text-emerald-400 font-medium">
-                          Phone: {p.phone || 'Protected'} (Verified via OTP)
-                        </p>
+                        <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                          Quick Preset Reasons
+                        </label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {[
+                            'Proof document unreadable or incomplete',
+                            'Unit number does not match township cadastral register',
+                            'Name does not match S&P or Tenancy Agreement schedule',
+                            'Expired tenancy agreement'
+                          ].map((preset) => (
+                            <button
+                              key={preset}
+                              type="button"
+                              onClick={() => setAddressRejectReason(preset)}
+                              className="px-2.5 py-1 text-[11px] rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 cursor-pointer text-left transition-colors"
+                            >
+                              {preset}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          Mandatory Rejection Rationale <span className="text-rose-500">*</span>
+                        </label>
+                        <textarea
+                          required
+                          rows={3}
+                          value={addressRejectReason}
+                          onChange={(e) => setAddressRejectReason(e.target.value)}
+                          placeholder="Provide clear guidance to help the resident resolve this issue..."
+                          className="w-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded-xl p-2.5 resize-none focus:ring-2 focus:ring-[#9E1315]/20 focus:border-[#9E1315]"
+                        />
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                       <button
-                        onClick={() => verifyResidentAccount(p.id, false)}
-                        className="flex items-center gap-1 bg-slate-100 hover:bg-rose-100 dark:bg-slate-800 dark:hover:bg-rose-950/40 text-slate-700 hover:text-rose-900 dark:text-slate-300 dark:hover:text-rose-300 px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-colors"
+                        type="button"
+                        onClick={() => setRejectingAddressRecord(null)}
+                        className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold rounded-xl cursor-pointer text-xs"
                       >
-                        <XCircle className="w-3.5 h-3.5" />
-                        <span>Decline Request</span>
+                        Cancel
                       </button>
                       <button
-                        onClick={() => verifyResidentAccount(p.id, true)}
-                        className="flex items-center gap-1 bg-emerald-800 hover:bg-emerald-900 text-white px-4 py-1.5 rounded-xl text-xs font-bold shadow-xs cursor-pointer"
+                        type="button"
+                        disabled={isProcessingAddress || !addressRejectReason.trim()}
+                        onClick={handleConfirmRejectAddress}
+                        className="px-4 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-bold rounded-xl cursor-pointer text-xs shadow-xs"
                       >
-                        <CheckCircle className="w-3.5 h-3.5" />
-                        <span>Approve Resident</span>
+                        {isProcessingAddress ? 'Processing...' : 'Confirm Rejection'}
                       </button>
                     </div>
                   </div>
-                ))
+                </div>
+              )}
+
+              {/* Revoke Address Modal */}
+              {revokingAddressRecord && (
+                <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+                  <div className="bg-white dark:bg-[#15181C] rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+                    <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                      <div className="flex items-center gap-2">
+                        <History className="w-5 h-5 text-rose-600 dark:text-rose-400" />
+                        <h4 className="text-sm font-bold text-slate-900 dark:text-white">Revoke Verified Address</h4>
+                      </div>
+                      <button
+                        onClick={() => setRevokingAddressRecord(null)}
+                        className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <div className="space-y-3 text-xs">
+                      <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 rounded-xl text-amber-900 dark:text-amber-200">
+                        Revoking <strong>{revokingAddressRecord.unitNumber}</strong> will immediately remove this resident from property-based messaging search and lock address associations.
+                      </div>
+
+                      <div>
+                        <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                          Preset Revocation Reasons
+                        </label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {[
+                            'Tenancy concluded / Resident relocated',
+                            'Property ownership transfer / Unit sold',
+                            'Disputed documentation or administrative correction'
+                          ].map((preset) => (
+                            <button
+                              key={preset}
+                              type="button"
+                              onClick={() => setAddressRevokeReason(preset)}
+                              className="px-2.5 py-1 text-[11px] rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 cursor-pointer text-left transition-colors"
+                            >
+                              {preset}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          Revocation Reason
+                        </label>
+                        <textarea
+                          rows={2}
+                          value={addressRevokeReason}
+                          onChange={(e) => setAddressRevokeReason(e.target.value)}
+                          placeholder="Optional notes for township records..."
+                          className="w-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded-xl p-2.5 resize-none focus:ring-2 focus:ring-[#9E1315]/20 focus:border-[#9E1315]"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                      <button
+                        type="button"
+                        onClick={() => setRevokingAddressRecord(null)}
+                        className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold rounded-xl cursor-pointer text-xs"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isProcessingAddress}
+                        onClick={handleConfirmRevokeAddress}
+                        className="px-4 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-bold rounded-xl cursor-pointer text-xs shadow-xs"
+                      >
+                        {isProcessingAddress ? 'Revoking...' : 'Confirm Revocation'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Proof Document Viewer Modal */}
+              {viewProofRecord && (
+                <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+                  <div className="bg-white dark:bg-[#15181C] rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+                    <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                      <div className="flex items-center gap-2">
+                        <FileCheck className="w-5 h-5 text-emerald-700 dark:text-emerald-400" />
+                        <h4 className="text-sm font-bold text-slate-900 dark:text-white">Proof of Ownership / Tenancy</h4>
+                      </div>
+                      <button
+                        onClick={() => setViewProofRecord(null)}
+                        className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-3 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500">Applicant:</span>
+                        <span className="font-bold text-slate-900 dark:text-white">{viewProofRecord.fullName || 'Resident'}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500">Declared Property:</span>
+                        <span className="font-bold text-[#ba1b1d]">{viewProofRecord.unitNumber} ({viewProofRecord.precinct})</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500">Residence Classification:</span>
+                        <span className="font-bold capitalize">{viewProofRecord.residenceType}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500">Document Name:</span>
+                        <span className="font-mono text-slate-700 dark:text-slate-300 font-bold">{viewProofRecord.proofDocumentName || 'Proof_Document.pdf'}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500">Digital Seal Hash:</span>
+                        <span className="font-mono text-[10px] text-slate-400">SHA256:7f9e8a1d...3c2b1a</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500">PDPA Verification:</span>
+                        <span className="text-emerald-700 dark:text-emerald-400 font-bold flex items-center gap-1">
+                          <ShieldCheck className="w-3.5 h-3.5" /> Identity &amp; Unit Number Matched
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                      <button
+                        type="button"
+                        onClick={() => setViewProofRecord(null)}
+                        className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold rounded-xl cursor-pointer text-xs"
+                      >
+                        Close
+                      </button>
+                      {viewProofRecord.status === 'pending' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleApproveAddress(viewProofRecord.id);
+                            setViewProofRecord(null);
+                          }}
+                          className="px-4 py-2 bg-emerald-800 hover:bg-emerald-900 text-white font-bold rounded-xl cursor-pointer text-xs flex items-center gap-1.5 shadow-xs"
+                        >
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          <span>Approve from Viewer</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
-          </div>
+          )}
 
-          {/* Resident Directory & Role Governance */}
-          <div className="bg-white dark:bg-[#15181C] p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
-              <div>
-                <h3 className="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-                  <Users className="w-4 h-4 text-emerald-800 dark:text-emerald-400" />
-                  <span>Resident Directory & Governance</span>
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Manage resident roles and account standing. Guarded against revoking the last management account.
-                </p>
-              </div>
-
-              {/* Filters */}
-              <div className="flex items-center gap-2 min-w-0 flex-wrap sm:flex-nowrap">
-                <div className="relative min-w-0 flex-1 sm:w-48">
-                  <input
-                    type="text"
-                    placeholder="Search resident..."
-                    value={residentSearchQuery}
-                    onChange={(e) => setResidentSearchQuery(e.target.value)}
-                    className="w-full h-9 sm:h-10 px-3 text-xs border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50/50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-[#9E1315]/20 focus:border-[#9E1315]"
-                  />
-                </div>
-                <div className="min-w-0 w-36 sm:w-40 shrink-0">
-                  <ManagementSelect
-                    value={residentRoleFilter}
-                    onChange={setResidentRoleFilter}
-                    ariaLabel="Filter by role"
-                    options={[
-                      { value: 'all', label: 'All Roles' },
-                      { value: 'resident', label: 'Resident' },
-                      { value: 'moderator', label: 'Moderator' },
-                      { value: 'security', label: 'Security' },
-                      { value: 'management', label: 'Management' },
-                    ]}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {roleMessage && (
-              <div className={`p-3 rounded-xl text-xs font-bold flex items-center gap-2 ${
-                roleMessage.isError ? 'bg-rose-50 text-rose-900 border border-rose-200' : 'bg-emerald-50 text-emerald-900 border border-emerald-200'
-              }`}>
-                {roleMessage.isError ? <AlertTriangle className="w-4 h-4" /> : <Check className="w-4 h-4" />}
-                <span>{roleMessage.text}</span>
-              </div>
-            )}
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400">
-                    <th className="py-2.5 px-3 font-bold">Resident</th>
-                    <th className="py-2.5 px-3 font-bold">Precinct</th>
-                    <th className="py-2.5 px-3 font-bold">Verification</th>
-                    <th className="py-2.5 px-3 font-bold">Status</th>
-                    <th className="py-2.5 px-3 font-bold">Role Assignment</th>
-                    <th className="py-2.5 px-3 font-bold">Account Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {availableProfiles
-                    .filter((prof) => {
-                      if (residentRoleFilter !== 'all' && prof.role !== residentRoleFilter) return false;
-                      if (residentSearchQuery.trim()) {
-                        const q = residentSearchQuery.toLowerCase();
-                        if (!prof.fullName.toLowerCase().includes(q) && !prof.townshipPrecinct.toLowerCase().includes(q)) return false;
-                      }
-                      return true;
-                    })
-                    .map((prof) => (
-                      <tr key={prof.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/50">
-                        <td className="py-3 px-3 whitespace-nowrap">
-                          <div className="flex items-center gap-2.5">
-                            <img src={prof.avatarUrl} alt={prof.fullName} className="w-7 h-7 rounded-full object-cover shrink-0" />
-                            <div>
-                              <span className="font-bold text-slate-900 dark:text-slate-100 block">{prof.fullName}</span>
-                              <span className="text-[10px] text-slate-400 font-mono">ID: {prof.id}</span>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="py-3 px-3 whitespace-nowrap text-slate-600 dark:text-slate-300">
-                          {prof.townshipPrecinct}
-                        </td>
-                        <td className="py-3 px-3 whitespace-nowrap">
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            prof.verificationStatus === 'verified' ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300' : 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300'
-                          }`}>
-                            {prof.verificationStatus.toUpperCase()}
-                          </span>
-                        </td>
-                        <td className="py-3 px-3 whitespace-nowrap">
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            prof.status === 'suspended' ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300' : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300'
-                          }`}>
-                            {prof.status === 'suspended' ? 'SUSPENDED' : 'ACTIVE'}
-                          </span>
-                        </td>
-                        <td className="py-2.5 px-3 whitespace-nowrap">
-                          <div className="w-32 min-w-0">
-                            <ManagementSelect
-                              value={prof.role}
-                              onChange={(val) => handleRoleChange(prof.id, val as UserRole)}
-                              ariaLabel={`Role for ${prof.fullName}`}
-                              className="h-8 py-1 text-xs"
-                              options={[
-                                { value: 'resident', label: 'Resident' },
-                                { value: 'moderator', label: 'Moderator' },
-                                { value: 'security', label: 'Security' },
-                                { value: 'management', label: 'Management' },
-                              ]}
-                            />
-                          </div>
-                        </td>
-                        <td className="py-3 px-3 whitespace-nowrap">
-                          {prof.status === 'suspended' ? (
-                            <button
-                              onClick={() => handleAccountStatusChange(prof.id, 'active')}
-                              className="text-xs font-bold text-emerald-700 hover:text-emerald-900 dark:text-emerald-400 dark:hover:text-emerald-300 cursor-pointer"
-                            >
-                              Restore Account
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => setSuspendModalUser(prof)}
-                              className="text-xs font-bold text-rose-600 hover:text-rose-800 dark:text-rose-400 dark:hover:text-rose-300 cursor-pointer"
-                            >
-                              Restrict / Suspend
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Suspend Modal */}
-          {suspendModalUser && (
-            <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-              <div className="bg-white dark:bg-[#15181C] rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+          {/* ======================================================== */}
+          {/* SUB-VIEW 2: RESIDENT DIRECTORY & ROLE GOVERNANCE        */}
+          {/* ======================================================== */}
+          {residentSubTab === 'directory' && (
+            <div className="space-y-6">
+              {/* Pending ID Verifications Queue */}
+              <div className="bg-white dark:bg-[#15181C] p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
                 <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-                  <div className="flex items-center gap-2">
-                    <ShieldX className="w-5 h-5 text-rose-600 dark:text-rose-400" />
-                    <h4 className="text-sm font-bold text-slate-900 dark:text-white">Suspend Resident Account</h4>
-                  </div>
-                  <button onClick={() => setSuspendModalUser(null)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-                <div className="space-y-3 text-xs">
-                  <p className="text-slate-600 dark:text-slate-300">
-                    Suspending <strong>{suspendModalUser.fullName}</strong> will temporarily restrict posting and exchange transactions.
-                  </p>
                   <div>
-                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Mandatory Officer Rationale</label>
-                    <textarea
-                      required
-                      rows={3}
-                      value={suspendReason}
-                      onChange={(e) => setSuspendReason(e.target.value)}
-                      placeholder="e.g. Repeated abusive comments in violation of section 4.2..."
-                      className="w-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded-xl p-2.5 resize-none"
-                    />
+                    <h3 className="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                      <UserCheck className="w-4 h-4 text-emerald-800 dark:text-emerald-400" />
+                      <span>Resident Identity Verification Queue</span>
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      Review proof of ownership or tenancy (S&amp;P / Assessment Tax / Tenancy Agreement). All PII is masked for PDPA compliance.
+                    </p>
                   </div>
+                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-full">
+                    Pending: {pendingVerificationProfiles.length}
+                  </span>
                 </div>
-                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                  <button
-                    onClick={() => setSuspendModalUser(null)}
-                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold rounded-xl cursor-pointer text-xs"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={() => handleAccountStatusChange(suspendModalUser.id, 'suspended', suspendReason)}
-                    className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl cursor-pointer text-xs shadow-xs"
-                  >
-                    Confirm Suspension
-                  </button>
+
+                <div className="space-y-3">
+                  {pendingVerificationProfiles.length === 0 ? (
+                    <div className="p-8 text-center text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-900/40 rounded-2xl">
+                      <UserCheck className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                      <p className="text-xs font-semibold">No pending resident verification requests at this time.</p>
+                    </div>
+                  ) : (
+                    pendingVerificationProfiles.map((p) => (
+                      <div key={p.id} className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/50 dark:bg-slate-900/40">
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={p.avatarUrl || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100'}
+                            alt={p.fullName}
+                            className="w-12 h-12 rounded-full object-cover ring-2 ring-slate-200 dark:ring-slate-700 shrink-0"
+                          />
+                          <div>
+                            <h4 className="text-xs font-bold text-slate-900 dark:text-white">{p.fullName}</h4>
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                              {p.townshipPrecinct} • Unit: {p.unitNumber || 'Verified in S&P record'}
+                            </p>
+                            <p className="text-[11px] text-emerald-800 dark:text-emerald-400 font-medium">
+                              Phone: {p.phone || 'Protected'} (Verified via OTP)
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => verifyResidentAccount(p.id, false)}
+                            className="flex items-center gap-1 bg-slate-100 hover:bg-rose-100 dark:bg-slate-800 dark:hover:bg-rose-950/40 text-slate-700 hover:text-rose-900 dark:text-slate-300 dark:hover:text-rose-300 px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-colors"
+                          >
+                            <XCircle className="w-3.5 h-3.5" />
+                            <span>Decline Request</span>
+                          </button>
+                          <button
+                            onClick={() => verifyResidentAccount(p.id, true)}
+                            className="flex items-center gap-1 bg-emerald-800 hover:bg-emerald-900 text-white px-4 py-1.5 rounded-xl text-xs font-bold shadow-xs cursor-pointer"
+                          >
+                            <CheckCircle className="w-3.5 h-3.5" />
+                            <span>Approve Resident</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
+
+              {/* Resident Directory & Role Governance */}
+              <div className="bg-white dark:bg-[#15181C] p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+                  <div>
+                    <h3 className="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                      <Users className="w-4 h-4 text-emerald-800 dark:text-emerald-400" />
+                      <span>Resident Directory &amp; Governance</span>
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      Manage resident roles and account standing. Guarded against revoking the last management account.
+                    </p>
+                  </div>
+
+                  {/* Filters */}
+                  <div className="flex items-center gap-2 min-w-0 flex-wrap sm:flex-nowrap">
+                    <div className="relative min-w-0 flex-1 sm:w-48">
+                      <input
+                        type="text"
+                        placeholder="Search resident..."
+                        value={residentSearchQuery}
+                        onChange={(e) => setResidentSearchQuery(e.target.value)}
+                        className="w-full h-9 sm:h-10 px-3 text-xs border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50/50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-[#9E1315]/20 focus:border-[#9E1315]"
+                      />
+                    </div>
+                    <div className="min-w-0 w-36 sm:w-40 shrink-0">
+                      <ManagementSelect
+                        value={residentRoleFilter}
+                        onChange={setResidentRoleFilter}
+                        ariaLabel="Filter by role"
+                        options={[
+                          { value: 'all', label: 'All Roles' },
+                          { value: 'resident', label: 'Resident' },
+                          { value: 'moderator', label: 'Moderator' },
+                          { value: 'security', label: 'Security' },
+                          { value: 'management', label: 'Management' },
+                        ]}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {roleMessage && (
+                  <div className={`p-3 rounded-xl text-xs font-bold flex items-center gap-2 ${
+                    roleMessage.isError ? 'bg-rose-50 text-rose-900 border border-rose-200' : 'bg-emerald-50 text-emerald-900 border border-emerald-200'
+                  }`}>
+                    {roleMessage.isError ? <AlertTriangle className="w-4 h-4" /> : <Check className="w-4 h-4" />}
+                    <span>{roleMessage.text}</span>
+                  </div>
+                )}
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400">
+                        <th className="py-2.5 px-3 font-bold">Resident</th>
+                        <th className="py-2.5 px-3 font-bold">Precinct</th>
+                        <th className="py-2.5 px-3 font-bold">Verification</th>
+                        <th className="py-2.5 px-3 font-bold">Status</th>
+                        <th className="py-2.5 px-3 font-bold">Role Assignment</th>
+                        <th className="py-2.5 px-3 font-bold">Account Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {availableProfiles
+                        .filter((prof) => {
+                          if (residentRoleFilter !== 'all' && prof.role !== residentRoleFilter) return false;
+                          if (residentSearchQuery.trim()) {
+                            const q = residentSearchQuery.toLowerCase();
+                            if (!prof.fullName.toLowerCase().includes(q) && !prof.townshipPrecinct.toLowerCase().includes(q)) return false;
+                          }
+                          return true;
+                        })
+                        .map((prof) => (
+                          <tr key={prof.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/50">
+                            <td className="py-3 px-3 whitespace-nowrap">
+                              <div className="flex items-center gap-2.5">
+                                <img src={prof.avatarUrl} alt={prof.fullName} className="w-7 h-7 rounded-full object-cover shrink-0" />
+                                <div>
+                                  <span className="font-bold text-slate-900 dark:text-slate-100 block">{prof.fullName}</span>
+                                  <span className="text-[10px] text-slate-400 font-mono">ID: {prof.id}</span>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-3 px-3 whitespace-nowrap text-slate-600 dark:text-slate-300">
+                              {prof.townshipPrecinct}
+                            </td>
+                            <td className="py-3 px-3 whitespace-nowrap">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                prof.verificationStatus === 'verified' ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300' : 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300'
+                              }`}>
+                                {prof.verificationStatus.toUpperCase()}
+                              </span>
+                            </td>
+                            <td className="py-3 px-3 whitespace-nowrap">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                prof.status === 'suspended' ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300' : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300'
+                              }`}>
+                                {prof.status === 'suspended' ? 'SUSPENDED' : 'ACTIVE'}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 whitespace-nowrap">
+                              <div className="w-32 min-w-0">
+                                <ManagementSelect
+                                  value={prof.role}
+                                  onChange={(val) => handleRoleChange(prof.id, val as UserRole)}
+                                  ariaLabel={`Role for ${prof.fullName}`}
+                                  className="h-8 py-1 text-xs"
+                                  options={[
+                                    { value: 'resident', label: 'Resident' },
+                                    { value: 'moderator', label: 'Moderator' },
+                                    { value: 'security', label: 'Security' },
+                                    { value: 'management', label: 'Management' },
+                                  ]}
+                                />
+                              </div>
+                            </td>
+                            <td className="py-3 px-3 whitespace-nowrap">
+                              {prof.status === 'suspended' ? (
+                                <button
+                                  onClick={() => handleAccountStatusChange(prof.id, 'active')}
+                                  className="text-xs font-bold text-emerald-700 hover:text-emerald-900 dark:text-emerald-400 dark:hover:text-emerald-300 cursor-pointer"
+                                >
+                                  Restore Account
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => setSuspendModalUser(prof)}
+                                  className="text-xs font-bold text-rose-600 hover:text-rose-800 dark:text-rose-400 dark:hover:text-rose-300 cursor-pointer"
+                                >
+                                  Restrict / Suspend
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Suspend Modal */}
+              {suspendModalUser && (
+                <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+                  <div className="bg-white dark:bg-[#15181C] rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+                    <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                      <div className="flex items-center gap-2">
+                        <ShieldX className="w-5 h-5 text-rose-600 dark:text-rose-400" />
+                        <h4 className="text-sm font-bold text-slate-900 dark:text-white">Suspend Resident Account</h4>
+                      </div>
+                      <button onClick={() => setSuspendModalUser(null)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="space-y-3 text-xs">
+                      <p className="text-slate-600 dark:text-slate-300">
+                        Suspending <strong>{suspendModalUser.fullName}</strong> will temporarily restrict posting and exchange transactions.
+                      </p>
+                      <div>
+                        <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Mandatory Officer Rationale</label>
+                        <textarea
+                          required
+                          rows={3}
+                          value={suspendReason}
+                          onChange={(e) => setSuspendReason(e.target.value)}
+                          placeholder="e.g. Repeated abusive comments in violation of section 4.2..."
+                          className="w-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded-xl p-2.5 resize-none"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                      <button
+                        onClick={() => setSuspendModalUser(null)}
+                        className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold rounded-xl cursor-pointer text-xs"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => handleAccountStatusChange(suspendModalUser.id, 'suspended', suspendReason)}
+                        className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl cursor-pointer text-xs shadow-xs"
+                      >
+                        Confirm Suspension
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

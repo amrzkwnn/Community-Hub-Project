@@ -9,6 +9,7 @@ import {
   updateMemoryStore
 } from '@/lib/server/dbSync';
 import { INITIAL_RESILIENCE_INCIDENTS, INITIAL_POSTS, INITIAL_EXCHANGE_ITEMS, INITIAL_SERVICES } from '@/lib/data/mockData';
+import { ResidentAddressRecord } from '@/types';
 
 /**
  * GET /api/sync
@@ -26,6 +27,7 @@ export async function GET(request: NextRequest) {
   let dbConversations: any[] = [];
   let dbMessages: any[] = [];
   let dbMessageRequests: any[] = [];
+  let dbAddressRegistrations: any[] = [];
   let fromDatabase = false;
 
   if (supabase) {
@@ -267,6 +269,36 @@ export async function GET(request: NextRequest) {
           fromDatabase = true;
         }
       } catch {}
+
+      // 10. Fetch resident_address_registrations (if table exists)
+      try {
+        const { data: addrRegs, error: addrErr } = await supabase
+          .from('resident_address_registrations')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (!addrErr && addrRegs && addrRegs.length > 0) {
+          dbAddressRegistrations = addrRegs.map((r: any) => ({
+            id: r.id,
+            userId: fromDatabaseUserId(r.user_id),
+            fullName: r.full_name,
+            precinct: r.precinct,
+            unitNumber: r.unit_number,
+            streetName: r.street_name,
+            residenceType: r.residence_type || 'owner',
+            proofDocumentUrl: r.proof_doc_url,
+            proofDocumentName: r.proof_doc_name,
+            status: r.status,
+            rejectionReason: r.rejection_reason,
+            reviewedBy: r.reviewed_by ? fromDatabaseUserId(r.reviewed_by) : undefined,
+            reviewedByName: r.reviewed_by_name,
+            reviewedAt: r.reviewed_at,
+            createdAt: r.created_at,
+            updatedAt: r.updated_at || r.created_at,
+          }));
+          fromDatabase = true;
+        }
+      } catch {}
     } catch (e) {
       console.warn('[Sync API] Database query warning:', e);
     }
@@ -348,6 +380,19 @@ export async function GET(request: NextRequest) {
     ? [...dbMessageRequests, ...memory.messageRequests.filter((m) => !dbMessageRequests.some((d) => d.id === m.id))]
     : memory.messageRequests;
 
+  const rawAddressRegistrations = dbAddressRegistrations.length > 0
+    ? [...dbAddressRegistrations, ...(memory.addressRegistrations || []).filter((m) => !dbAddressRegistrations.some((d) => d.id === m.id))]
+    : (memory.addressRegistrations || []);
+
+  const finalAddressRegistrations = rawAddressRegistrations.filter((reg) => {
+    if (isManagement) return true;
+    if (requestingUserId) {
+      const uUuid = toDatabaseUserId(requestingUserId);
+      if (reg.userId === requestingUserId || reg.userId === uUuid) return true;
+    }
+    return reg.status === 'verified';
+  });
+
   return NextResponse.json({
     success: true,
     fromDatabase,
@@ -360,6 +405,7 @@ export async function GET(request: NextRequest) {
       conversations: finalConversations,
       messages: finalMessages,
       messageRequests: finalMessageRequests,
+      addressRegistrations: finalAddressRegistrations,
     },
     timestamp: new Date().toISOString(),
   });
@@ -385,6 +431,10 @@ export async function POST(request: NextRequest) {
 
   const supabase = getSupabaseAdmin();
   const memory = getMemoryStore();
+
+  const sessionHeader = request.headers.get('x-tesdh-session') || request.headers.get('authorization')?.replace('Bearer ', '');
+  const requestingUserId = user?.id || sessionHeader || '';
+  const isManagement = user?.role === 'management' || user?.id === 'user-azman' || user?.id === '33333333-3333-4333-8333-333333333333' || sessionHeader === 'user-azman' || sessionHeader === '33333333-3333-4333-8333-333333333333';
 
   let resultRecord: any = null;
 
@@ -1091,24 +1141,265 @@ export async function POST(request: NextRequest) {
         break;
       }
 
-      case 'REGISTER_PROPERTY_ADDRESS': {
-        const { targetId, userId, precinct, unitNumber, displayName, fullName, maskedProperty } = payload;
-        const resolvedTargetId = targetId || userId || user?.id;
+      case 'REGISTER_PROPERTY_ADDRESS':
+      case 'SUBMIT_ADDRESS_REGISTRATION': {
+        const { targetId, userId, precinct, unitNumber, streetName, residenceType, proofDocumentName, proofDocumentUrl, fullName, displayName, maskedProperty } = payload;
+        const resolvedTargetId = targetId || userId || user?.id || requestingUserId;
+        const resolvedUuid = toDatabaseUserId(resolvedTargetId);
         const resolvedPrecinct = precinct || user?.townshipPrecinct || 'Bandar Elmina';
         const resolvedUnitNumber = unitNumber || user?.unitNumber || '';
-        const normalizedProp = {
-          targetId: resolvedTargetId,
+        const resolvedFullName = fullName || displayName || user?.fullName || user?.displayName || 'Resident';
+        const resolvedResidenceType = residenceType || 'owner';
+
+        // Check if user already has an active verified address
+        const existingReg = (memory.addressRegistrations || []).find(
+          (r) => r.userId === resolvedTargetId || r.userId === resolvedUuid
+        );
+
+        if (existingReg && existingReg.status === 'verified' && !isManagement) {
+          return NextResponse.json({
+            success: false,
+            error: 'Your residential address is already verified by JMB. To prevent unauthorized alteration of verified addresses, please contact the JMB Management office for relocation requests.',
+          }, { status: 400 });
+        }
+
+        const regId = existingReg?.id || `addr-${Date.now()}`;
+        const newRecord: ResidentAddressRecord = {
+          id: regId,
+          userId: resolvedTargetId,
+          fullName: resolvedFullName,
           precinct: resolvedPrecinct,
           unitNumber: resolvedUnitNumber,
-          maskedProperty: maskedProperty || resolvedUnitNumber || `Residence ${resolvedPrecinct}`,
-          displayName: displayName || fullName || user?.displayName || user?.fullName || 'Resident',
+          streetName: streetName || '',
+          residenceType: resolvedResidenceType,
+          proofDocumentName: proofDocumentName || 'Proof_Document.pdf',
+          proofDocumentUrl: proofDocumentUrl || undefined,
+          status: 'pending',
+          rejectionReason: undefined,
+          createdAt: existingReg?.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
+        if (supabase) {
+          try {
+            await supabase.from('resident_address_registrations').upsert({
+              id: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(regId) ? regId : undefined,
+              user_id: resolvedUuid,
+              full_name: newRecord.fullName,
+              precinct: newRecord.precinct,
+              unit_number: newRecord.unitNumber,
+              street_name: newRecord.streetName,
+              residence_type: newRecord.residenceType,
+              proof_doc_name: newRecord.proofDocumentName,
+              proof_doc_url: newRecord.proofDocumentUrl,
+              status: 'pending',
+              updated_at: new Date().toISOString(),
+            });
+
+            await supabase.from('profiles').update({
+              unit_number: newRecord.unitNumber,
+              township_precinct: newRecord.precinct,
+              verification_status: 'pending',
+              updated_at: new Date().toISOString(),
+            }).eq('id', resolvedUuid);
+          } catch (dbErr) {
+            console.warn('[Sync API] DB write address registration fallback:', dbErr);
+          }
+        }
+
+        const currentRegs = memory.addressRegistrations || [];
+        const updatedRegs = [
+          ...currentRegs.filter((r) => r.id !== regId && r.userId !== resolvedTargetId),
+          newRecord,
+        ];
+        updateMemoryStore({ addressRegistrations: updatedRegs });
+        resultRecord = { success: true, registration: newRecord };
+        break;
+      }
+
+      case 'APPROVE_ADDRESS_REGISTRATION': {
+        const { registrationId, registration } = payload;
+        const currentRegs = memory.addressRegistrations || [];
+        const reg = currentRegs.find((r) => r.id === registrationId) || registration;
+        if (!reg) {
+          return NextResponse.json({ success: false, error: 'Address registration application not found.' }, { status: 404 });
+        }
+
+        const targetUuid = toDatabaseUserId(reg.userId);
+        const reviewerUuid = toDatabaseUserId(user?.id);
+        const reviewerName = user?.fullName || 'Capt (B) Azman Salleh (JMB)';
+        const nowIso = new Date().toISOString();
+
+        const approvedReg: ResidentAddressRecord = {
+          ...reg,
+          status: 'verified',
+          rejectionReason: undefined,
+          reviewedBy: user?.id || 'user-azman',
+          reviewedByName: reviewerName,
+          reviewedAt: nowIso,
+          updatedAt: nowIso,
+        };
+
+        if (supabase) {
+          try {
+            await supabase.from('resident_address_registrations').update({
+              status: 'verified',
+              rejection_reason: null,
+              reviewed_by: reviewerUuid,
+              reviewed_by_name: reviewerName,
+              reviewed_at: nowIso,
+              updated_at: nowIso,
+            }).eq('id', registrationId);
+
+            await supabase.from('profiles').update({
+              verification_status: 'verified',
+              unit_number: approvedReg.unitNumber,
+              township_precinct: approvedReg.precinct,
+              updated_at: nowIso,
+            }).eq('id', targetUuid);
+          } catch (dbErr) {
+            console.warn('[Sync API] DB approve address fallback:', dbErr);
+          }
+        }
+
+        const updatedRegs = currentRegs.map((r) => (r.id === registrationId ? approvedReg : r));
+        if (!updatedRegs.some((r) => r.id === registrationId)) {
+          updatedRegs.push(approvedReg);
+        }
+
+        // Add to immediately searchable properties index
+        const newProp = {
+          targetId: approvedReg.userId,
+          precinct: approvedReg.precinct,
+          unitNumber: approvedReg.unitNumber,
+          maskedProperty: approvedReg.unitNumber || `Residence ${approvedReg.precinct}`,
+          displayName: approvedReg.fullName,
+          residenceType: approvedReg.residenceType,
         };
         const updatedProps = [
-          ...memory.registeredProperties.filter((p) => p.targetId !== normalizedProp.targetId),
-          normalizedProp,
+          ...memory.registeredProperties.filter((p) => p.targetId !== approvedReg.userId),
+          newProp,
         ];
-        updateMemoryStore({ registeredProperties: updatedProps });
-        resultRecord = { success: true, property: normalizedProp };
+
+        updateMemoryStore({
+          addressRegistrations: updatedRegs,
+          registeredProperties: updatedProps,
+        });
+
+        resultRecord = { success: true, registration: approvedReg };
+        break;
+      }
+
+      case 'REJECT_ADDRESS_REGISTRATION': {
+        const { registrationId, reason, registration } = payload;
+        const currentRegs = memory.addressRegistrations || [];
+        const reg = currentRegs.find((r) => r.id === registrationId) || registration;
+        if (!reg) {
+          return NextResponse.json({ success: false, error: 'Address registration application not found.' }, { status: 404 });
+        }
+
+        const targetUuid = toDatabaseUserId(reg.userId);
+        const reviewerUuid = toDatabaseUserId(user?.id);
+        const reviewerName = user?.fullName || 'Capt (B) Azman Salleh (JMB)';
+        const nowIso = new Date().toISOString();
+
+        const rejectedReg: ResidentAddressRecord = {
+          ...reg,
+          status: 'rejected',
+          rejectionReason: reason || 'Submitted documents do not match township municipal records.',
+          reviewedBy: user?.id || 'user-azman',
+          reviewedByName: reviewerName,
+          reviewedAt: nowIso,
+          updatedAt: nowIso,
+        };
+
+        if (supabase) {
+          try {
+            await supabase.from('resident_address_registrations').update({
+              status: 'rejected',
+              rejection_reason: rejectedReg.rejectionReason,
+              reviewed_by: reviewerUuid,
+              reviewed_by_name: reviewerName,
+              reviewed_at: nowIso,
+              updated_at: nowIso,
+            }).eq('id', registrationId);
+
+            await supabase.from('profiles').update({
+              verification_status: 'rejected',
+              updated_at: nowIso,
+            }).eq('id', targetUuid);
+          } catch (dbErr) {
+            console.warn('[Sync API] DB reject address fallback:', dbErr);
+          }
+        }
+
+        const updatedRegs = currentRegs.map((r) => (r.id === registrationId ? rejectedReg : r));
+        if (!updatedRegs.some((r) => r.id === registrationId)) {
+          updatedRegs.push(rejectedReg);
+        }
+        const updatedProps = memory.registeredProperties.filter((p) => p.targetId !== reg.userId);
+
+        updateMemoryStore({
+          addressRegistrations: updatedRegs,
+          registeredProperties: updatedProps,
+        });
+
+        resultRecord = { success: true, registration: rejectedReg };
+        break;
+      }
+
+      case 'REVOKE_ADDRESS_REGISTRATION': {
+        const { registrationId, reason } = payload;
+        const currentRegs = memory.addressRegistrations || [];
+        const reg = currentRegs.find((r) => r.id === registrationId);
+        if (!reg) {
+          return NextResponse.json({ success: false, error: 'Address registration record not found.' }, { status: 404 });
+        }
+
+        const targetUuid = toDatabaseUserId(reg.userId);
+        const reviewerUuid = toDatabaseUserId(user?.id);
+        const reviewerName = user?.fullName || 'Capt (B) Azman Salleh (JMB)';
+        const nowIso = new Date().toISOString();
+
+        const revokedReg: ResidentAddressRecord = {
+          ...reg,
+          status: 'revoked',
+          rejectionReason: reason || 'Address verification revoked by JMB.',
+          reviewedBy: user?.id || 'user-azman',
+          reviewedByName: reviewerName,
+          reviewedAt: nowIso,
+          updatedAt: nowIso,
+        };
+
+        if (supabase) {
+          try {
+            await supabase.from('resident_address_registrations').update({
+              status: 'revoked',
+              rejection_reason: revokedReg.rejectionReason,
+              reviewed_by: reviewerUuid,
+              reviewed_by_name: reviewerName,
+              reviewed_at: nowIso,
+              updated_at: nowIso,
+            }).eq('id', registrationId);
+
+            await supabase.from('profiles').update({
+              verification_status: 'unverified',
+              updated_at: nowIso,
+            }).eq('id', targetUuid);
+          } catch (dbErr) {
+            console.warn('[Sync API] DB revoke address fallback:', dbErr);
+          }
+        }
+
+        const updatedRegs = currentRegs.map((r) => (r.id === registrationId ? revokedReg : r));
+        const updatedProps = memory.registeredProperties.filter((p) => p.targetId !== reg.userId);
+
+        updateMemoryStore({
+          addressRegistrations: updatedRegs,
+          registeredProperties: updatedProps,
+        });
+
+        resultRecord = { success: true, registration: revokedReg };
         break;
       }
 
@@ -1125,7 +1416,22 @@ export async function POST(request: NextRequest) {
         const normClean = norm(clean);
         const queryTokens = normClean.split(' ').filter(Boolean);
 
-        const results = memory.registeredProperties.filter((p) => {
+        // Collect all verified properties from both memory.registeredProperties and verified addressRegistrations
+        const allVerifiedProperties = [...memory.registeredProperties];
+        (memory.addressRegistrations || []).forEach((vr) => {
+          if (vr.status === 'verified' && !allVerifiedProperties.some((p) => p.targetId === vr.userId)) {
+            allVerifiedProperties.push({
+              targetId: vr.userId,
+              precinct: vr.precinct,
+              unitNumber: vr.unitNumber,
+              maskedProperty: vr.unitNumber,
+              displayName: vr.fullName,
+              residenceType: vr.residenceType,
+            });
+          }
+        });
+
+        const results = allVerifiedProperties.filter((p) => {
           if (user?.id && (p.targetId === user.id || toDatabaseUserId(p.targetId) === toDatabaseUserId(user.id))) {
             return false;
           }
@@ -1142,6 +1448,7 @@ export async function POST(request: NextRequest) {
           targetId: p.targetId,
           precinct: p.precinct,
           maskedProperty: p.maskedProperty,
+          residenceType: p.residenceType || 'owner',
         }));
         resultRecord = { results: results.slice(0, 10) };
         break;

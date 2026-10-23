@@ -124,10 +124,16 @@ export default function MessagesView() {
     navigationTarget?.conversationId || ''
   );
 
-  // Auto-lock active conversation on initial load without jumping on message updates
+  const hasAutoSelectedRef = useRef(false);
+
+  // Auto-select first conversation ONCE on initial desktop load if no specific conversation is set
   useEffect(() => {
-    if (!activeConversationId && userConversations.length > 0) {
-      setActiveConversationId(userConversations[0].id);
+    if (hasAutoSelectedRef.current) return;
+    if (typeof window !== 'undefined' && window.innerWidth >= 1024) {
+      if (!activeConversationId && userConversations.length > 0) {
+        setActiveConversationId(userConversations[0].id);
+        hasAutoSelectedRef.current = true;
+      }
     }
   }, [activeConversationId, userConversations]);
 
@@ -137,6 +143,7 @@ export default function MessagesView() {
   useEffect(() => {
     if (prevUserIdRef.current !== currentUser.id) {
       prevUserIdRef.current = currentUser.id;
+      hasAutoSelectedRef.current = false;
       setActiveConversationId('');
       setMobileActiveThreadOpen(false);
       setIsDossierOpen(false);
@@ -705,6 +712,7 @@ export default function MessagesView() {
                           const convId = await acceptMessageRequest(req.id);
                           if (convId) {
                             setActiveConversationId(convId);
+                            setMobileActiveThreadOpen(true);
                           }
                           setSidebarTab('conversations');
                           showToast('Contact request accepted. Secure channel initiated.');

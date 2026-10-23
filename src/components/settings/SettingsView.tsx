@@ -29,11 +29,17 @@ import {
   SlidersHorizontal,
   EyeOff,
   MessageSquare,
-  ArrowLeftRight
+  ArrowLeftRight,
+  Clock,
+  AlertCircle,
+  FileCheck,
+  Building,
+  RefreshCw
 } from 'lucide-react';
-import { UIScalePreset } from '@/types';
+import { UIScalePreset, ResidenceType, AddressVerificationStatus } from '@/types';
+import { toDatabaseUserId } from '@/lib/utils/idMapping';
 
-export type SettingsSection = 'appearance' | 'notifications' | 'privacy' | 'language' | 'account';
+export type SettingsSection = 'appearance' | 'notifications' | 'privacy' | 'language' | 'account' | 'residential_address';
 
 export default function SettingsView() {
   const { 
@@ -50,20 +56,57 @@ export default function SettingsView() {
     setLanguage,
     currentUser,
     availableProfiles,
+    addressRegistrations,
+    submitAddressRegistration,
     t
   } = useApp();
 
   const isMalay = language === 'bm' || language === 'ms-MY';
 
+  const userRegistration = (addressRegistrations || []).find(
+    (r) => r.userId === currentUser.id || toDatabaseUserId(r.userId) === toDatabaseUserId(currentUser.id)
+  );
+
+  const addressStatus: AddressVerificationStatus = userRegistration?.status || (currentUser.unitNumber && currentUser.verificationStatus === 'verified' ? 'verified' : 'unsubmitted');
+
   const [activeSection, setActiveSection] = useState<SettingsSection>('appearance');
   const [mobileView, setMobileView] = useState<'menu' | 'detail'>('menu');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Address Registration Form State
+  const [precinctInput, setPrecinctInput] = useState(userRegistration?.precinct || currentUser.townshipPrecinct || 'Elmina Green 3');
+  const [unitNumberInput, setUnitNumberInput] = useState(userRegistration?.unitNumber || currentUser.unitNumber || '');
+  const [streetNameInput, setStreetNameInput] = useState(userRegistration?.streetName || '');
+  const [residenceTypeInput, setResidenceTypeInput] = useState<ResidenceType>(userRegistration?.residenceType || 'owner');
+  const [proofDocName, setProofDocName] = useState(userRegistration?.proofDocumentName || 'SP_Agreement_EG3.pdf');
+  const [isSubmittingAddress, setIsSubmittingAddress] = useState(false);
+  const [addressError, setAddressError] = useState<string | null>(null);
+  const [addressSuccess, setAddressSuccess] = useState<string | null>(null);
+
+  // Keep form fields synced if user registration changes (e.g. switching persona)
+  useEffect(() => {
+    if (userRegistration) {
+      setPrecinctInput(userRegistration.precinct);
+      setUnitNumberInput(userRegistration.unitNumber);
+      setStreetNameInput(userRegistration.streetName || '');
+      setResidenceTypeInput(userRegistration.residenceType);
+      setProofDocName(userRegistration.proofDocumentName || 'SP_Agreement_EG3.pdf');
+    } else {
+      setPrecinctInput(currentUser.townshipPrecinct || 'Elmina Green 3');
+      setUnitNumberInput(currentUser.unitNumber || '');
+      setStreetNameInput('');
+      setResidenceTypeInput('owner');
+      setProofDocName('SP_Agreement_EG3.pdf');
+    }
+    setAddressError(null);
+    setAddressSuccess(null);
+  }, [userRegistration, currentUser]);
 
   // Initialize from hash if present
   useEffect(() => {
     if (typeof window !== 'undefined' && window.location.hash) {
       const hash = window.location.hash.replace('#', '') as SettingsSection;
-      if (['appearance', 'notifications', 'privacy', 'language', 'account'].includes(hash)) {
+      if (['appearance', 'notifications', 'privacy', 'language', 'account', 'residential_address'].includes(hash)) {
         setActiveSection(hash);
         setMobileView('detail');
       }
@@ -106,6 +149,48 @@ export default function SettingsView() {
     showToast(newLang === 'en' ? 'Language set to English.' : 'Bahasa ditetapkan kepada Bahasa Melayu.');
   };
 
+  const handleSubmitAddress = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAddressError(null);
+    setAddressSuccess(null);
+
+    if (!unitNumberInput.trim()) {
+      setAddressError('Please provide your residential unit number (e.g. No. 24, Jalan EG 3/4).');
+      return;
+    }
+
+    setIsSubmittingAddress(true);
+    try {
+      const res = await submitAddressRegistration({
+        precinct: precinctInput,
+        unitNumber: unitNumberInput.trim(),
+        streetName: streetNameInput.trim() || undefined,
+        residenceType: residenceTypeInput,
+        proofDocumentName: proofDocName,
+      });
+
+      if (!res.success) {
+        setAddressError(res.error || 'Failed to submit address registration.');
+      } else {
+        setAddressSuccess('Residential address registered and submitted for JMB verification!');
+        showToast('Address submitted. Awaiting JMB Approval.');
+      }
+    } catch {
+      setAddressError('An unexpected error occurred while registering address.');
+    } finally {
+      setIsSubmittingAddress(false);
+    }
+  };
+
+  const residentAddressBadge = 
+    addressStatus === 'verified' 
+      ? (isMalay ? 'Disahkan' : 'Verified')
+      : addressStatus === 'pending'
+        ? (isMalay ? 'Menunggu' : 'Pending')
+        : addressStatus === 'rejected'
+          ? (isMalay ? 'Tindakan' : 'Action Req')
+          : (isMalay ? 'Daftar' : 'Unregistered');
+
   const navItems: { 
     id: SettingsSection; 
     label: string; 
@@ -113,6 +198,13 @@ export default function SettingsView() {
     icon: React.ReactNode; 
     badge?: string | number;
   }[] = [
+    { 
+      id: 'residential_address', 
+      label: isMalay ? 'Alamat Kediaman' : 'Residential Address', 
+      description: isMalay ? 'Pendaftaran unit & pengesahan status JMB' : 'Unit registration & official JMB verification status',
+      icon: <Home className="w-4 h-4" />,
+      badge: residentAddressBadge
+    },
     { 
       id: 'appearance', 
       label: isMalay ? 'Rupa & Tema' : 'Appearance & Theme', 
@@ -269,6 +361,45 @@ export default function SettingsView() {
                 </span>
                 <span className="text-xs text-slate-500 dark:text-slate-400 truncate">
                   {currentUser.townshipPrecinct || 'Elmina West EV3-04-12'}
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center text-slate-400 pl-2">
+              <ChevronRight className="w-5 h-5" />
+            </div>
+          </div>
+
+          {/* Residential Address Mobile Card */}
+          <div 
+            onClick={() => handleSelectSection('residential_address')}
+            className="bg-white dark:bg-[#15181C] rounded-xl shadow-xs border border-slate-200/80 dark:border-slate-800 p-4 flex items-center justify-between active:scale-[0.99] transition-transform cursor-pointer"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-12 h-12 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-[#ba1b1d] dark:text-rose-400 flex items-center justify-center shrink-0">
+                <Home className="w-6 h-6" />
+              </div>
+              <div className="flex flex-col min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold text-sm text-slate-900 dark:text-slate-100 truncate">
+                    {isMalay ? 'Alamat Kediaman' : 'Residential Address'}
+                  </span>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    addressStatus === 'verified'
+                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                      : addressStatus === 'pending'
+                        ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                        : addressStatus === 'rejected'
+                          ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
+                          : 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                  }`}>
+                    {residentAddressBadge}
+                  </span>
+                </div>
+                <span className="text-xs text-slate-600 dark:text-slate-300 truncate">
+                  {userRegistration?.unitNumber || currentUser.unitNumber || (isMalay ? 'Belum Didaftar' : 'Not Registered')}
+                </span>
+                <span className="text-[11px] text-slate-400 dark:text-slate-500 truncate">
+                  {userRegistration?.precinct || currentUser.townshipPrecinct || 'Bandar Elmina'}
                 </span>
               </div>
             </div>
@@ -1265,6 +1396,390 @@ export default function SettingsView() {
               <div className="p-4 rounded-xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/60 text-xs text-amber-900 dark:text-amber-200 leading-relaxed">
                 Official property details are protected under the Malaysian Personal Data Protection Act (PDPA 2010). Only authorized JMB officers may update registered unit records or assign township administrative rights.
               </div>
+            </section>
+          )}
+
+          {/* ========================================================================= */}
+          {/* SECTION 6: RESIDENTIAL ADDRESS & JMB VERIFICATION                         */}
+          {/* ========================================================================= */}
+          {activeSection === 'residential_address' && (
+            <section 
+              id="section-residential-address" 
+              aria-label="Residential Address Registration & JMB Verification"
+              className="bg-white dark:bg-[#15181C] rounded-2xl border border-slate-200 dark:border-slate-800 p-6 sm:p-7 shadow-xs space-y-6 animate-in fade-in duration-200 motion-reduce:animate-none"
+            >
+              {/* Header */}
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
+                <div>
+                  <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                    <Home className="w-5 h-5 text-[#ba1b1d] dark:text-rose-400" />
+                    <span>Residential Address &amp; JMB Verification</span>
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-xl">
+                    Register and manage your residential address in Bandar Elmina under Joint Management Body (JMB) governance.
+                  </p>
+                </div>
+
+                {/* Status Badges */}
+                <div className="self-start shrink-0">
+                  {addressStatus === 'verified' && (
+                    <span className="px-3 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 font-bold text-[11px] border border-emerald-300 dark:border-emerald-800 flex items-center gap-1.5 shadow-2xs">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                      <span>VERIFIED RESIDENTIAL ADDRESS</span>
+                    </span>
+                  )}
+                  {addressStatus === 'pending' && (
+                    <span className="px-3 py-1 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 font-bold text-[11px] border border-amber-300 dark:border-amber-800 flex items-center gap-1.5 shadow-2xs">
+                      <Clock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 animate-pulse" />
+                      <span>PENDING JMB APPROVAL</span>
+                    </span>
+                  )}
+                  {addressStatus === 'rejected' && (
+                    <span className="px-3 py-1 rounded-full bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 font-bold text-[11px] border border-rose-300 dark:border-rose-800 flex items-center gap-1.5 shadow-2xs">
+                      <AlertTriangle className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
+                      <span>APPLICATION REJECTED</span>
+                    </span>
+                  )}
+                  {addressStatus === 'revoked' && (
+                    <span className="px-3 py-1 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-[11px] flex items-center gap-1.5 shadow-2xs">
+                      <Lock className="w-3.5 h-3.5 text-slate-500" />
+                      <span>VERIFICATION REVOKED</span>
+                    </span>
+                  )}
+                  {addressStatus === 'unsubmitted' && (
+                    <span className="px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-[11px] flex items-center gap-1.5">
+                      <Home className="w-3.5 h-3.5 text-slate-400" />
+                      <span>NOT REGISTERED</span>
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Status Explanation Banners */}
+              {addressStatus === 'verified' && (
+                <div className="p-4 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/80 text-xs text-emerald-900 dark:text-emerald-200 flex items-start gap-3">
+                  <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <strong className="font-bold text-sm text-emerald-950 dark:text-emerald-100 block">
+                      Residential Address Verified &amp; Protected
+                    </strong>
+                    <p className="leading-relaxed">
+                      Your residential address has been verified by the Joint Management Body (JMB) Secretariat. 
+                      In compliance with township security bylaws, verified addresses are locked against direct alteration to prevent unauthorized representation and address enumeration.
+                    </p>
+                    <p className="text-[11px] text-emerald-800 dark:text-emerald-300 font-semibold pt-1">
+                      Verified by: {userRegistration?.reviewedByName || 'JMB Secretariat'} • Status: Active Civic Registration
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {addressStatus === 'pending' && (
+                <div className="p-4 rounded-xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/80 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-3">
+                  <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <strong className="font-bold text-sm text-amber-950 dark:text-amber-100 block">
+                      Application Pending JMB Review
+                    </strong>
+                    <p className="leading-relaxed">
+                      Your address registration has been submitted and is currently queued for verification by the JMB Secretariat. 
+                      Verification typically takes 1 business day. Once approved, your property will become eligible for secure, privacy-shielded neighborhood messaging.
+                    </p>
+                    <p className="text-[11px] text-amber-800 dark:text-amber-300 font-semibold pt-1">
+                      Submitted on: {userRegistration?.createdAt ? new Date(userRegistration.createdAt).toLocaleString() : 'Recent'} • Review status: Pending
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {addressStatus === 'rejected' && (
+                <div className="p-4 rounded-xl bg-rose-50/80 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800/80 text-xs text-rose-900 dark:text-rose-200 flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+                  <div className="space-y-1.5">
+                    <strong className="font-bold text-sm text-rose-950 dark:text-rose-100 block">
+                      Application Not Approved — Correction Required
+                    </strong>
+                    <div className="p-2.5 rounded-lg bg-rose-100/70 dark:bg-rose-900/40 border border-rose-200 dark:border-rose-800 font-medium">
+                      <span className="font-bold block mb-0.5">JMB Secretariat Feedback:</span>
+                      &quot;{userRegistration?.rejectionReason || 'Submitted documentation was unclear or did not match municipal assessment records.'}&quot;
+                    </div>
+                    <p className="leading-relaxed text-[11px]">
+                      You may correct your unit number, phase, or proof of residence document below and click <strong>Resubmit for Review</strong>.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {addressStatus === 'revoked' && (
+                <div className="p-4 rounded-xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs text-slate-800 dark:text-slate-200 flex items-start gap-3">
+                  <Lock className="w-5 h-5 text-slate-500 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <strong className="font-bold text-sm block">Address Verification Revoked</strong>
+                    <p className="leading-relaxed">
+                      Reason: &quot;{userRegistration?.rejectionReason || 'Address revoked by JMB administration.'}&quot;
+                    </p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Please register a new valid address with supporting tenancy or ownership documentation.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Current Address Details Card */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200/80 dark:border-slate-800 space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-200/60 dark:border-slate-800">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                    Registered Unit Record
+                  </span>
+                  <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                    {userRegistration?.residenceType === 'tenant' ? 'Tenancy Record' : userRegistration?.residenceType === 'household_member' ? 'Household Member' : 'Homeowner / Title Record'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                  <div>
+                    <span className="text-[10px] text-slate-400 dark:text-slate-500 block">Unit Address:</span>
+                    <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5 mt-0.5">
+                      <Home className="w-3.5 h-3.5 text-[#ba1b1d] dark:text-rose-400 shrink-0" />
+                      {userRegistration?.unitNumber || currentUser.unitNumber || 'Not Registered'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 dark:text-slate-500 block">Township Precinct:</span>
+                    <span className="font-bold text-slate-900 dark:text-white block mt-0.5">
+                      {userRegistration?.precinct || currentUser.townshipPrecinct || 'Bandar Elmina'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 dark:text-slate-500 block">Supporting Document:</span>
+                    <span className="font-medium text-slate-700 dark:text-slate-300 flex items-center gap-1.5 mt-0.5 truncate">
+                      <FileCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      {userRegistration?.proofDocumentName || 'No document on file'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Form Alerts */}
+              {addressError && (
+                <div className="p-3 bg-rose-50 dark:bg-rose-950/50 text-rose-900 dark:text-rose-200 text-xs rounded-xl flex items-center gap-2 border border-rose-200 dark:border-rose-900 animate-in fade-in duration-150">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{addressError}</span>
+                </div>
+              )}
+
+              {addressSuccess && (
+                <div className="p-3 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-900 dark:text-emerald-200 text-xs rounded-xl flex items-center gap-2 border border-emerald-200 dark:border-emerald-900 animate-in fade-in duration-150">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{addressSuccess}</span>
+                </div>
+              )}
+
+              {/* Registration Form / Locked Mode */}
+              {addressStatus === 'verified' ? (
+                <div className="p-5 rounded-2xl bg-white dark:bg-[#15181C] border border-slate-200 dark:border-slate-800 space-y-4">
+                  <div className="flex items-center gap-2 text-slate-800 dark:text-slate-200 font-bold text-sm">
+                    <Lock className="w-4 h-4 text-slate-400" />
+                    <span>Address Modifications Locked by JMB</span>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                    Because this residential address has been verified with official property records, direct changes are restricted. 
+                    This ensures only authenticated owners and verified tenants represent properties within the City of Elmina community network.
+                  </p>
+                  <div className="pt-2 flex flex-col sm:flex-row gap-3">
+                    <button
+                      type="button"
+                      onClick={() => showToast('Relocation inquiry sent to JMB Secretariat office.')}
+                      className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      Request Address Relocation via JMB
+                    </button>
+                    <a
+                      href="tel:0378452222"
+                      className="px-4 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-950/60 text-[#ba1b1d] dark:text-rose-300 text-xs font-bold transition-colors inline-flex items-center justify-center gap-1.5"
+                    >
+                      <PhoneCall className="w-3.5 h-3.5" />
+                      <span>Contact JMB Secretariat (03-7845 2222)</span>
+                    </a>
+                  </div>
+                </div>
+              ) : (
+                /* Editable Registration or Resubmission Form */
+                <form onSubmit={handleSubmitAddress} className="space-y-5 pt-2">
+                  <div className="border-b border-slate-100 dark:border-slate-800 pb-3">
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                      <Building className="w-4 h-4 text-[#ba1b1d] dark:text-rose-400" />
+                      <span>
+                        {addressStatus === 'rejected'
+                          ? 'Resubmit Corrected Address Application'
+                          : addressStatus === 'pending'
+                            ? 'Update Pending Address Application'
+                            : 'Submit Residential Address for JMB Approval'}
+                      </span>
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      Provide your Elmina residential unit details and proof document for administrative verification.
+                    </p>
+                  </div>
+
+                  {/* Precinct & Residence Type Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Precinct Selector */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                        Township Precinct <span className="text-rose-500">*</span>
+                      </label>
+                      <select
+                        value={precinctInput}
+                        onChange={(e) => setPrecinctInput(e.target.value)}
+                        className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-[#ba1b1d] focus:outline-hidden"
+                      >
+                        <option value="Elmina Green 1">Elmina Green 1</option>
+                        <option value="Elmina Green 3">Elmina Green 3</option>
+                        <option value="Elmina East (EE2)">Elmina East (EE2)</option>
+                        <option value="Elmina West (EV1)">Elmina West (EV1)</option>
+                        <option value="Ilham Residence">Ilham Residence</option>
+                        <option value="City of Elmina Central">City of Elmina Central</option>
+                      </select>
+                    </div>
+
+                    {/* Residence Type Radio Selector */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                        Residency Type <span className="text-rose-500">*</span>
+                      </label>
+                      <div className="grid grid-cols-3 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setResidenceTypeInput('owner')}
+                          className={`py-2 px-2 rounded-xl text-center text-xs font-bold transition-all cursor-pointer border ${
+                            residenceTypeInput === 'owner'
+                              ? 'border-[#ba1b1d] bg-rose-50 dark:bg-rose-950/40 text-[#ba1b1d] dark:text-rose-400 shadow-2xs'
+                              : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400'
+                          }`}
+                        >
+                          Homeowner
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setResidenceTypeInput('tenant')}
+                          className={`py-2 px-2 rounded-xl text-center text-xs font-bold transition-all cursor-pointer border ${
+                            residenceTypeInput === 'tenant'
+                              ? 'border-[#ba1b1d] bg-rose-50 dark:bg-rose-950/40 text-[#ba1b1d] dark:text-rose-400 shadow-2xs'
+                              : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400'
+                          }`}
+                        >
+                          Tenant
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setResidenceTypeInput('household_member')}
+                          className={`py-2 px-2 rounded-xl text-center text-xs font-bold transition-all cursor-pointer border ${
+                            residenceTypeInput === 'household_member'
+                              ? 'border-[#ba1b1d] bg-rose-50 dark:bg-rose-950/40 text-[#ba1b1d] dark:text-rose-400 shadow-2xs'
+                              : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400'
+                          }`}
+                        >
+                          Relative
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Unit Number & Street Name Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                        Residential Unit Number <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. No. 24, Jalan EG 3/4"
+                        value={unitNumberInput}
+                        onChange={(e) => setUnitNumberInput(e.target.value)}
+                        className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-[#ba1b1d] focus:outline-hidden"
+                      />
+                      <p className="text-[10px] text-slate-400 mt-1">Official unit or house number matching your municipal title.</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                        Street Name / Road Section
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Jalan EG 3/4"
+                        value={streetNameInput}
+                        onChange={(e) => setStreetNameInput(e.target.value)}
+                        className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-[#ba1b1d] focus:outline-hidden"
+                      />
+                      <p className="text-[10px] text-slate-400 mt-1">Street name helps disambiguate shared precinct blocks.</p>
+                    </div>
+                  </div>
+
+                  {/* Proof Document Selector */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                      Proof of Residence Document <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <select
+                          value={proofDocName}
+                          onChange={(e) => setProofDocName(e.target.value)}
+                          className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-[#ba1b1d] focus:outline-hidden"
+                        >
+                          <option value="SP_Agreement_Elmina.pdf">Sale &amp; Purchase (S&amp;P) Agreement</option>
+                          <option value="Tenancy_Agreement_2026.pdf">Valid Tenancy Agreement</option>
+                          <option value="MBSA_Cukai_Taksiran_2026.pdf">MBSA Assessment Tax (Cukai Pintu)</option>
+                          <option value="Utility_Bill_TNB_Water.pdf">TNB / Air Selangor Utility Bill</option>
+                          <option value="Resident_Family_Affidavit.pdf">Household Deputation / Letter</option>
+                        </select>
+                      </div>
+
+                      <div className="flex items-center gap-2 p-2.5 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-300">
+                        <FileCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span className="truncate font-medium">{proofDocName}</span>
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-1.5">
+                      PDPA Privacy: All document metadata is strictly encrypted and accessible only to authorized JMB officers for vetting.
+                    </p>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3">
+                    <button
+                      type="submit"
+                      disabled={isSubmittingAddress}
+                      className="bg-[#ba1b1d] hover:bg-[#94000c] text-white text-xs font-bold px-6 py-2.5 rounded-xl shadow-xs cursor-pointer transition-all disabled:opacity-50 flex items-center gap-2"
+                    >
+                      {isSubmittingAddress ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Submitting...</span>
+                        </>
+                      ) : addressStatus === 'rejected' ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5" />
+                          <span>Resubmit Application</span>
+                        </>
+                      ) : addressStatus === 'pending' ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5" />
+                          <span>Update Pending Submission</span>
+                        </>
+                      ) : (
+                        <>
+                          <Check className="w-3.5 h-3.5 stroke-[3]" />
+                          <span>Submit for JMB Approval</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              )}
             </section>
           )}
         </main>

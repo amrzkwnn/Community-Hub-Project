@@ -13,8 +13,11 @@ import {
   Check, 
   AlertCircle,
   Sparkles,
-  CheckCircle2
+  CheckCircle2,
+  Clock,
+  ArrowRight
 } from 'lucide-react';
+import { toDatabaseUserId } from '@/lib/utils/idMapping';
 
 export default function ProfileModal() {
   const { 
@@ -22,6 +25,8 @@ export default function ProfileModal() {
     updateProfile, 
     isProfileModalOpen, 
     setIsProfileModalOpen,
+    setActiveTab,
+    addressRegistrations,
     t 
   } = useApp();
 
@@ -100,6 +105,12 @@ export default function ProfileModal() {
     }
   };
 
+  const userRegistration = (addressRegistrations || []).find(
+    (r) => r.userId === currentUser.id || toDatabaseUserId(r.userId) === toDatabaseUserId(currentUser.id)
+  );
+
+  const addressStatus = userRegistration?.status || (currentUser.unitNumber && currentUser.verificationStatus === 'verified' ? 'verified' : 'unsubmitted');
+
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
       <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in duration-200">
@@ -168,7 +179,7 @@ export default function ProfileModal() {
               </span>
               <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-300 font-semibold bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800 text-[10px]" title="Registered Nadikomuniti account">
                 <CheckCircle2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-                <span>VERIFIED</span>
+                <span>VERIFIED ACCOUNT</span>
               </span>
             </div>
 
@@ -177,16 +188,59 @@ export default function ProfileModal() {
               <span className="font-bold text-slate-800">{currentUser.fullName}</span>
             </div>
 
-            <div>
-              <span className="text-[11px] text-slate-500 block">Registered Unit Address:</span>
-              <span className="font-bold text-slate-800 flex items-center gap-1">
+            <div className="pt-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-slate-500 block">Residential Address:</span>
+                {addressStatus === 'verified' && (
+                  <span className="inline-flex items-center gap-1 text-emerald-800 font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-300 text-[10px]">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                    <span>Verified Address</span>
+                  </span>
+                )}
+                {addressStatus === 'pending' && (
+                  <span className="inline-flex items-center gap-1 text-amber-800 font-bold bg-amber-50 px-2 py-0.5 rounded-full border border-amber-300 text-[10px]">
+                    <Clock className="w-3 h-3 text-amber-600" />
+                    <span>Pending JMB Approval</span>
+                  </span>
+                )}
+                {addressStatus === 'rejected' && (
+                  <span className="inline-flex items-center gap-1 text-rose-800 font-bold bg-rose-50 px-2 py-0.5 rounded-full border border-rose-300 text-[10px]">
+                    <AlertCircle className="w-3 h-3 text-rose-600" />
+                    <span>Rejected · Action Required</span>
+                  </span>
+                )}
+                {addressStatus === 'unsubmitted' && (
+                  <span className="inline-flex items-center gap-1 text-slate-600 font-bold bg-slate-200 px-2 py-0.5 rounded-full text-[10px]">
+                    <span>Unregistered</span>
+                  </span>
+                )}
+              </div>
+              <span className="font-bold text-slate-800 flex items-center gap-1 mt-0.5">
                 <Home className="w-3.5 h-3.5 text-slate-400" />
-                {currentUser.unitNumber || 'Not Specified'} ({currentUser.townshipPrecinct})
+                {userRegistration?.unitNumber || currentUser.unitNumber || 'Not Registered'} ({userRegistration?.precinct || currentUser.townshipPrecinct})
               </span>
             </div>
 
+            <button
+              type="button"
+              onClick={() => {
+                setIsProfileModalOpen(false);
+                setActiveTab('settings');
+                if (typeof window !== 'undefined') {
+                  window.location.hash = '#residential_address';
+                }
+              }}
+              className="w-full mt-2 py-2 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold flex items-center justify-between gap-1.5 transition-colors cursor-pointer shadow-xs"
+            >
+              <div className="flex items-center gap-1.5">
+                <Home className="w-3.5 h-3.5 text-rose-400" />
+                <span>Manage Residential Address</span>
+              </div>
+              <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
+            </button>
+
             <p className="text-[10px] text-slate-400 italic pt-1">
-              *Only JMB / township management is authorized to modify registered names, property addresses, or resident roles.
+              *Official residential verification is managed by JMB to ensure neighborhood privacy and safety.
             </p>
           </div>
 
