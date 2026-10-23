@@ -1,0 +1,1238 @@
+/* ==========================================================================
+   NadiKomuniti Landing Page Stylesheet
+   Design System Reference: DESIGN.md & Asset_Pack_landingpack
+   All rules scoped strictly under .nkLanding
+   ========================================================================== */
+
+.nkLanding {
+  --ink: #12213A;
+  --ink-secondary: #4A5568;
+  --sub: #66758A;
+  --red: #E94737;
+  --red-hover: #D33626;
+  --orange: #FA893C;
+  --cream: #FFF8F3;
+  --line: #E2E8F0;
+  --line-light: #EEF2F6;
+  --sky: #EFF7FB;
+  --green: #129B78;
+  --shadow-sm: 0 4px 12px rgba(18, 33, 58, 0.05);
+  --shadow-md: 0 14px 34px rgba(18, 33, 58, 0.08);
+  --shadow-lg: 0 24px 60px rgba(18, 33, 58, 0.11);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  font-family: var(--font-inter, 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+  color: var(--ink);
+  background-color: #FFFFFF;
+  min-height: 100vh;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  position: relative;
+  overflow-x: hidden;
+  scroll-behavior: smooth;
+}
+
+.nkLanding *,
+.nkLanding *:before,
+.nkLanding *:after {
+  box-sizing: border-box;
+}
+
+.nkLanding a {
+  text-decoration: none;
+  color: inherit;
+}
+
+.nkLanding button {
+  font: inherit;
+  cursor: pointer;
+  background: none;
+  border: none;
+}
+
+.nkLanding img {
+  max-width: 100%;
+  display: block;
+}
+
+.nkLanding svg {
+  display: block;
+  flex-shrink: 0;
+}
+
+.nkLanding [id] {
+  scroll-margin-top: 92px;
+}
+
+/* Container Constraint */
+.nkLanding .nkWrap {
+  width: min(1200px, calc(100% - 64px));
+  margin-inline: auto;
+}
+
+/* ==========================================================================
+   Header & Sticky Navigation
+   ========================================================================== */
+.nkLanding .nkHeader {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--line-light);
+  transition: box-shadow 0.25s ease;
+}
+
+.nkLanding .nkHeader.isScrolled {
+  box-shadow: 0 4px 20px rgba(18, 33, 58, 0.06);
+}
+
+.nkLanding .nkHeaderInner {
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.nkLanding .nkBrand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+  transition: opacity 0.2s ease;
+}
+
+.nkLanding .nkBrand:hover {
+  opacity: 0.92;
+}
+
+.nkLanding .nkBrandLogo {
+  height: 42px;
+  width: auto;
+  object-fit: contain;
+}
+
+.nkLanding .nkBrandSlogan {
+  border-left: 1px solid var(--line);
+  padding-left: 14px;
+  color: #718096;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.nkLanding .nkNav {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  margin-left: auto;
+}
+
+.nkLanding .nkNav a {
+  font-size: 14px;
+  font-weight: 600;
+  color: #4A5568;
+  position: relative;
+  padding: 6px 0;
+  transition: color 0.2s ease;
+}
+
+.nkLanding .nkNav a::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 0;
+  height: 2px;
+  background: var(--red);
+  border-radius: 2px;
+  transition: width 0.25s var(--ease-out);
+}
+
+.nkLanding .nkNav a:hover,
+.nkLanding .nkNav a:focus-visible {
+  color: var(--red);
+}
+
+.nkLanding .nkNav a:hover::after,
+.nkLanding .nkNav a:focus-visible::after {
+  width: 100%;
+}
+
+.nkLanding .nkHeaderAction {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Buttons */
+.nkLanding .nkBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border-radius: 9999px;
+  padding: 13px 26px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.25;
+  transition: transform 0.2s var(--ease-spring), box-shadow 0.2s ease, background-color 0.2s ease;
+  white-space: nowrap;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.nkLanding .nkBtn:hover {
+  transform: translateY(-2px);
+}
+
+.nkLanding .nkBtn:active {
+  transform: translateY(0);
+}
+
+.nkLanding .nkBtnPrimary {
+  background: linear-gradient(115deg, #DD2F2D 0%, #FA6B42 100%);
+  color: #FFFFFF;
+  box-shadow: 0 8px 22px rgba(221, 47, 45, 0.24);
+}
+
+.nkLanding .nkBtnPrimary:hover {
+  background: linear-gradient(115deg, #C72523 0%, #F55B2E 100%);
+  box-shadow: 0 14px 28px rgba(221, 47, 45, 0.32);
+}
+
+.nkLanding .nkBtnOutline {
+  border: 1px solid #CBD5E1;
+  color: #1E293B;
+  background: #FFFFFF;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+}
+
+.nkLanding .nkBtnOutline:hover {
+  border-color: #94A3B8;
+  background: #F8FAFC;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.06);
+}
+
+.nkLanding .nkBtnSmall {
+  padding: 10px 20px;
+  font-size: 13px;
+}
+
+.nkLanding .nkMobileToggle {
+  display: none;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--line);
+  background: #FFFFFF;
+  border-radius: 12px;
+  color: var(--ink);
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.nkLanding .nkMobileToggle:hover {
+  background: #F8FAFC;
+  border-color: #CBD5E1;
+}
+
+/* ==========================================================================
+   Hero Section
+   ========================================================================== */
+.nkLanding .nkHero {
+  position: relative;
+  padding: 80px 0 90px;
+  isolation: isolate;
+  background: radial-gradient(ellipse 45% 65% at 75% 40%, #FFF2EB 0%, rgba(255, 242, 235, 0.2) 65%, transparent 80%),
+              linear-gradient(180deg, #FFFFFF 0%, #FFFDFC 100%);
+}
+
+.nkLanding .nkHeroGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 50px;
+}
+
+.nkLanding .nkEyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #E03E2D;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin-bottom: 18px;
+}
+
+.nkLanding .nkEyebrow::before {
+  content: "";
+  width: 24px;
+  height: 2px;
+  background: #E03E2D;
+  border-radius: 2px;
+}
+
+.nkLanding .nkHeroTitle {
+  font-size: clamp(38px, 4.4vw, 58px);
+  font-weight: 850;
+  line-height: 1.14;
+  letter-spacing: -0.045em;
+  margin: 0 0 20px;
+  color: var(--ink);
+}
+
+.nkLanding .nkHeroTitle span {
+  color: var(--red);
+  background: linear-gradient(115deg, #DD2F2D, #FA7349);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.nkLanding .nkLead {
+  color: var(--ink-secondary);
+  font-size: 17px;
+  line-height: 1.75;
+  margin: 0;
+  max-width: 520px;
+}
+
+.nkLanding .nkHeroActions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 34px;
+}
+
+.nkLanding .nkBenefits {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 48px;
+  max-width: 540px;
+}
+
+.nkLanding .nkBenefit {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 9px;
+}
+
+.nkLanding .nkBenefitIcon {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: #FFF0EC;
+  color: #E14C3E;
+  transition: transform 0.2s var(--ease-spring);
+}
+
+.nkLanding .nkBenefit:hover .nkBenefitIcon {
+  transform: translateY(-2px) scale(1.05);
+}
+
+.nkLanding .nkBenefit:nth-child(2) .nkBenefitIcon {
+  background: #EBF5FF;
+  color: #2563EB;
+}
+
+.nkLanding .nkBenefit:nth-child(3) .nkBenefitIcon {
+  background: #E8F8F1;
+  color: #059669;
+}
+
+.nkLanding .nkBenefit:nth-child(4) .nkBenefitIcon {
+  background: #FFF5E5;
+  color: #D97706;
+}
+
+.nkLanding .nkBenefit span:last-child {
+  font-size: 12px;
+  color: #4A5568;
+  line-height: 1.35;
+  font-weight: 600;
+}
+
+/* Hero Art - Transparent Product Mockup */
+.nkLanding .nkHeroArt {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 440px;
+}
+
+.nkLanding .nkMockupWrapper {
+  position: relative;
+  width: 100%;
+  max-width: 636px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: nkHeroFadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes nkHeroFadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.nkLanding .nkHeroMockupImage {
+  width: 100%;
+  height: auto;
+  max-width: 636px;
+  max-height: 480px;
+  object-fit: contain;
+  display: block;
+}
+
+/* ==========================================================================
+   Section Common Styles
+   ========================================================================== */
+.nkLanding .nkSection {
+  padding: 96px 0;
+  position: relative;
+}
+
+.nkLanding .nkSectionIntro {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 60px;
+  align-items: flex-end;
+  margin-bottom: 70px;
+}
+
+.nkLanding .nkLabel {
+  display: inline-flex;
+  align-items: center;
+  color: #E03E2D;
+  background: #FFF0EC;
+  border-radius: 9999px;
+  padding: 6px 14px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+.nkLanding .nkSectionTitle {
+  font-size: clamp(30px, 3.2vw, 44px);
+  line-height: 1.18;
+  letter-spacing: -0.04em;
+  font-weight: 850;
+  color: var(--ink);
+  margin: 0;
+}
+
+.nkLanding .nkIntroText {
+  color: var(--ink-secondary);
+  font-size: 16px;
+  line-height: 1.8;
+  margin: 0;
+}
+
+/* Feature Rows */
+.nkLanding .nkFeatureRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 80px;
+  margin-bottom: 96px;
+}
+
+.nkLanding .nkFeatureRow:last-child {
+  margin-bottom: 0;
+}
+
+.nkLanding .nkFeatureRow.reverse .nkVisual {
+  order: 0;
+}
+
+.nkLanding .nkFeatureRow.reverse .nkFeatureCopy {
+  order: 1;
+}
+
+.nkLanding .nkFeatureCopy {
+  max-width: 460px;
+}
+
+.nkLanding .nkFeatureNum {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: #E94737;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.nkLanding .nkFeatureNum::after {
+  content: "";
+  height: 1.5px;
+  width: 32px;
+  background: #FECACA;
+}
+
+.nkLanding .nkFeatureCopy h3 {
+  font-size: clamp(24px, 2.5vw, 34px);
+  line-height: 1.22;
+  letter-spacing: -0.035em;
+  margin: 0 0 16px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.nkLanding .nkFeatureCopy p {
+  font-size: 16px;
+  color: var(--ink-secondary);
+  line-height: 1.75;
+  margin: 0 0 24px;
+}
+
+.nkLanding .nkTextLink {
+  color: #D93826;
+  font-weight: 750;
+  font-size: 14px;
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+
+.nkLanding .nkTextLink:hover {
+  color: #B91C1C;
+  transform: translateX(4px);
+}
+
+/* Feature Visual Containers */
+.nkLanding .nkVisual {
+  position: relative;
+  border-radius: 28px;
+  min-height: 380px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  border: 1px solid var(--line-light);
+  box-shadow: var(--shadow-md);
+  transition: transform 0.3s var(--ease-out), box-shadow 0.3s ease;
+}
+
+.nkLanding .nkVisual:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+}
+
+.nkLanding .nkVisual.peach {
+  background: linear-gradient(145deg, #FFF6F2 0%, #FFEBE1 100%);
+  border-color: #FED7AA;
+}
+
+.nkLanding .nkVisual.sky {
+  background: linear-gradient(145deg, #F0F9FF 0%, #E0F2FE 100%);
+  border-color: #BAE6FD;
+}
+
+.nkLanding .nkVisual.mint {
+  background: linear-gradient(145deg, #F0FDF4 0%, #DCFCE7 100%);
+  border-color: #BBF7D0;
+}
+
+.nkLanding .nkFeatureImage {
+  width: 100%;
+  height: auto;
+  max-height: 350px;
+  object-fit: contain;
+  border-radius: 18px;
+  filter: drop-shadow(0 12px 24px rgba(18, 33, 58, 0.08));
+}
+
+/* ==========================================================================
+   How It Works Section
+   ========================================================================== */
+.nkLanding .nkSteps {
+  background: linear-gradient(180deg, #FFF9F6 0%, #FFF3EE 100%);
+  border-top: 1px solid #FFE4D6;
+  border-bottom: 1px solid #FFE4D6;
+  position: relative;
+  overflow: hidden;
+}
+
+.nkLanding .nkCenter {
+  text-align: center;
+  max-width: 680px;
+  margin: 0 auto;
+}
+
+.nkLanding .nkCenter h2 {
+  font-size: clamp(30px, 3.2vw, 44px);
+  font-weight: 850;
+  letter-spacing: -0.04em;
+  line-height: 1.2;
+  margin: 12px 0 16px;
+  color: var(--ink);
+}
+
+.nkLanding .nkCenter p {
+  color: var(--ink-secondary);
+  font-size: 16px;
+  line-height: 1.7;
+  margin: 0;
+}
+
+.nkLanding .nkStepGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 40px;
+  margin-top: 64px;
+  position: relative;
+}
+
+.nkLanding .nkStepGrid::before {
+  content: "";
+  position: absolute;
+  height: 2px;
+  background: repeating-linear-gradient(90deg, #F87171 0 12px, transparent 12px 24px);
+  top: 48px;
+  left: 18%;
+  right: 18%;
+  z-index: 0;
+}
+
+.nkLanding .nkStep {
+  position: relative;
+  text-align: center;
+  z-index: 1;
+  padding: 0 16px;
+}
+
+.nkLanding .nkStepIconBox {
+  width: 96px;
+  height: 96px;
+  border-radius: 26px;
+  margin: 0 auto 24px;
+  background: #FFFFFF;
+  box-shadow: 0 12px 28px rgba(18, 33, 58, 0.08);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  border: 1px solid #F1F5F9;
+  transition: transform 0.25s var(--ease-spring), box-shadow 0.25s ease;
+}
+
+.nkLanding .nkStep:hover .nkStepIconBox {
+  transform: translateY(-4px) scale(1.05);
+  box-shadow: 0 18px 36px rgba(18, 33, 58, 0.12);
+}
+
+.nkLanding .nkStepIcon {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.nkLanding .nkStep h3 {
+  font-size: 18px;
+  letter-spacing: -0.02em;
+  margin: 0 0 10px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.nkLanding .nkStep p {
+  font-size: 14px;
+  color: var(--ink-secondary);
+  line-height: 1.65;
+  margin: 0;
+}
+
+/* ==========================================================================
+   Meet Nadi Mascot Section
+   ========================================================================== */
+.nkLanding .nkNadiSection {
+  background: #F0F9FF;
+  border-top: 1px solid #E0F2FE;
+  border-bottom: 1px solid #E0F2FE;
+  padding: 60px 0 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.nkLanding .nkNadiGrid {
+  display: grid;
+  grid-template-columns: 380px 1fr;
+  align-items: center;
+  gap: 60px;
+}
+
+.nkLanding .nkNadiPortrait {
+  position: relative;
+  height: 400px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.nkLanding .nkNadiPortrait::before {
+  content: "";
+  position: absolute;
+  width: 360px;
+  height: 360px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #BAE6FD 0%, #E0F2FE 70%);
+  bottom: -40px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 0;
+}
+
+.nkLanding .nkMascotInteractive {
+  position: relative;
+  z-index: 1;
+  height: 360px;
+  width: auto;
+  object-fit: contain;
+  cursor: pointer;
+  filter: drop-shadow(0 16px 20px rgba(18, 33, 58, 0.12));
+  animation: nkNadiIdle 4.5s ease-in-out infinite;
+  transition: transform 0.2s ease;
+  user-select: none;
+}
+
+.nkLanding .nkMascotInteractive:hover {
+  transform: scale(1.03);
+}
+
+.nkLanding .nkNadiBubble {
+  position: absolute;
+  top: 16px;
+  right: -10px;
+  background: #FFFFFF;
+  border: 1px solid #BAE6FD;
+  border-radius: 16px;
+  padding: 10px 16px;
+  box-shadow: 0 10px 24px rgba(18, 33, 58, 0.08);
+  font-size: 13px;
+  font-weight: 700;
+  color: #0369A1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 2;
+  animation: nkFloat 3s ease-in-out infinite alternate;
+}
+
+.nkLanding .nkNadiBubble::after {
+  content: "";
+  position: absolute;
+  bottom: -8px;
+  left: 20px;
+  width: 14px;
+  height: 14px;
+  background: #FFFFFF;
+  border-right: 1px solid #BAE6FD;
+  border-bottom: 1px solid #BAE6FD;
+  transform: rotate(45deg);
+}
+
+.nkLanding .nkNadiGrid h2 {
+  font-size: clamp(30px, 3.2vw, 44px);
+  line-height: 1.18;
+  letter-spacing: -0.04em;
+  margin: 14px 0 16px;
+  font-weight: 850;
+  color: var(--ink);
+}
+
+.nkLanding .nkNadiGrid p {
+  color: var(--ink-secondary);
+  font-size: 16px;
+  line-height: 1.8;
+  margin: 0;
+  max-width: 540px;
+}
+
+.nkLanding .nkChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.nkLanding .nkChip {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 8px 16px;
+  background: #FFFFFF;
+  border: 1px solid #BAE6FD;
+  border-radius: 9999px;
+  color: #0369A1;
+  box-shadow: 0 2px 6px rgba(3, 105, 161, 0.05);
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.nkLanding .nkChip:hover {
+  transform: translateY(-2px);
+  background: #E0F2FE;
+}
+
+/* ==========================================================================
+   Final Call to Action (CTA) Section
+   ========================================================================== */
+.nkLanding .nkCta {
+  padding: 96px 0;
+  background: #FFFFFF;
+}
+
+.nkLanding .nkCtaCard {
+  position: relative;
+  border-radius: 32px;
+  background: linear-gradient(120deg, #FFF0EA 0%, #FFF8F4 50%, #F0F9FF 100%);
+  padding: 68px 36px;
+  text-align: center;
+  overflow: hidden;
+  border: 1px solid #FFE4D6;
+  box-shadow: var(--shadow-lg);
+}
+
+.nkLanding .nkCtaCard::before,
+.nkLanding .nkCtaCard::after {
+  content: "";
+  position: absolute;
+  width: 280px;
+  height: 280px;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.nkLanding .nkCtaCard::before {
+  background: radial-gradient(circle, #FED7AA 0%, transparent 70%);
+  bottom: -140px;
+  left: -80px;
+  opacity: 0.5;
+}
+
+.nkLanding .nkCtaCard::after {
+  background: radial-gradient(circle, #BAE6FD 0%, transparent 70%);
+  top: -120px;
+  right: -60px;
+  opacity: 0.5;
+}
+
+.nkLanding .nkCtaCard h2 {
+  font-size: clamp(30px, 3.5vw, 46px);
+  letter-spacing: -0.045em;
+  line-height: 1.2;
+  margin: 14px 0 16px;
+  position: relative;
+  font-weight: 850;
+  color: var(--ink);
+}
+
+.nkLanding .nkCtaCard p {
+  color: var(--ink-secondary);
+  font-size: 17px;
+  line-height: 1.7;
+  max-width: 520px;
+  margin: 0 auto 32px;
+  position: relative;
+}
+
+/* ==========================================================================
+   Footer
+   ========================================================================== */
+.nkLanding .nkFooter {
+  border-top: 1px solid var(--line);
+  background: #F8FAFC;
+  padding: 40px 0 32px;
+}
+
+.nkLanding .nkFooterTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.nkLanding .nkFooterLogo {
+  height: 38px;
+  width: auto;
+  object-fit: contain;
+}
+
+.nkLanding .nkFooterLinks {
+  display: flex;
+  gap: 28px;
+  align-items: center;
+}
+
+.nkLanding .nkFooterLinks a {
+  color: #4A5568;
+  font-size: 13px;
+  font-weight: 650;
+  transition: color 0.2s ease;
+}
+
+.nkLanding .nkFooterLinks a:hover {
+  color: var(--red);
+}
+
+.nkLanding .nkFooterBottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line-light);
+  color: #718096;
+  font-size: 12px;
+}
+
+/* ==========================================================================
+   Scroll-Reveal Animations
+   ========================================================================== */
+.nkLanding .nkReveal {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.5s var(--ease-out), transform 0.5s var(--ease-out);
+  will-change: opacity, transform;
+}
+
+.nkLanding.js-ready .nkReveal {
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+.nkLanding .nkRevealed,
+.nkLanding.js-ready .nkRevealed {
+  opacity: 1 !important;
+  transform: translateY(0) !important;
+}
+
+@keyframes nkNadiIdle {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes nkFloat {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(-6px);
+  }
+}
+
+/* ==========================================================================
+   Accessibility & Responsive Breakpoints
+   ========================================================================== */
+/* Keyboard Focus Visibility (Matching DESIGN.md) */
+.nkLanding button:focus-visible,
+.nkLanding a:focus-visible {
+  outline: 2px solid #DD2F2D !important;
+  outline-offset: 3px !important;
+}
+
+/* Desktop Tablet (Max 1120px) */
+@media (max-width: 1120px) {
+  .nkLanding .nkHeroGrid {
+    gap: 30px;
+  }
+  .nkLanding .nkHeroArt {
+    transform: scale(0.95);
+  }
+  .nkLanding .nkBrandSlogan {
+    display: none;
+  }
+  .nkLanding .nkFeatureRow {
+    gap: 50px;
+  }
+  .nkLanding .nkNav {
+    gap: 22px;
+  }
+}
+
+/* Mobile & Small Tablet (Max 860px) */
+@media (max-width: 860px) {
+  .nkLanding .nkWrap {
+    width: min(100% - 40px, 640px);
+  }
+  .nkLanding .nkHeaderInner {
+    height: 72px;
+  }
+  .nkLanding .nkHeaderAction .nkBtn {
+    display: none;
+  }
+  .nkLanding .nkMobileToggle {
+    display: flex;
+    margin-left: auto;
+  }
+  .nkLanding .nkNav {
+    display: none;
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 71px;
+    background: #FFFFFF;
+    border-bottom: 1px solid var(--line);
+    padding: 18px 24px 28px;
+    box-shadow: 0 20px 40px rgba(18, 33, 58, 0.1);
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    margin: 0;
+    z-index: 100;
+  }
+  .nkLanding .nkNav.isOpen {
+    display: flex;
+  }
+  .nkLanding .nkNav a {
+    padding: 14px 4px;
+    border-bottom: 1px solid var(--line-light);
+    font-size: 15px;
+  }
+  .nkLanding .nkMobileAppLink {
+    display: block !important;
+    color: var(--red) !important;
+    font-weight: 750 !important;
+    margin-top: 10px;
+  }
+  .nkLanding .nkHero {
+    padding: 50px 0 60px;
+  }
+  .nkLanding .nkHeroGrid {
+    grid-template-columns: 1fr;
+    text-align: center;
+    gap: 30px;
+  }
+  .nkLanding .nkHeroCopy {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .nkLanding .nkHeroActions {
+    justify-content: center;
+  }
+  .nkLanding .nkBenefits {
+    width: 100%;
+    margin-top: 36px;
+  }
+  .nkLanding .nkBenefit {
+    align-items: center;
+    text-align: center;
+  }
+  .nkLanding .nkHeroArt {
+    width: 100%;
+    max-width: 540px;
+    height: auto;
+    min-height: unset;
+    margin: 10px auto 0;
+    transform: none;
+  }
+  .nkLanding .nkMockupWrapper {
+    max-width: 100%;
+  }
+  .nkLanding .nkHeroMockupImage {
+    max-height: 440px;
+  }
+  .nkLanding .nkSection {
+    padding: 70px 0;
+  }
+  .nkLanding .nkSectionIntro {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    margin-bottom: 50px;
+  }
+  .nkLanding .nkFeatureRow {
+    grid-template-columns: 1fr;
+    gap: 32px;
+    margin-bottom: 64px;
+  }
+  .nkLanding .nkFeatureCopy {
+    max-width: unset;
+    order: 0 !important;
+  }
+  .nkLanding .nkVisual {
+    order: 1 !important;
+    min-height: 300px;
+  }
+  .nkLanding .nkStepGrid {
+    grid-template-columns: 1fr;
+    gap: 36px;
+    margin-top: 48px;
+  }
+  .nkLanding .nkStepGrid::before {
+    display: none;
+  }
+  .nkLanding .nkNadiGrid {
+    grid-template-columns: 1fr;
+    text-align: center;
+    gap: 30px;
+  }
+  .nkLanding .nkNadiPortrait {
+    height: 320px;
+    order: 1;
+  }
+  .nkLanding .nkMascotInteractive {
+    height: 290px;
+  }
+  .nkLanding .nkChips {
+    justify-content: center;
+  }
+  .nkLanding .nkFooterTop,
+  .nkLanding .nkFooterBottom {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 18px;
+  }
+  .nkLanding .nkFooterLinks {
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+}
+
+/* Small Smartphone (Max 580px) */
+@media (max-width: 580px) {
+  .nkLanding .nkWrap {
+    width: calc(100% - 32px);
+  }
+  .nkLanding .nkHeaderInner {
+    height: 64px;
+  }
+  .nkLanding .nkBrandLogo {
+    height: 34px;
+  }
+  .nkLanding .nkHeroTitle {
+    font-size: clamp(26px, 7.2vw, 32px);
+    line-height: 1.16;
+    letter-spacing: -0.035em;
+    word-break: normal;
+    overflow-wrap: break-word;
+    margin: 16px 0 14px;
+  }
+  .nkLanding .nkLead {
+    font-size: 15px;
+    line-height: 1.65;
+  }
+  .nkLanding .nkBtn {
+    font-size: 13px;
+    padding: 12px 20px;
+  }
+  .nkLanding .nkHeroActions {
+    flex-direction: column;
+    width: 100%;
+    gap: 10px;
+  }
+  .nkLanding .nkHeroActions .nkBtn {
+    width: 100%;
+  }
+  .nkLanding .nkBenefits {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-top: 30px;
+    width: 100%;
+  }
+  .nkLanding .nkBenefit {
+    flex-direction: row;
+    align-items: center;
+    text-align: left;
+    gap: 10px;
+    background: #F8FAFC;
+    padding: 10px 12px;
+    border-radius: 14px;
+    border: 1px solid #EEF2F6;
+  }
+  .nkLanding .nkBenefitIcon {
+    width: 38px;
+    height: 38px;
+    flex-shrink: 0;
+  }
+  .nkLanding .nkBenefit span:last-child {
+    font-size: 11px;
+    line-height: 1.3;
+  }
+  .nkLanding .nkHeroArt {
+    height: auto;
+    width: 100%;
+    max-width: 100%;
+    overflow: visible;
+    transform: none;
+    margin-top: 20px;
+    min-height: unset;
+  }
+  .nkLanding .nkMockupWrapper {
+    max-width: 100%;
+  }
+  .nkLanding .nkHeroMockupImage {
+    max-height: 320px;
+  }
+  .nkLanding .nkSectionTitle {
+    font-size: 26px;
+    line-height: 1.2;
+  }
+  .nkLanding .nkFeatureCopy h3 {
+    font-size: 22px;
+    line-height: 1.25;
+  }
+  .nkLanding .nkFeatureCopy p {
+    font-size: 14px;
+  }
+  .nkLanding .nkVisual {
+    min-height: 240px;
+    padding: 16px;
+  }
+  .nkLanding .nkCtaCard {
+    padding: 44px 18px;
+  }
+  .nkLanding .nkCtaCard h2 {
+    font-size: 26px;
+  }
+}
+
+/* Reduced Motion Override (A11y requirement) */
+@media (prefers-reduced-motion: reduce) {
+  .nkLanding *,
+  .nkLanding *:before,
+  .nkLanding *:after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .nkLanding .nkReveal {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .nkLanding .nkMascotInteractive,
+  .nkLanding .nkNadiBubble,
+  .nkLanding .nkMockupWrapper {
+    animation: none !important;
+    transform: none !important;
+  }
+}

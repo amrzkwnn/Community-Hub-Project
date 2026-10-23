@@ -6,6 +6,7 @@ import AuthModal from '@/components/auth/AuthModal';
 import NotificationCenter from '@/components/common/NotificationCenter';
 import ProfileModal from '@/components/common/ProfileModal';
 import ContactModal from '@/components/common/ContactModal';
+import Link from 'next/link';
 import { 
   ChevronDown,
   LogIn,
@@ -15,7 +16,7 @@ import {
   Phone,
   PanelLeft,
   PanelLeftClose,
-  Menu
+  ArrowLeft
 } from 'lucide-react';
 
 import GlobalSearch from '@/components/navigation/GlobalSearch';
@@ -171,8 +172,8 @@ export default function Header() {
                 className="flex items-center gap-2 ml-0.5 cursor-pointer select-none"
               >
                 <img
-                  src="/images/nadikomuniti-logo-transparent.png"
-                  alt="Nadikomuniti — Connect & Relax"
+                  src="/nadikomuniti/01_branding/logo-header-horizontal.webp"
+                  alt="NadiKomuniti — Connect & Relax"
                   className="h-7 w-auto object-contain max-w-[130px]"
                 />
                 <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-l border-slate-300 dark:border-slate-700 pl-2">
@@ -236,17 +237,30 @@ export default function Header() {
                 )}
               </button>
               {isSidebarCollapsed && (
-                <div 
-                  onClick={() => setActiveTab('home')}
-                  className="flex items-center gap-2 cursor-pointer select-none group"
-                  title="Nadikomuniti — Connect & Relax"
-                >
-                  <img
-                    src="/images/nadikomuniti-logo-transparent.png"
-                    alt="Nadikomuniti — Connect & Relax"
-                    className="h-8 w-auto object-contain max-w-[150px] group-hover:scale-105 transition-transform"
-                  />
-                </div>
+                <>
+                  <div 
+                    onClick={() => setActiveTab('home')}
+                    className="flex items-center gap-2 cursor-pointer select-none group"
+                    title="NadiKomuniti — Connect & Relax"
+                  >
+                    <img
+                      src="/nadikomuniti/01_branding/logo-header-horizontal.webp"
+                      alt="NadiKomuniti — Connect & Relax"
+                      className="h-8 w-auto object-contain max-w-[150px] group-hover:scale-105 transition-transform"
+                    />
+                  </div>
+
+                  {/* Accessible Back to Landing Page control when sidebar is collapsed */}
+                  <Link
+                    href="/welcome"
+                    aria-label="Back to Landing Page"
+                    title="Back to Landing Page"
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200/80 dark:border-slate-800 bg-white/90 dark:bg-slate-800/90 hover:bg-slate-100 dark:hover:bg-slate-700/80 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100 text-xs font-medium shadow-2xs transition-all active:scale-95 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9E1315]"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400 shrink-0" />
+                    <span className="hidden xl:inline text-[12px]">Back to Landing</span>
+                  </Link>
+                </>
               )}
             </div>
 
