@@ -280,14 +280,36 @@ export async function searchIncidents(
   if (options.supabase) {
     try {
       const { data } = await options.supabase
-        .from('resilience_incidents')
+        .from('community_reports')
         .select('*')
-        .is('is_archived', false)
+        .neq('status', 'pending')
+        .neq('status', 'rejected')
         .neq('status', 'resolved')
         .order('created_at', { ascending: false })
         .limit(20);
       if (data && data.length > 0) {
-        incidents = data as ResilienceIncident[];
+        incidents = data.map((d: any) => ({
+          id: d.id,
+          reporterId: d.reporter_id || 'user-unknown',
+          reporterName: d.is_anonymous ? 'Anonymous Neighbour' : 'Resident',
+          reporterPrecinct: 'Bandar Elmina',
+          incidentType: d.report_type || 'flood',
+          title: d.title,
+          description: d.description || '',
+          locationName: d.location_name || 'Bandar Elmina',
+          latitude: Number(d.latitude) || 3.1802,
+          longitude: Number(d.longitude) || 101.5165,
+          severity: d.severity || 'medium',
+          status: d.status || 'reported',
+          isVerified: d.status === 'under_review' || d.status === 'resolved' || d.status === 'dispatched',
+          imageUrl: d.image_url,
+          isAnonymous: !!d.is_anonymous,
+          managementNotes: d.management_notes,
+          assignedTeam: d.assigned_team,
+          updates: [],
+          createdAt: d.created_at || new Date().toISOString(),
+          updatedAt: d.updated_at || d.created_at || new Date().toISOString(),
+        })) as ResilienceIncident[];
       }
     } catch {
       // Fallback below
@@ -295,7 +317,7 @@ export async function searchIncidents(
   }
 
   if (incidents.length === 0) {
-    incidents = INITIAL_RESILIENCE_INCIDENTS.filter((i) => !i.isArchived && i.status !== 'resolved');
+    incidents = INITIAL_RESILIENCE_INCIDENTS.filter((i) => !i.isArchived && i.status !== 'resolved' && i.status !== 'pending' && i.status !== 'rejected');
   }
 
   // Location extraction
@@ -920,20 +942,42 @@ export async function analyzeIncidentReportIntent(
   if (options.supabase) {
     try {
       const { data } = await options.supabase
-        .from('resilience_incidents')
+        .from('community_reports')
         .select('*')
-        .is('is_archived', false)
+        .neq('status', 'pending')
+        .neq('status', 'rejected')
         .neq('status', 'resolved')
         .order('created_at', { ascending: false })
         .limit(20);
       if (data && data.length > 0) {
-        activeIncidents = data as ResilienceIncident[];
+        activeIncidents = data.map((d: any) => ({
+          id: d.id,
+          reporterId: d.reporter_id || 'user-unknown',
+          reporterName: d.is_anonymous ? 'Anonymous Neighbour' : 'Resident',
+          reporterPrecinct: 'Bandar Elmina',
+          incidentType: d.report_type || 'flood',
+          title: d.title,
+          description: d.description || '',
+          locationName: d.location_name || 'Bandar Elmina',
+          latitude: Number(d.latitude) || 3.1802,
+          longitude: Number(d.longitude) || 101.5165,
+          severity: d.severity || 'medium',
+          status: d.status || 'reported',
+          isVerified: d.status === 'under_review' || d.status === 'resolved' || d.status === 'dispatched',
+          imageUrl: d.image_url,
+          isAnonymous: !!d.is_anonymous,
+          managementNotes: d.management_notes,
+          assignedTeam: d.assigned_team,
+          updates: [],
+          createdAt: d.created_at || new Date().toISOString(),
+          updatedAt: d.updated_at || d.created_at || new Date().toISOString(),
+        })) as ResilienceIncident[];
       }
     } catch {}
   }
 
   if (activeIncidents.length === 0) {
-    activeIncidents = INITIAL_RESILIENCE_INCIDENTS.filter((i) => !i.isArchived && i.status !== 'resolved');
+    activeIncidents = INITIAL_RESILIENCE_INCIDENTS.filter((i) => !i.isArchived && i.status !== 'resolved' && i.status !== 'pending' && i.status !== 'rejected');
   }
 
   const duplicates: AiSearchResultCard[] = [];

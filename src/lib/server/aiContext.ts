@@ -206,22 +206,22 @@ export async function buildGroundedContext(
         promises.push(
           (async () => {
             const { data } = await supabase
-              .from('resilience_reports')
-              .select('id, incident_type, location_name, severity, status, description')
-              .eq('is_verified', true)
-              .is('is_archived', false)
+              .from('community_reports')
+              .select('id, report_type, location_name, severity, status, description')
+              .neq('status', 'pending')
+              .neq('status', 'rejected')
               .limit(isGeneral ? 3 : 5);
 
             if (data) {
               verifiedIncidents = data.map((inc) => {
-                const item = inc as { id: string; incident_type: string; location_name: string; severity: string; status: string; description: string };
+                const item = inc as { id: string; report_type: string; location_name: string; severity: string; status: string; description: string };
                 return {
                   id: item.id,
-                  type: item.incident_type,
-                  location: item.location_name,
-                  severity: item.severity,
-                  status: item.status,
-                  description: item.description.slice(0, 120),
+                  type: item.report_type || 'other',
+                  location: item.location_name || 'Bandar Elmina',
+                  severity: item.severity || 'medium',
+                  status: item.status || 'reported',
+                  description: (item.description || '').slice(0, 120),
                 };
               });
             }

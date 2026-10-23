@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { 
   getSupabaseAdmin, 
   toDatabaseUserId, 
+  fromDatabaseUserId,
   mapToSupabaseReportType,
   bootstrapDatabaseIfEmpty,
   getMemoryStore,
@@ -22,6 +23,8 @@ export async function GET(request: NextRequest) {
   let dbComments: Record<string, any[]> = {};
   let dbExchange: any[] = [];
   let dbServices: any[] = [];
+  let dbConversations: any[] = [];
+  let dbMessages: any[] = [];
   let fromDatabase = false;
 
   if (supabase) {
@@ -135,7 +138,7 @@ export async function GET(request: NextRequest) {
       if (!exchErr && exchange && exchange.length > 0) {
         dbExchange = exchange.map((e: any) => ({
           id: e.id,
-          authorId: e.author_id,
+          authorId: fromDatabaseUserId(e.author_id),
           authorName: e.author?.full_name || 'Resident',
           authorPrecinct: e.author?.township_precinct || e.precinct,
           authorVerified: e.author?.verification_status === 'verified',
@@ -163,7 +166,7 @@ export async function GET(request: NextRequest) {
       if (!servErr && services && services.length > 0) {
         dbServices = services.map((s: any) => ({
           id: s.id,
-          authorId: s.author_id,
+          authorId: fromDatabaseUserId(s.author_id),
           authorName: s.author?.full_name || 'Resident',
           authorPrecinct: s.author?.township_precinct || s.precinct,
           authorVerified: s.author?.verification_status === 'verified',
@@ -178,6 +181,50 @@ export async function GET(request: NextRequest) {
         }));
         fromDatabase = true;
       }
+
+      // 6. Fetch conversations (Mediated Private Messaging)
+      const { data: convs, error: convErr } = await supabase
+        .from('conversations')
+        .select('*, p1:public_profiles!participant_one(full_name, avatar_url, township_precinct), p2:public_profiles!participant_two(full_name, avatar_url, township_precinct)')
+        .order('last_message_time', { ascending: false });
+
+      if (!convErr && convs && convs.length > 0) {
+        dbConversations = convs.map((c: any) => ({
+          id: c.id,
+          participantOneId: fromDatabaseUserId(c.participant_one),
+          participantOneName: c.p1?.full_name || 'Resident',
+          participantTwoId: fromDatabaseUserId(c.participant_two),
+          participantTwoName: c.p2?.full_name || 'Resident',
+          subject: c.subject || 'Direct Message',
+          contextType: c.context_type || 'general',
+          status: c.status || 'accepted',
+          lastMessage: c.last_message || '',
+          lastMessageTime: c.last_message_time || c.updated_at || c.created_at,
+          unreadCount: c.unread_count || 0,
+        }));
+        fromDatabase = true;
+      }
+
+      // 7. Fetch messages
+      const { data: msgs, error: msgErr } = await supabase
+        .from('messages')
+        .select('*, sender:public_profiles!sender_id(full_name, avatar_url)')
+        .order('created_at', { ascending: true });
+
+      if (!msgErr && msgs && msgs.length > 0) {
+        dbMessages = msgs.map((m: any) => ({
+          id: m.id,
+          conversationId: m.conversation_id,
+          senderId: fromDatabaseUserId(m.sender_id),
+          senderName: m.is_anonymous ? 'Elmina Neighbour (Anonymous)' : (m.sender?.full_name || m.sender_name || 'Resident'),
+          senderAvatar: m.is_anonymous ? undefined : m.sender?.avatar_url,
+          isAnonymous: Boolean(m.is_anonymous),
+          content: m.content,
+          imageUrl: m.image_url,
+          createdAt: m.created_at,
+        }));
+        fromDatabase = true;
+      }
     } catch (e) {
       console.warn('[Sync API] Database query warning:', e);
     }
@@ -189,11 +236,11 @@ export async function GET(request: NextRequest) {
   let isManagement = false;
   let requestingUserId = sessionHeader || '';
 
-  if (sessionHeader === 'user-azman') {
+  if (sessionHeader === 'user-azman' || sessionHeader === '33333333-3333-4333-8333-333333333333') {
     isManagement = true;
   } else if (sessionHeader) {
     const { INITIAL_PROFILES } = await import('@/lib/data/mockData');
-    const p = INITIAL_PROFILES.find((prof) => prof.id === sessionHeader);
+    const p = INITIAL_PROFILES.find((prof) => prof.id === sessionHeader || prof.id === fromDatabaseUserId(sessionHeader));
     if (p?.role === 'management') {
       isManagement = true;
     }
@@ -247,6 +294,14 @@ export async function GET(request: NextRequest) {
 
   const finalComments = { ...memory.comments, ...dbComments };
 
+  const finalConversations = dbConversations.length > 0
+    ? [...dbConversations, ...memory.conversations.filter((m) => !dbConversations.some((d) => d.id === m.id))]
+    : memory.conversations;
+
+  const finalMessages = dbMessages.length > 0
+    ? [...dbMessages, ...memory.messages.filter((m) => !dbMessages.some((d) => d.id === m.id))]
+    : memory.messages;
+
   return NextResponse.json({
     success: true,
     fromDatabase,
@@ -256,8 +311,8 @@ export async function GET(request: NextRequest) {
       comments: finalComments,
       exchange: finalExchange,
       services: finalServices,
-      conversations: memory.conversations,
-      messages: memory.messages,
+      conversations: finalConversations,
+      messages: finalMessages,
     },
     timestamp: new Date().toISOString(),
   });
@@ -836,7 +891,7 @@ export async function POST(request: NextRequest) {
           ? 'Elmina Neighbour (Anonymous)' 
           : (user?.displayName || user?.fullName || 'Resident');
 
-        const newMsg = {
+        let savedMsg = {
           id: `msg-${Date.now()}`,
           conversationId,
           senderId: user?.id || 'user-nurul',
@@ -848,7 +903,45 @@ export async function POST(request: NextRequest) {
           createdAt: new Date().toISOString(),
         };
 
-        const updatedMessages = [...memory.messages, newMsg];
+        if (supabase) {
+          try {
+            const senderUuid = toDatabaseUserId(user?.id);
+            const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(conversationId);
+            
+            if (isUuid) {
+              const { data: dbMsg, error: dbMsgErr } = await supabase
+                .from('messages')
+                .insert({
+                  conversation_id: conversationId,
+                  sender_id: senderUuid,
+                  content: content || '',
+                  image_url: imageUrl || null,
+                  is_anonymous: Boolean(isAnonymous),
+                  sender_name: senderName,
+                })
+                .select()
+                .single();
+
+              if (!dbMsgErr && dbMsg) {
+                savedMsg.id = dbMsg.id;
+                savedMsg.createdAt = dbMsg.created_at;
+              }
+
+              await supabase
+                .from('conversations')
+                .update({
+                  last_message: content || (imageUrl ? '📷 Photo attached' : ''),
+                  last_message_time: new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', conversationId);
+            }
+          } catch (msgErr) {
+            console.warn('[Sync API] Error writing message to Supabase:', msgErr);
+          }
+        }
+
+        const updatedMessages = [...memory.messages.filter((m) => m.id !== savedMsg.id), savedMsg];
         const updatedConversations = memory.conversations.map((c) =>
           c.id === conversationId
             ? {
@@ -860,19 +953,102 @@ export async function POST(request: NextRequest) {
         );
 
         updateMemoryStore({ messages: updatedMessages, conversations: updatedConversations });
-        resultRecord = newMsg;
+        resultRecord = savedMsg;
         break;
       }
 
       case 'START_CONVERSATION': {
-        const { conversation } = payload;
-        const exists = memory.conversations.some((c) => c.id === conversation.id);
-        const updatedConversations = exists 
-          ? memory.conversations 
-          : [conversation, ...memory.conversations];
+        const { conversation, initialMessage } = payload;
+        const pOneUuid = toDatabaseUserId(user?.id || conversation.participantOneId);
+        const pTwoUuid = toDatabaseUserId(conversation.participantTwoId);
+        
+        let savedConv = conversation;
+        if (supabase && pOneUuid !== pTwoUuid) {
+          try {
+            // Check if conversation already exists in DB
+            const { data: existing } = await supabase
+              .from('conversations')
+              .select('*')
+              .or(`and(participant_one.eq.${pOneUuid},participant_two.eq.${pTwoUuid}),and(participant_one.eq.${pTwoUuid},participant_two.eq.${pOneUuid})`)
+              .maybeSingle();
 
-        updateMemoryStore({ conversations: updatedConversations });
-        resultRecord = conversation;
+            if (existing) {
+              savedConv = {
+                ...conversation,
+                id: existing.id,
+                status: existing.status || 'accepted',
+                lastMessage: existing.last_message || conversation.lastMessage || initialMessage || '',
+                lastMessageTime: existing.last_message_time || existing.updated_at,
+              };
+            } else {
+              const { data: inserted, error: insertErr } = await supabase
+                .from('conversations')
+                .insert({
+                  participant_one: pOneUuid,
+                  participant_two: pTwoUuid,
+                  subject: conversation.subject || 'Direct Message',
+                  context_type: conversation.contextType || 'general',
+                  status: conversation.status || 'accepted',
+                  last_message: conversation.lastMessage || initialMessage || '',
+                  last_message_time: new Date().toISOString(),
+                })
+                .select()
+                .single();
+
+              if (!insertErr && inserted) {
+                savedConv = {
+                  ...conversation,
+                  id: inserted.id,
+                  status: inserted.status || 'accepted',
+                };
+              }
+            }
+
+            // If initial message provided, also persist message atomically
+            if (initialMessage && initialMessage.trim()) {
+              const senderUuid = toDatabaseUserId(user?.id);
+              const isConvUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(savedConv.id);
+              if (isConvUuid) {
+                await supabase.from('messages').insert({
+                  conversation_id: savedConv.id,
+                  sender_id: senderUuid,
+                  content: initialMessage.trim(),
+                  is_anonymous: Boolean(payload.isAnonymous),
+                  sender_name: payload.isAnonymous ? 'Elmina Neighbour (Anonymous)' : (user?.displayName || user?.fullName || 'Resident'),
+                });
+                await supabase.from('conversations').update({
+                  last_message: initialMessage.trim(),
+                  last_message_time: new Date().toISOString(),
+                }).eq('id', savedConv.id);
+              }
+            }
+          } catch (convErr) {
+            console.warn('[Sync API] Error writing conversation to Supabase:', convErr);
+          }
+        }
+
+        const exists = memory.conversations.some((c) => c.id === savedConv.id);
+        const updatedConversations = exists 
+          ? memory.conversations.map((c) => (c.id === savedConv.id ? { ...c, ...savedConv } : c))
+          : [savedConv, ...memory.conversations];
+
+        let updatedMessages = memory.messages;
+        if (initialMessage && initialMessage.trim()) {
+          const initialMsgRecord = {
+            id: `msg-${Date.now()}`,
+            conversationId: savedConv.id,
+            senderId: user?.id || conversation.participantOneId,
+            senderName: payload.isAnonymous ? 'Elmina Neighbour (Anonymous)' : (user?.displayName || user?.fullName || 'Resident'),
+            senderAvatar: payload.isAnonymous ? undefined : user?.avatarUrl,
+            isAnonymous: Boolean(payload.isAnonymous),
+            content: initialMessage.trim(),
+            createdAt: new Date().toISOString(),
+          };
+          updatedMessages = [...memory.messages.filter((m) => m.id !== initialMsgRecord.id), initialMsgRecord];
+        }
+
+        updateMemoryStore({ conversations: updatedConversations, messages: updatedMessages });
+        resultRecord = { conversation: savedConv };
         break;
       }
 

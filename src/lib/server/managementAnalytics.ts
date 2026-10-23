@@ -78,38 +78,38 @@ export async function computeManagementAnalytics(
   if (supabase) {
     try {
       const { data, error } = await supabase
-        .from('resilience_incidents')
-        .select('*')
+        .from('community_reports')
+        .select('*, reporter:public_profiles(full_name, township_precinct)')
         .order('created_at', { ascending: false });
       if (!error && data && data.length > 0) {
         incidents = data.map((d: any) => ({
           id: d.id,
-          reporterId: d.reporter_id || d.reporterId || 'user-unknown',
-          reporterName: d.reporter_name || d.reporterName || 'Resident',
-          reporterPrecinct: d.reporter_precinct || d.reporterPrecinct || 'Elmina',
-          incidentType: d.incident_type || d.incidentType || 'other',
+          reporterId: d.reporter_id || 'user-unknown',
+          reporterName: d.is_anonymous ? 'Anonymous Neighbour' : (d.reporter?.full_name || d.reporter_name || 'Resident'),
+          reporterPrecinct: d.reporter?.township_precinct || d.reporter_precinct || 'Bandar Elmina',
+          incidentType: d.report_type || d.incident_type || 'other',
           title: d.title,
           description: d.description || '',
-          locationName: d.location_name || d.locationName || 'Bandar Elmina',
+          locationName: d.location_name || 'Bandar Elmina',
           latitude: Number(d.latitude) || 3.1802,
           longitude: Number(d.longitude) || 101.5165,
           severity: d.severity || 'medium',
           status: d.status || 'reported',
-          isVerified: !!d.is_verified || !!d.isVerified,
-          verifiedBy: d.verified_by || d.verifiedBy,
-          verifiedByName: d.verified_by_name || d.verifiedByName,
-          verifiedAt: d.verified_at || d.verifiedAt,
-          verificationNotes: d.verification_notes || d.verificationNotes,
-          imageUrl: d.image_url || d.imageUrl,
-          isAnonymous: !!d.is_anonymous || !!d.isAnonymous,
-          managementNotes: d.management_notes || d.managementNotes,
-          assignedTeam: d.assigned_team || d.assignedTeam,
-          resolvedAt: d.resolved_at || d.resolvedAt,
-          isArchived: !!d.is_archived || !!d.isArchived,
-          archivedAt: d.archived_at || d.archivedAt,
+          isVerified: d.status === 'under_review' || d.status === 'resolved' || d.status === 'dispatched' || !!d.is_verified,
+          verifiedBy: d.verified_by,
+          verifiedByName: d.verified_by_name,
+          verifiedAt: d.verified_at,
+          verificationNotes: d.verification_notes,
+          imageUrl: d.image_url,
+          isAnonymous: !!d.is_anonymous,
+          managementNotes: d.management_notes,
+          assignedTeam: d.assigned_team,
+          resolvedAt: d.resolved_at,
+          isArchived: !!d.is_archived,
+          archivedAt: d.archived_at,
           updates: d.updates || [],
-          createdAt: d.created_at || d.createdAt || new Date().toISOString(),
-          updatedAt: d.updated_at || d.updatedAt || new Date().toISOString(),
+          createdAt: d.created_at || new Date().toISOString(),
+          updatedAt: d.updated_at || d.created_at || new Date().toISOString(),
         }));
       }
     } catch {

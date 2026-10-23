@@ -41,6 +41,7 @@ import ImageUploadArea from '@/components/common/ImageUploadArea';
 import SuccessToast from '@/components/common/SuccessToast';
 import TimeAgo from '@/components/common/TimeAgo';
 import { useScrollHeader } from '@/lib/hooks/useScrollHeader';
+import { fromDatabaseUserId } from '@/lib/utils/idMapping';
 
 export default function ExchangeView() {
   const { 
@@ -49,8 +50,11 @@ export default function ExchangeView() {
     reserveExchangeItem, 
     completeExchangeItem,
     deleteExchangeItem,
+    getOrCreateConversation,
     startConversation,
+    navigateToItem,
     setActiveTab,
+    language,
     t, 
     currentUser,
     navigationTarget,
@@ -413,21 +417,59 @@ export default function ExchangeView() {
     }
   };
 
-  // Contact Owner via Secure Messages
+  // Contact Owner via Secure Messages with contextual editable draft
   const handleContactOwner = (item: CircularExchangeItem) => {
+    const targetAuthorId = fromDatabaseUserId(item.authorId);
+    if (item.authorId === currentUser.id || targetAuthorId === currentUser.id) {
+      setSuccessToast({
+        open: true,
+        heading: 'Notice',
+        body: 'You cannot send an inquiry for your own listing.',
+      });
+      return;
+    }
+
     if (item.status === 'available') {
       reserveExchangeItem(item.id);
     }
 
-    startConversation(
-      item.authorId,
+    const isFree = item.listingType === 'giveaway';
+    let draft = '';
+    if (language === 'bm' || (language as string) === 'ms-MY') {
+      draft = isFree
+        ? `Hai, saya berminat dengan barang pemberian percuma '${item.title}'. Adakah ia masih boleh diambil?`
+        : `Hai, saya berminat dengan barang anda '${item.title}'. Adakah ia masih ada?`;
+    } else {
+      draft = isFree
+        ? `Hi, I'm interested in your giveaway '${item.title}'. Is it still available for collection?`
+        : `Hi, I'm interested in your listing '${item.title}'. Is it still available?`;
+    }
+
+    const convId = getOrCreateConversation(
+      targetAuthorId,
       `Exchange Inquiry: ${item.title}`,
-      `Hello neighbor ${item.authorName}, I am interested in your listing "${item.title}" on the Elmina Community Hub. What time works best for porch collection in ${item.precinct}?`,
       'exchange'
     );
 
+    if (!convId) {
+      setSuccessToast({
+        open: true,
+        heading: 'Unable to Message',
+        body: 'Cannot open conversation with this listing owner.',
+      });
+      return;
+    }
+
     handleCloseDrawer(true);
-    setActiveTab('messages');
+    navigateToItem({
+      tab: 'messages',
+      conversationId: convId,
+      recipientId: targetAuthorId,
+      draftMessage: draft,
+      contextTitle: item.title,
+      contextType: 'exchange',
+      contextId: item.id,
+    });
   };
 
   // Helper Labels & Icons

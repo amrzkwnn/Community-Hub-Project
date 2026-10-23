@@ -62,8 +62,17 @@ export default function MessagesView() {
     blockPropertySender,
     sendPropertyMessageRequest,
     currentUser, 
+    navigationTarget,
+    clearNavigationTarget,
     t 
   } = useApp();
+
+  // Listing / Service Context state for inquiries
+  const [listingContext, setListingContext] = useState<{
+    title: string;
+    type?: string;
+    id?: string;
+  } | null>(null);
 
   // Modals state
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
@@ -92,29 +101,106 @@ export default function MessagesView() {
   );
 
   const [activeConversationId, setActiveConversationId] = useState<string>(
-    userConversations[0]?.id || ''
+    navigationTarget?.conversationId || ''
   );
 
-  // Invalidate conversation context and reset message composer when currentUser changes
-  useEffect(() => {
-    const userConvs = conversations.filter(
-      (c) => c.participantOneId === currentUser.id || c.participantTwoId === currentUser.id
-    );
-    setActiveConversationId(userConvs[0]?.id || '');
-    setIsDossierOpen(false);
-    setMessageInput('');
-    setAttachedFile(null);
-    setAttachmentPreview(null);
-    setAttachmentError(null);
-    setLightboxData(null);
-    setIsSearchModalOpen(false);
-    setIsKeyAuditModalOpen(false);
-    setIsBylawsModalOpen(false);
-  }, [currentUser.id, conversations]);
+  const prevUserIdRef = useRef(currentUser.id);
 
-  // Active conversation & messages
-  const activeConv = userConversations.find((c) => c.id === activeConversationId) || userConversations[0];
-  const activeMessages = messages.filter((m) => m.conversationId === activeConv?.id);
+  // Invalidate conversation context and reset message composer ONLY when currentUser changes
+  useEffect(() => {
+    if (prevUserIdRef.current !== currentUser.id) {
+      prevUserIdRef.current = currentUser.id;
+      setActiveConversationId('');
+      setMobileActiveThreadOpen(false);
+      setIsDossierOpen(false);
+      setMessageInput('');
+      setListingContext(null);
+      setAttachedFile(null);
+      setAttachmentPreview(null);
+      setAttachmentError(null);
+      setLightboxData(null);
+      setIsSearchModalOpen(false);
+      setIsKeyAuditModalOpen(false);
+      setIsBylawsModalOpen(false);
+    }
+  }, [currentUser.id]);
+
+  // Deep-link / Quick-Chat navigationTarget listener
+  useEffect(() => {
+    if (!navigationTarget || navigationTarget.tab !== 'messages') return;
+
+    let targetConvId = navigationTarget.conversationId;
+
+    if (!targetConvId && navigationTarget.recipientId) {
+      const match = conversations.find(
+        (c) =>
+          (c.participantOneId === currentUser.id && c.participantTwoId === navigationTarget.recipientId) ||
+          (c.participantTwoId === currentUser.id && c.participantOneId === navigationTarget.recipientId)
+      );
+      if (match) {
+        targetConvId = match.id;
+      }
+    }
+
+    if (targetConvId) {
+      setActiveConversationId(targetConvId);
+      setMobileActiveThreadOpen(true);
+    }
+
+    if (navigationTarget.draftMessage) {
+      setMessageInput(navigationTarget.draftMessage);
+    }
+
+    if (navigationTarget.contextTitle) {
+      setListingContext({
+        title: navigationTarget.contextTitle,
+        type: navigationTarget.contextType,
+        id: navigationTarget.contextId,
+      });
+    }
+
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+      }
+    }, 150);
+
+    clearNavigationTarget();
+  }, [navigationTarget, conversations, currentUser.id, clearNavigationTarget]);
+
+  // URL query hydration on initial mount
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const convId = params.get('conversationId');
+    const recipientId = params.get('recipientId');
+
+    if (convId) {
+      const exists = conversations.some((c) => c.id === convId);
+      if (exists) {
+        setActiveConversationId(convId);
+        setMobileActiveThreadOpen(true);
+      }
+    } else if (recipientId) {
+      const match = conversations.find(
+        (c) =>
+          (c.participantOneId === currentUser.id && c.participantTwoId === recipientId) ||
+          (c.participantTwoId === currentUser.id && c.participantOneId === recipientId)
+      );
+      if (match) {
+        setActiveConversationId(match.id);
+        setMobileActiveThreadOpen(true);
+      }
+    }
+  }, [conversations, currentUser.id]);
+
+  // Active conversation & messages: resolve specific conversation when activeConversationId is provided
+  const activeConv = activeConversationId
+    ? (userConversations.find((c) => c.id === activeConversationId) ||
+       conversations.find((c) => c.id === activeConversationId) ||
+       null)
+    : (userConversations[0] || null);
+  const activeMessages = activeConv ? messages.filter((m) => m.conversationId === activeConv.id) : [];
 
   // Messaging composer state
   const [messageInput, setMessageInput] = useState('');
@@ -286,6 +372,7 @@ export default function MessagesView() {
     );
 
     setMessageInput('');
+    setListingContext(null);
     handleRemoveAttachment();
     setIsUploadingAttachment(false);
     setTimeout(() => scrollToBottom('smooth'), 50);
@@ -948,6 +1035,37 @@ export default function MessagesView() {
                     Pet &amp; Noise Advisory
                   </button>
                 </div>
+
+                {/* Contextual Listing / Service Preview Banner */}
+                {listingContext && (
+                  <div className="p-2.5 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60 rounded-2xl flex items-center justify-between gap-3 animate-in fade-in duration-150">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-xl bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center shrink-0">
+                        {listingContext.type === 'service' ? (
+                          <Wrench className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                        ) : (
+                          <ArrowLeftRight className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 dark:text-amber-300">
+                          {listingContext.type === 'service' ? 'Local Services Inquiry' : 'Exchange Listing Inquiry'}
+                        </span>
+                        <p className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">
+                          {listingContext.title}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setListingContext(null)}
+                      className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg cursor-pointer"
+                      title="Dismiss context"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
 
                 {/* Attachment Preview Card */}
                 {attachmentPreview && (
@@ -1790,6 +1908,34 @@ export default function MessagesView() {
                       Logged to Ops
                     </button>
                   </div>
+
+                  {/* Contextual Listing / Service Preview Banner */}
+                  {listingContext && (
+                    <div className="p-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60 rounded-xl flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        {listingContext.type === 'service' ? (
+                          <Wrench className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                        ) : (
+                          <ArrowLeftRight className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                        )}
+                        <div className="min-w-0">
+                          <span className="text-[9px] font-bold uppercase tracking-wider text-amber-800 dark:text-amber-300 block">
+                            {listingContext.type === 'service' ? 'Service Inquiry' : 'Exchange Inquiry'}
+                          </span>
+                          <span className="text-[11px] font-bold text-slate-800 dark:text-slate-100 truncate block">
+                            {listingContext.title}
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setListingContext(null)}
+                        className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
 
                   {/* Attachment Preview if any */}
                   {attachmentPreview && (

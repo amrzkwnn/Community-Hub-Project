@@ -26,6 +26,7 @@ export default function Header() {
   const { 
     currentUser, 
     supabaseUser,
+    isDemoMode,
     availableProfiles, 
     switchProfile, 
     signOut,
@@ -282,6 +283,13 @@ export default function Header() {
 
               <NotificationCenter />
 
+              {isDemoMode && (
+                <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800 text-[10px] font-bold shrink-0">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                  Demo Mode
+                </span>
+              )}
+
               <div className="relative z-50">
                 <button
                   type="button"
@@ -435,34 +443,20 @@ export default function Header() {
                 })}
               </div>
 
-              {/* Authentication Action at bottom of Profile Dropdown (Requirement 4) */}
+              {/* Authentication Action at bottom of Profile Dropdown (Requirement Part 13) */}
               <hr className="my-2 border-slate-100 dark:border-slate-800" />
 
-              {supabaseUser ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    signOut();
-                    setRoleMenuOpen(false);
-                  }}
-                  className="w-full flex items-center justify-center gap-2 p-2 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
-                >
-                  <LogOut className="w-4 h-4" />
-                  <span>{t('signOut') || 'Sign Out'}</span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsAuthModalOpen(true);
-                    setRoleMenuOpen(false);
-                  }}
-                  className="w-full flex items-center justify-center gap-2 p-2.5 rounded-xl text-xs font-semibold text-white bg-[#9E1315] hover:bg-[#841012] shadow-xs hover:shadow transition-all cursor-pointer"
-                >
-                  <LogIn className="w-4 h-4" />
-                  <span>{t('signIn') || 'Sign In'}</span>
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => {
+                  signOut();
+                  setRoleMenuOpen(false);
+                }}
+                className="w-full flex items-center justify-center gap-2 p-2.5 rounded-xl text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-rose-200/60 dark:border-rose-900/40 transition-colors cursor-pointer"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>Log Out</span>
+              </button>
             </div>
           </>
         )}

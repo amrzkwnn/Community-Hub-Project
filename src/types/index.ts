@@ -19,6 +19,7 @@ export interface UserProfile {
   avatarUrl?: string;
   status?: 'active' | 'suspended';
   restrictionReason?: string;
+  blockedUserIds?: string[];
   createdAt: string;
 }
 
@@ -450,6 +451,12 @@ export interface NavigationTarget {
   parentId?: string;
   itemType?: 'post' | 'comment' | 'incident' | 'exchange' | 'service';
   action?: 'report_incident';
+  conversationId?: string;
+  recipientId?: string;
+  draftMessage?: string;
+  contextTitle?: string;
+  contextType?: 'exchange' | 'service' | 'request' | 'general';
+  contextId?: string;
   prefill?: {
     category?: IncidentType;
     title?: string;

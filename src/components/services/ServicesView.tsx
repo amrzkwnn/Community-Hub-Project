@@ -25,14 +25,18 @@ import {
 import ImageUploadArea from '@/components/common/ImageUploadArea';
 import SuccessToast from '@/components/common/SuccessToast';
 import { useScrollHeader } from '@/lib/hooks/useScrollHeader';
+import { fromDatabaseUserId } from '@/lib/utils/idMapping';
 
 export default function ServicesView() {
   const { 
     services, 
     createService, 
     deleteService, 
+    getOrCreateConversation,
     startConversation, 
+    navigateToItem,
     setActiveTab, 
+    language,
     currentUser,
     navigationTarget,
     clearNavigationTarget
@@ -365,38 +369,104 @@ export default function ServicesView() {
     }
   };
 
-  // Handlers for Contacting Provider / Offering Help
+  // Handlers for Contacting Provider / Offering Help with contextual editable draft
   const handleOpenContact = (serv: LocalService) => {
-    setContactService(serv);
-    if (serv.type === 'offering') {
-      setContactMessage(`Hello ${serv.authorName}, I am interested in your listing "${serv.title}" on the Elmina Community Hub. Could you share more details?`);
-    } else {
-      setContactMessage(`Hi ${serv.authorName}! I saw your request "${serv.title}" and would be happy to lend a hand. What time works best for you?`);
+    const targetAuthorId = fromDatabaseUserId(serv.authorId);
+    if (serv.authorId === currentUser.id || targetAuthorId === currentUser.id) {
+      setSuccessToast({
+        open: true,
+        heading: 'Notice',
+        body: 'You cannot message yourself for your own listing.',
+      });
+      return;
     }
+
+    let draft = '';
+    const isBM = language === 'bm' || (language as string) === 'ms-MY';
+    if (serv.type === 'offering') {
+      draft = isBM
+        ? `Hai, saya melihat perkhidmatan ${serv.title} anda di NADI Community Hub. Bolehkah anda kongsikan butiran lanjut mengenai ketersediaan?`
+        : `Hi, I saw your ${serv.title} service on NADI Community Hub. Could you share more details about availability?`;
+    } else {
+      draft = isBM
+        ? `Hai, saya melihat permintaan bantuan anda untuk '${serv.title}'. Saya berminat untuk membantu. Bolehkah anda kongsikan butiran lanjut?`
+        : `Hi, I saw your request for help with '${serv.title}'. I'm interested in helping. Could you share more details?`;
+    }
+
+    const convId = getOrCreateConversation(
+      targetAuthorId,
+      serv.type === 'offering' ? `Service Inquiry: ${serv.title}` : `Mutual Aid Offer: ${serv.title}`,
+      'service'
+    );
+
+    if (!convId) {
+      setSuccessToast({
+        open: true,
+        heading: 'Unable to Message',
+        body: 'Cannot open conversation with this resident.',
+      });
+      return;
+    }
+
+    if (detailService) setDetailService(null);
+    if (contactService) setContactService(null);
+
+    navigateToItem({
+      tab: 'messages',
+      conversationId: convId,
+      recipientId: targetAuthorId,
+      draftMessage: draft,
+      contextTitle: serv.title,
+      contextType: serv.type === 'offering' ? 'service' : 'request',
+      contextId: serv.id,
+    });
   };
 
   const handleSendContactMessage = (e: React.FormEvent) => {
     e.preventDefault();
     if (!contactService) return;
 
-    const subject = contactService.type === 'offering'
-      ? `Local Service Inquiry: ${contactService.title}`
-      : `Mutual Aid Offer: ${contactService.title}`;
+    const targetAuthorId = fromDatabaseUserId(contactService.authorId);
+    if (contactService.authorId === currentUser.id || targetAuthorId === currentUser.id) {
+      setSuccessToast({
+        open: true,
+        heading: 'Notice',
+        body: 'You cannot message yourself for your own listing.',
+      });
+      return;
+    }
 
     const bodyWithPhone = shareWhatsapp && currentUser.phone
       ? `${contactMessage.trim()}\n\n[WhatsApp Contact Shared]: ${currentUser.phone}`
       : contactMessage.trim();
 
-    startConversation(
-      contactService.authorId,
-      subject,
-      bodyWithPhone,
+    const convId = getOrCreateConversation(
+      targetAuthorId,
+      contactService.type === 'offering' ? `Service Inquiry: ${contactService.title}` : `Mutual Aid Offer: ${contactService.title}`,
       'service'
     );
 
+    if (!convId) {
+      setSuccessToast({
+        open: true,
+        heading: 'Unable to Message',
+        body: 'Cannot open conversation with this resident.',
+      });
+      return;
+    }
+
     setContactService(null);
     setDetailService(null);
-    setActiveTab('messages');
+
+    navigateToItem({
+      tab: 'messages',
+      conversationId: convId,
+      recipientId: targetAuthorId,
+      draftMessage: bodyWithPhone,
+      contextTitle: contactService.title,
+      contextType: contactService.type === 'offering' ? 'service' : 'request',
+      contextId: contactService.id,
+    });
   };
 
   // Category Icon helper
