@@ -1,6 +1,13 @@
 import fs from 'fs';
 import path from 'path';
-import { createClient } from '@/lib/supabase/server';
+async function getSupabaseServerClient() {
+  try {
+    const { createClient } = await import('@/lib/supabase/server');
+    return await createClient();
+  } catch {
+    return null;
+  }
+}
 
 export interface ContactInquiry {
   id: string;
@@ -214,20 +221,22 @@ export async function createContactInquiry(input: CreateInquiryInput): Promise<C
 
   // 2. Best-effort durable sync to Supabase contact_inquiries table if present
   try {
-    const supabase = await createClient();
-    await supabase.from('contact_inquiries').insert({
-      id: inquiry.id,
-      reference_id: inquiry.referenceId,
-      full_name: inquiry.fullName,
-      email: inquiry.email,
-      phone: inquiry.phone || null,
-      category: inquiry.category,
-      message: inquiry.message,
-      status: inquiry.status,
-      user_id: inquiry.userId || null,
-      created_at: inquiry.createdAt,
-      updated_at: inquiry.updatedAt,
-    });
+    const supabase = await getSupabaseServerClient();
+    if (supabase) {
+      await supabase.from('contact_inquiries').insert({
+        id: inquiry.id,
+        reference_id: inquiry.referenceId,
+        full_name: inquiry.fullName,
+        email: inquiry.email,
+        phone: inquiry.phone || null,
+        category: inquiry.category,
+        message: inquiry.message,
+        status: inquiry.status,
+        user_id: inquiry.userId || null,
+        created_at: inquiry.createdAt,
+        updated_at: inquiry.updatedAt,
+      });
+    }
   } catch {
     // If Supabase table is not yet migrated, durable local record remains safe
   }
@@ -238,11 +247,12 @@ export async function createContactInquiry(input: CreateInquiryInput): Promise<C
 export async function listContactInquiries(): Promise<ContactInquiry[]> {
   // Check Supabase first
   try {
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from('contact_inquiries')
-      .select('*')
-      .order('created_at', { ascending: false });
+    const supabase = await getSupabaseServerClient();
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('contact_inquiries')
+        .select('*')
+        .order('created_at', { ascending: false });
 
     if (!error && data && data.length > 0) {
       return data.map((row: {
@@ -273,6 +283,7 @@ export async function listContactInquiries(): Promise<ContactInquiry[]> {
         adminNotes: row.admin_notes || undefined,
       }));
     }
+    }
   } catch {
     // Fall back to durable local storage
   }
@@ -300,15 +311,17 @@ export async function updateInquiryStatus(
 
   // Attempt remote sync if available
   try {
-    const supabase = await createClient();
-    await supabase
-      .from('contact_inquiries')
-      .update({
-        status,
-        admin_notes: adminNotes,
-        updated_at: stored[index].updatedAt,
-      })
-      .or(`reference_id.eq.${referenceId},id.eq.${referenceId}`);
+    const supabase = await getSupabaseServerClient();
+    if (supabase) {
+      await supabase
+        .from('contact_inquiries')
+        .update({
+          status,
+          admin_notes: adminNotes,
+          updated_at: stored[index].updatedAt,
+        })
+        .or(`reference_id.eq.${referenceId},id.eq.${referenceId}`);
+    }
   } catch {
     // Local storage updated
   }

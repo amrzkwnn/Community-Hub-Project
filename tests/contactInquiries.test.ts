@@ -7,7 +7,7 @@ import {
   createContactInquiry,
   listContactInquiries,
   updateInquiryStatus,
-} from '../src/lib/server/contactInquiries';
+} from '../src/lib/server/contactInquiries.ts';
 
 test('Contact Inquiries: generates valid reference ID format', () => {
   const refId = generateReferenceId();
