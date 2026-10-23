@@ -2745,8 +2745,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       });
       if (res.ok) {
         const json = await res.json();
-        if (json?.success && Array.isArray(json?.data)) {
-          remoteMatches = json.data;
+        if (json?.success) {
+          const list = Array.isArray(json?.data?.results)
+            ? json.data.results
+            : Array.isArray(json?.data)
+              ? json.data
+              : [];
+          if (list.length > 0) {
+            remoteMatches = list;
+          }
         }
       }
     } catch (e) {
