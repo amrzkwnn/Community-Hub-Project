@@ -186,6 +186,7 @@ export default function WelcomePage() {
 
           <nav className={`nkNav ${isNavOpen ? 'isOpen' : ''}`} aria-label="Main navigation" id="nkNav">
             <Link href="#features" onClick={closeNav}>Features</Link>
+            <Link href="#platform" onClick={closeNav}>Platform</Link>
             <Link href="#how-it-works" onClick={closeNav}>How it works</Link>
             <Link href="#meet-nadi" onClick={closeNav}>Meet Nadi</Link>
             <Link href="#about" onClick={closeNav}>About</Link>
@@ -379,53 +380,156 @@ export default function WelcomePage() {
           </div>
         </section>
 
-        {/* Section 05: How It Works */}
-        <section className="nkSection nkSteps" id="how-it-works" aria-labelledby="nkStepsTitle">
-          <div className="nkWrap">
+        {/* Section: One Platform. Two Connected Experiences */}
+        <section className="nkSection nkConnectedSection" id="platform" aria-labelledby="nkConnectedTitle">
+          <div className="nkWrapWide">
+            <div className="nkSectionIntro nkReveal">
+              <div>
+                <span className="nkLabel">Unified Township Network</span>
+                <h2 className="nkSectionTitle" id="nkConnectedTitle">
+                  One Platform.<br />Two Connected Experiences.
+                </h2>
+              </div>
+              <p className="nkIntroText">
+                Connecting residents with the dedicated teams who keep their neighbourhood running. Seamless civic reporting meets accountable operational coordination.
+              </p>
+            </div>
+
+            <div className="nkConnectedGrid">
+              {/* Card 1: For Residents */}
+              <div className="nkConnectedCard resident nkReveal">
+                <div className="nkConnectedCardMeta">
+                  <div className="nkConnectedBadge resident">For Residents</div>
+                  <h3 className="nkConnectedCardTitle">Stay informed, report issues, and connect locally</h3>
+                  <p className="nkConnectedCardDesc">
+                    A dedicated community space for Elmina residents to follow civic updates, report municipal hazards with GPS accuracy, and connect with verified neighbours.
+                  </p>
+                  <div className="nkConnectedAction">
+                    <Link href="/?tab=home" className="nkBtn nkBtnOutline nkBtnSmall">
+                      Explore Resident Hub <svg width="15" height="15"><use href="#nkArrow" /></svg>
+                    </Link>
+                  </div>
+                </div>
+                <div className="nkConnectedCardVisual resident">
+                  <Image
+                    src="/nadikomuniti/showcase/nadikomuniti_community_app_showcase.webp"
+                    alt="NadiKomuniti Resident mobile application preview on iPhone"
+                    width={630}
+                    height={994}
+                    className="nkShowcasePhone"
+                  />
+                </div>
+              </div>
+
+              {/* Card 2: For Township Management */}
+              <div className="nkConnectedCard management nkReveal">
+                <div className="nkConnectedCardMeta">
+                  <div className="nkConnectedBadge management">For Management</div>
+                  <h3 className="nkConnectedCardTitle">Triage reports, coordinate crews, and keep Elmina safe</h3>
+                  <p className="nkConnectedCardDesc">
+                    Professional console for JMB, Auxiliary Police, and township teams to review incoming reports, dispatch contractor crews, and publish verified updates.
+                  </p>
+                  <div className="nkConnectedAction">
+                    <Link href="/?tab=home" className="nkBtn nkBtnPrimary nkBtnSmall">
+                      Explore Management Console <svg width="15" height="15"><use href="#nkArrow" /></svg>
+                    </Link>
+                  </div>
+                </div>
+                <div className="nkConnectedCardVisual management">
+                  <Image
+                    src="/nadikomuniti/showcase/nadikomuniti_administration_console_laptop_mockup.webp"
+                    alt="NadiKomuniti Community Administration & Security Console on MacBook"
+                    width={1024}
+                    height={728}
+                    className="nkShowcaseLaptop"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Section 05: How It Works — Redesigned 3-Step Experience */}
+        <section className="nkSection nkStepsSection" id="how-it-works" aria-labelledby="nkStepsTitle">
+          <div className="nkWrapWide">
             <div className="nkCenter nkReveal">
               <span className="nkLabel">How it works</span>
               <h2 id="nkStepsTitle">From a report to real follow-up.</h2>
-              <p>Clear steps help residents stay informed while township management handles each report.</p>
+              <p>Clear, accountable steps keep residents informed while township teams handle each report.</p>
             </div>
-            <div className="nkStepGrid">
-              <div className="nkStep nkReveal">
-                <div className="nkStepIconBox">
-                  <img
-                    className="nkStepIcon"
-                    src="/nadikomuniti/04_how_it_works_icons/step-01-report-camera.webp"
-                    alt="Step 1 Camera Icon"
-                    width={56}
-                    height={56}
+
+            <div className="nkStepCardsGrid">
+              {/* Step 01 */}
+              <div className="nkStepCard nkReveal">
+                <div className="nkStepVisualWrapper peach">
+                  <span className="nkStepNumberBadge">01</span>
+                  <Image
+                    src="/nadikomuniti/how_it_works/streetlight_reporting_app_mockup.webp"
+                    alt="Step 01 — Spot an issue in your neighbourhood and submit a report with details and location"
+                    width={924}
+                    height={715}
+                    className="nkStepCardImage"
                   />
                 </div>
-                <h3>1. Report</h3>
-                <p>Add a photo, describe the problem and mark its location on the township map.</p>
+                <div className="nkStepCardContent">
+                  <span className="nkStepSubBadge">Step 01</span>
+                  <h3>Report an Issue</h3>
+                  <p>
+                    Spot an issue in your neighbourhood? Submit a report with details and location.
+                  </p>
+                </div>
+                <div className="nkStepArrowConnector" aria-hidden="true">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M5 12h14M13 5l7 7-7 7" />
+                  </svg>
+                </div>
               </div>
-              <div className="nkStep nkReveal">
-                <div className="nkStepIconBox">
-                  <img
-                    className="nkStepIcon"
-                    src="/nadikomuniti/04_how_it_works_icons/step-02-management-review.webp"
-                    alt="Step 2 Management Review Icon"
-                    width={56}
-                    height={56}
+
+              {/* Step 02 */}
+              <div className="nkStepCard nkReveal">
+                <div className="nkStepVisualWrapper sky">
+                  <span className="nkStepNumberBadge">02</span>
+                  <Image
+                    src="/nadikomuniti/how_it_works/municipal_incident_dashboard_illustration.webp"
+                    alt="Step 02 — Township teams review incoming reports and coordinate follow-up actions"
+                    width={1010}
+                    height={748}
+                    className="nkStepCardImage"
                   />
                 </div>
-                <h3>2. Management reviews</h3>
-                <p>The township team verifies the report, prioritizes urgency, and dispatches field crews.</p>
+                <div className="nkStepCardContent">
+                  <span className="nkStepSubBadge">Step 02</span>
+                  <h3>Management Review</h3>
+                  <p>
+                    Township teams review incoming reports and coordinate follow-up actions.
+                  </p>
+                </div>
+                <div className="nkStepArrowConnector" aria-hidden="true">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M5 12h14M13 5l7 7-7 7" />
+                  </svg>
+                </div>
               </div>
-              <div className="nkStep nkReveal">
-                <div className="nkStepIconBox">
-                  <img
-                    className="nkStepIcon"
-                    src="/nadikomuniti/04_how_it_works_icons/step-03-status-updated.webp"
-                    alt="Step 3 Status Updated Icon"
-                    width={56}
-                    height={56}
+
+              {/* Step 03 */}
+              <div className="nkStepCard nkReveal">
+                <div className="nkStepVisualWrapper mint">
+                  <span className="nkStepNumberBadge">03</span>
+                  <Image
+                    src="/nadikomuniti/how_it_works/streetlight_repair_confirmed.webp"
+                    alt="Step 03 — Follow your report progress and stay informed as updates become available"
+                    width={1024}
+                    height={680}
+                    className="nkStepCardImage"
                   />
                 </div>
-                <h3>3. Follow the status</h3>
-                <p>See live progress updates, field notes, and know exactly when the issue is resolved.</p>
+                <div className="nkStepCardContent">
+                  <span className="nkStepSubBadge">Step 03</span>
+                  <h3>Get Status Updates</h3>
+                  <p>
+                    Follow your report&apos;s progress and stay informed as updates become available.
+                  </p>
+                </div>
               </div>
             </div>
           </div>
@@ -502,6 +606,7 @@ export default function WelcomePage() {
             </Link>
             <div className="nkFooterLinks">
               <Link href="#features">Features</Link>
+              <Link href="#platform">Platform</Link>
               <Link href="#how-it-works">How it works</Link>
               <Link href="#meet-nadi">Meet Nadi</Link>
               <Link href="/?tab=home">Open App</Link>

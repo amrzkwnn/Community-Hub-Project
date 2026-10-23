@@ -71,6 +71,11 @@
   margin-inline: auto;
 }
 
+.nkLanding .nkWrapWide {
+  width: min(1240px, calc(100% - 48px));
+  margin-inline: auto;
+}
+
 /* ==========================================================================
    Header & Sticky Navigation
    ========================================================================== */
@@ -602,70 +607,283 @@
   margin: 0;
 }
 
-.nkLanding .nkStepGrid {
+/* ==========================================================================
+   Section: One Platform. Two Connected Experiences.
+   ========================================================================== */
+.nkLanding .nkConnectedSection {
+  background: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 50%, #FFFFFF 100%);
+  border-top: 1px solid var(--line-light);
+  border-bottom: 1px solid var(--line-light);
+}
+
+.nkLanding .nkConnectedGrid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 40px;
-  margin-top: 64px;
-  position: relative;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 36px;
+  align-items: stretch;
 }
 
-.nkLanding .nkStepGrid::before {
-  content: "";
-  position: absolute;
-  height: 2px;
-  background: repeating-linear-gradient(90deg, #F87171 0 12px, transparent 12px 24px);
-  top: 48px;
-  left: 18%;
-  right: 18%;
-  z-index: 0;
-}
-
-.nkLanding .nkStep {
-  position: relative;
-  text-align: center;
-  z-index: 1;
-  padding: 0 16px;
-}
-
-.nkLanding .nkStepIconBox {
-  width: 96px;
-  height: 96px;
-  border-radius: 26px;
-  margin: 0 auto 24px;
+.nkLanding .nkConnectedCard {
   background: #FFFFFF;
-  box-shadow: 0 12px 28px rgba(18, 33, 58, 0.08);
-  display: grid;
-  place-items: center;
+  border-radius: 28px;
+  border: 1px solid var(--line);
+  box-shadow: 0 10px 30px rgba(18, 33, 58, 0.05);
+  padding: 36px 36px 32px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: transform 0.3s var(--ease-out), box-shadow 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.nkLanding .nkConnectedCard:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 18px 45px rgba(18, 33, 58, 0.09);
+}
+
+.nkLanding .nkConnectedCard.resident {
+  background: linear-gradient(180deg, #FFFFFF 0%, #FFF9F6 100%);
+  border-color: #FED7AA;
+}
+
+.nkLanding .nkConnectedCard.management {
+  background: linear-gradient(180deg, #FFFFFF 0%, #F4F7FB 100%);
+  border-color: #E2E8F0;
+}
+
+.nkLanding .nkConnectedBadge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 5px 12px;
+  border-radius: 9999px;
+  margin-bottom: 14px;
+}
+
+.nkLanding .nkConnectedBadge.resident {
+  background: #FEE2E2;
+  color: #BA1B1D;
+  border: 1px solid #FECACA;
+}
+
+.nkLanding .nkConnectedBadge.management {
+  background: #E2E8F0;
+  color: #0F172A;
+  border: 1px solid #CBD5E1;
+}
+
+.nkLanding .nkConnectedCardMeta {
+  display: flex;
+  flex-direction: column;
+}
+
+.nkLanding .nkConnectedCardTitle {
+  font-size: clamp(21px, 1.8vw, 25px);
+  font-weight: 850;
+  line-height: 1.25;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+  margin: 0 0 10px;
+}
+
+.nkLanding .nkConnectedCardDesc {
+  font-size: 14.5px;
+  color: var(--ink-secondary);
+  line-height: 1.6;
+  margin: 0 0 20px;
+}
+
+.nkLanding .nkConnectedAction {
+  margin-bottom: 24px;
+}
+
+/* Device Presentation Stages */
+.nkLanding .nkConnectedCardVisual {
+  height: 380px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(18, 33, 58, 0.05);
+  box-shadow: 0 4px 16px rgba(18, 33, 58, 0.04) inset;
+  overflow: hidden;
   padding: 16px;
-  border: 1px solid #F1F5F9;
-  transition: transform 0.25s var(--ease-spring), box-shadow 0.25s ease;
+  margin-top: auto;
 }
 
-.nkLanding .nkStep:hover .nkStepIconBox {
-  transform: translateY(-4px) scale(1.05);
-  box-shadow: 0 18px 36px rgba(18, 33, 58, 0.12);
+.nkLanding .nkShowcasePhone {
+  height: 96%;
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 16px 32px rgba(18, 33, 58, 0.12));
+  transition: transform 0.35s var(--ease-out);
 }
 
-.nkLanding .nkStepIcon {
+.nkLanding .nkConnectedCard.resident:hover .nkShowcasePhone {
+  transform: scale(1.03);
+}
+
+.nkLanding .nkShowcaseLaptop {
+  width: 96%;
+  max-width: 520px;
+  height: auto;
+  max-height: 94%;
+  object-fit: contain;
+  filter: drop-shadow(0 16px 32px rgba(18, 33, 58, 0.10));
+  transition: transform 0.35s var(--ease-out);
+}
+
+.nkLanding .nkConnectedCard.management:hover .nkShowcaseLaptop {
+  transform: scale(1.03);
+}
+
+/* ==========================================================================
+   Section: How It Works — Redesigned 3-Step Experience
+   ========================================================================== */
+.nkLanding .nkStepsSection {
+  background: #FFFFFF;
+}
+
+.nkLanding .nkStepCardsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 32px;
+  margin-top: 56px;
+  position: relative;
+}
+
+.nkLanding .nkStepCard {
+  background: #FFFFFF;
+  border-radius: 24px;
+  border: 1px solid var(--line-light);
+  box-shadow: 0 8px 24px rgba(18, 33, 58, 0.05);
+  overflow: visible;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  transition: transform 0.3s var(--ease-out), box-shadow 0.3s ease, border-color 0.3s ease;
+}
+
+.nkLanding .nkStepCard:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 20px 45px rgba(18, 33, 58, 0.09);
+  border-color: #CBD5E1;
+}
+
+.nkLanding .nkStepVisualWrapper {
+  width: 100%;
+  height: 260px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  border-radius: 23px 23px 0 0;
+  border-bottom: 1px solid var(--line-light);
+}
+
+.nkLanding .nkStepVisualWrapper.peach {
+  background: linear-gradient(150deg, #FFF7ED 0%, #FFEDD5 100%);
+}
+
+.nkLanding .nkStepVisualWrapper.sky {
+  background: linear-gradient(150deg, #F0F9FF 0%, #E0F2FE 100%);
+}
+
+.nkLanding .nkStepVisualWrapper.mint {
+  background: linear-gradient(150deg, #ECFDF5 0%, #D1FAE5 100%);
+}
+
+.nkLanding .nkStepNumberBadge {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 2;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  box-shadow: 0 2px 8px rgba(18, 33, 58, 0.06);
+  font-size: 13px;
+  font-weight: 850;
+  color: #BA1B1D;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nkLanding .nkStepCardImage {
   width: 100%;
   height: 100%;
   object-fit: contain;
+  border-radius: 14px;
+  filter: drop-shadow(0 6px 16px rgba(18, 33, 58, 0.07));
+  transition: transform 0.35s var(--ease-out);
 }
 
-.nkLanding .nkStep h3 {
-  font-size: 18px;
-  letter-spacing: -0.02em;
-  margin: 0 0 10px;
+.nkLanding .nkStepCard:hover .nkStepCardImage {
+  transform: scale(1.03);
+}
+
+.nkLanding .nkStepCardContent {
+  padding: 24px 24px 28px;
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+}
+
+.nkLanding .nkStepSubBadge {
+  font-size: 11px;
   font-weight: 800;
-  color: var(--ink);
+  color: #BA1B1D;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 8px;
 }
 
-.nkLanding .nkStep p {
-  font-size: 14px;
+.nkLanding .nkStepCardContent h3 {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  color: var(--ink);
+  margin: 0 0 10px;
+  line-height: 1.25;
+}
+
+.nkLanding .nkStepCardContent p {
+  font-size: 14.5px;
   color: var(--ink-secondary);
   line-height: 1.65;
   margin: 0;
+}
+
+.nkLanding .nkStepArrowConnector {
+  position: absolute;
+  right: -20px;
+  top: 130px;
+  z-index: 5;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 4px 12px rgba(18, 33, 58, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748B;
+  pointer-events: none;
 }
 
 /* ==========================================================================
@@ -1082,13 +1300,20 @@
     order: 1 !important;
     min-height: 300px;
   }
-  .nkLanding .nkStepGrid {
+  .nkLanding .nkConnectedGrid {
     grid-template-columns: 1fr;
-    gap: 36px;
-    margin-top: 48px;
+    gap: 32px;
   }
-  .nkLanding .nkStepGrid::before {
-    display: none;
+  .nkLanding .nkConnectedCardVisual {
+    height: 350px;
+  }
+  .nkLanding .nkStepCardsGrid {
+    grid-template-columns: 1fr;
+    gap: 28px;
+    margin-top: 40px;
+  }
+  .nkLanding .nkStepArrowConnector {
+    display: none !important;
   }
   .nkLanding .nkNadiGrid {
     grid-template-columns: 1fr;
@@ -1206,6 +1431,23 @@
   .nkLanding .nkVisual {
     min-height: 240px;
     padding: 16px;
+  }
+  .nkLanding .nkConnectedCard {
+    padding: 24px 20px 20px;
+  }
+  .nkLanding .nkConnectedCardVisual {
+    height: 300px;
+    padding: 12px;
+  }
+  .nkLanding .nkStepVisualWrapper {
+    height: 210px;
+    padding: 10px;
+  }
+  .nkLanding .nkStepCardContent {
+    padding: 20px 18px 22px;
+  }
+  .nkLanding .nkStepCardContent h3 {
+    font-size: 18px;
   }
   .nkLanding .nkCtaCard {
     padding: 44px 18px;
