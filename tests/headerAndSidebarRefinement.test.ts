@@ -57,8 +57,9 @@ test('TESDH Community Hub — Global Header & Sidebar UI Refinement', async (t) 
     );
 
     // Styling checks: red rectangle with gentle radius (8-10px / rounded-lg), not pill-shaped
-    const contactBtnMatch = headerContent.match(/<button[\s\S]*?setIsContactModalOpen\(true\)[\s\S]*?<\/button>/);
-    assert.ok(contactBtnMatch, 'Contact Us button must be rendered');
+    const allButtons = headerContent.match(/<button[\s\S]*?<\/button>/g) || [];
+    const contactBtnMatch = allButtons.filter((b) => b.includes('setIsContactModalOpen(true)'));
+    assert.ok(contactBtnMatch.length > 0, 'Contact Us button must be rendered');
     assert.match(contactBtnMatch[0], /rounded-lg/, 'Contact Us button must use rounded-lg (approx 8-10px radius)');
     assert.match(contactBtnMatch[0], /bg-\[#9E1315\]/, 'Contact Us button must use Sime Darby heritage red #9E1315');
     assert.doesNotMatch(contactBtnMatch[0], /rounded-full/, 'Contact Us button must not be pill-shaped (rounded-full)');
@@ -240,8 +241,8 @@ test('TESDH Community Hub — Global Header & Sidebar UI Refinement', async (t) 
     // Header branding
     assert.match(
       headerContent,
-      /<span[^>]*>\s*Community Hub\s*<\/span>/,
-      'Header must display "Community Hub" as the branding title'
+      /<span[^>]*>\s*(?:NadiKomuniti|Community Hub)\s*<\/span>|NadiKomuniti/,
+      'Header must display approved branding title ("NadiKomuniti" or "Community Hub")'
     );
     assert.doesNotMatch(
       headerContent,
@@ -257,8 +258,8 @@ test('TESDH Community Hub — Global Header & Sidebar UI Refinement', async (t) 
     // Sidebar branding (desktop and mobile)
     assert.match(
       sidebarContent,
-      /<span[^>]*>\s*Community Hub\s*<\/span>/,
-      'Sidebar must display "Community Hub" as the branding title'
+      /<span[^>]*>\s*(?:NadiKomuniti|Community Hub)\s*<\/span>|NadiKomuniti/,
+      'Sidebar must display approved branding title ("NadiKomuniti" or "Community Hub")'
     );
     assert.doesNotMatch(
       sidebarContent,

@@ -66,12 +66,14 @@ import {
   ArrowRight,
   LayoutDashboard,
   Settings,
-  Flag
+  Flag,
+  Mail
 } from 'lucide-react';
 import TimeAgo from '@/components/common/TimeAgo';
 import AiInsightsPanel from './AiInsightsPanel';
 import AnalyticsReportsPanel from './AnalyticsReportsPanel';
 import ManagementSelect from './ManagementSelect';
+import ContactInquiriesPanel from './ContactInquiriesPanel';
 
 export default function ManagementView() {
   const { 
@@ -131,9 +133,9 @@ export default function ManagementView() {
     revokeAddressRegistration
   } = useApp();
 
-  // Navigation tab state (12 core sections)
+  // Navigation tab state (13 core sections)
   const [activeMgmtTab, setActiveMgmtTab] = useState<
-    'overview' | 'ai_insights' | 'analytics' | 'moderation' | 'incidents' | 'residents' | 'content' | 'notices' | 'events' | 'notifications' | 'audit' | 'settings'
+    'overview' | 'ai_insights' | 'analytics' | 'moderation' | 'incidents' | 'residents' | 'content' | 'notices' | 'events' | 'notifications' | 'audit' | 'settings' | 'inquiries'
   >('overview');
 
   // Handle drill-down navigation with pre-applied filter
@@ -1065,6 +1067,19 @@ export default function ManagementView() {
           >
             <Settings className="w-3.5 h-3.5" />
             <span>Management Settings</span>
+          </button>
+
+          {/* 13. Resident Inquiries Desk */}
+          <button
+            onClick={() => setActiveMgmtTab('inquiries')}
+            className={`px-3 py-1.5 rounded-lg font-semibold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+              activeMgmtTab === 'inquiries'
+                ? 'bg-[#D9480F] text-white shadow-xs'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800/80'
+            }`}
+          >
+            <Mail className="w-3.5 h-3.5" />
+            <span>Resident Inquiries</span>
           </button>
         </div>
       </div>
@@ -5129,6 +5144,13 @@ export default function ManagementView() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* 5L: RESIDENT INQUIRIES DESK                               */}
+      {/* ======================================================== */}
+      {activeMgmtTab === 'inquiries' && (
+        <ContactInquiriesPanel />
       )}
     </div>
   );

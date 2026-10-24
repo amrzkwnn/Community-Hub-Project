@@ -1,9 +1,24 @@
 'use client';
 
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useRef, useState, useEffect, useCallback, useSyncExternalStore } from 'react';
+import Link from 'next/link';
 import { useApp } from '@/lib/context/AppContext';
 import { FEATURES } from '@/config/features';
-import { X } from 'lucide-react';
+import { X, ArrowLeft } from 'lucide-react';
+
+const subscribeReducedMotion = (callback: () => void) => {
+  if (typeof window === 'undefined') return () => {};
+  const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+  mediaQuery.addEventListener('change', callback);
+  return () => mediaQuery.removeEventListener('change', callback);
+};
+
+const getReducedMotionSnapshot = () => {
+  if (typeof window === 'undefined') return false;
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+};
+
+const getReducedMotionServerSnapshot = () => false;
 
 export default function Sidebar() {
   const { 
@@ -36,23 +51,12 @@ export default function Sidebar() {
     animate: false,
   });
 
-  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
-  const [mounted, setMounted] = useState(false);
+  const prefersReducedMotion = useSyncExternalStore(
+    subscribeReducedMotion,
+    getReducedMotionSnapshot,
+    getReducedMotionServerSnapshot
+  );
   const hasMountedRef = useRef(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  // Monitor prefers-reduced-motion media query
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-    setPrefersReducedMotion(mediaQuery.matches);
-    const handleChange = (e: MediaQueryListEvent) => setPrefersReducedMotion(e.matches);
-    mediaQuery.addEventListener('change', handleChange);
-    return () => mediaQuery.removeEventListener('change', handleChange);
-  }, []);
 
   // Recalculate single shared sliding pill position based on active item
   const updateIndicator = useCallback((shouldAnimate = true) => {
@@ -186,11 +190,11 @@ export default function Sidebar() {
             <div 
               onClick={() => setActiveTab('home')}
               className="h-16 px-4 flex items-center border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-[#15181C] cursor-pointer group"
-              title="Nadikomuniti — Connect & Relax"
+              title="NadiKomuniti — Connect & Relax"
             >
               <img
-                src="/images/nadikomuniti-logo-transparent.png"
-                alt="Nadikomuniti — Connect & Relax"
+                src="/nadikomuniti/01_branding/logo-header-horizontal.webp"
+                alt="NadiKomuniti — Connect & Relax"
                 className="h-8 w-auto object-contain max-w-[190px] group-hover:scale-[1.02] transition-transform"
               />
             </div>
@@ -423,8 +427,24 @@ export default function Sidebar() {
             </nav>
           </div>
 
-          {/* Bottom Profile Summary Card */}
-          <div className="p-3 mx-3 mb-4 rounded-xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/70 dark:border-slate-800 shadow-2xs">
+          {/* Desktop Footer Area with Back to Landing Page & Profile Summary */}
+          <div className="flex flex-col shrink-0 mt-auto">
+            {/* Back to Landing Page Link */}
+            <div className="px-3 pb-2 pt-1 border-t border-slate-100 dark:border-slate-800/80">
+              <Link
+                href="/welcome"
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100/70 dark:hover:bg-slate-800/50 transition-colors text-left group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9E1315]"
+                title="Back to Landing Page"
+              >
+                <ArrowLeft className="w-4 h-4 text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200 transition-colors shrink-0" />
+                <span className="text-[13px] font-medium tracking-tight">
+                  Back to Landing Page
+                </span>
+              </Link>
+            </div>
+
+            {/* Bottom Profile Summary Card */}
+            <div className="p-3 mx-3 mb-4 rounded-xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/70 dark:border-slate-800 shadow-2xs">
             <div 
               onClick={() => setIsProfileModalOpen(true)}
               className="flex items-center gap-2.5 cursor-pointer hover:opacity-85 transition-opacity group"
@@ -449,7 +469,8 @@ export default function Sidebar() {
             </div>
           </div>
         </div>
-      </aside>
+      </div>
+    </aside>
 
       {/* =========================================================================
           2. MOBILE OFF-CANVAS NAVIGATION DRAWER
@@ -485,11 +506,11 @@ export default function Sidebar() {
             <div 
               onClick={() => handleNavClick('home', true)}
               className="flex items-center cursor-pointer group"
-              title="Nadikomuniti — Connect & Relax"
+              title="NadiKomuniti — Connect & Relax"
             >
               <img
-                src="/images/nadikomuniti-logo-transparent.png"
-                alt="Nadikomuniti — Connect & Relax"
+                src="/nadikomuniti/01_branding/logo-header-horizontal.webp"
+                alt="NadiKomuniti — Connect & Relax"
                 className="h-7 w-auto object-contain max-w-[170px]"
               />
             </div>
@@ -669,8 +690,25 @@ export default function Sidebar() {
           </nav>
         </div>
 
-        {/* Mobile Profile Card */}
-        <div className="p-3 mx-3 mb-4 rounded-xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/70 dark:border-slate-800 shadow-2xs">
+        {/* Mobile Drawer Footer Area with Back to Landing Page & Profile Summary */}
+        <div className="flex flex-col shrink-0 mt-auto">
+          {/* Back to Landing Page Link in Mobile Drawer */}
+          <div className="px-3 pb-2 pt-1 border-t border-slate-100 dark:border-slate-800/80">
+            <Link
+              href="/welcome"
+              onClick={() => setIsMobileNavOpen(false)}
+              className="w-full min-h-[44px] flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors text-left cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9E1315]"
+              title="Back to Landing Page"
+            >
+              <ArrowLeft className="w-4.5 h-4.5 text-slate-400 shrink-0" />
+              <span className="text-[13px] font-medium">
+                Back to Landing Page
+              </span>
+            </Link>
+          </div>
+
+          {/* Mobile Profile Card */}
+          <div className="p-3 mx-3 mb-4 rounded-xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/70 dark:border-slate-800 shadow-2xs">
           <div 
             onClick={() => {
               setIsProfileModalOpen(true);
@@ -697,7 +735,8 @@ export default function Sidebar() {
             </div>
           </div>
         </div>
-      </aside>
+      </div>
+    </aside>
     </>
   );
 }
