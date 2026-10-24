@@ -55,6 +55,7 @@ next-env.d.ts
 # local caches, browser test profiles, and scratch files
 .chrome-test-profile/
 .runtime_data/
+.data/
 scratch/
 exchange-verification-screenshot.png
 .env*

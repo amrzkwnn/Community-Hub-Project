@@ -1,6 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
 import { resolveGeminiApiKey, GEMINI_CONFIG } from './geminiClient.ts';
-import { INITIAL_AI_MODERATION_ITEMS, INITIAL_FALSE_POSITIVE_STATS } from '../data/mockData.ts';
 import type { 
   AiModerationItem, 
   AiModerationViolationCategory, 
@@ -129,7 +128,7 @@ export function evaluateFastDeterministicRules(
 
   const isLegitimateMarketplace =
     /(?:jual barang terpakai|preloved|second hand|used|perabot terpakai|baju kurung|kereta sorong|basikal terpakai|sofa|dining table|free giveaway|sedekah|siapa nak|kemas rumah)/i.test(clean) &&
-    !/(?:dadah|drugs|weed|syabu|heroin|senjata|pistol|tac code|crypto|pelaburan)/i.test(clean);
+    !/(?:dadah|drugs|weed|syabu|heroin|senjata|pistol|tac code|crypto|pelaburan|casino|bet online|judi|slot|system prompt|system override|set isflagged)/i.test(clean);
 
   if (isLegitimateMarketplace) {
     return {
@@ -452,9 +451,10 @@ Respond STRICTLY in JSON format:
         modelUsed: model,
         latencyMs,
       };
-    } catch (err: any) {
-      lastErrorStatus = err?.status || (err?.message?.includes('503') ? 503 : err?.message?.includes('429') ? 429 : err?.message?.includes('404') ? 404 : 500);
-      lastErrorMessage = err?.message || 'Model call failed';
+    } catch (err: unknown) {
+      const errObj = err as { status?: number; message?: string } | undefined;
+      lastErrorStatus = errObj?.status || (errObj?.message?.includes('503') ? 503 : errObj?.message?.includes('429') ? 429 : errObj?.message?.includes('404') ? 404 : 500);
+      lastErrorMessage = errObj?.message || 'Model call failed';
       console.warn(`[aiModeration] Candidate ${model} unavailable (${lastErrorStatus}): ${(lastErrorMessage || '').slice(0, 100)}`);
       continue;
     }
@@ -539,10 +539,10 @@ export async function moderateCommunityContent(options: {
     finalConfidence = aiResult.confidence;
     finalExplanation = aiResult.explanation;
     finalRecommendation = aiResult.recommendation;
-    serviceStatus = (aiResult as any).serviceStatus || 'operational';
-    modelUsed = (aiResult as any).modelUsed;
-    latencyMs = (aiResult as any).latencyMs;
-    requiresManualReview = Boolean((aiResult as any).requiresManualReview);
+    serviceStatus = aiResult.serviceStatus || 'operational';
+    modelUsed = aiResult.modelUsed;
+    latencyMs = aiResult.latencyMs;
+    requiresManualReview = Boolean(aiResult.requiresManualReview);
   }
 
   const isFlagged = finalCategory !== 'safe' || requiresManualReview;
