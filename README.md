@@ -21,7 +21,7 @@
 <p align="center">
   <a href="https://community-hub-project-eta.vercel.app/welcome"><strong>🌐 Live Landing Page</strong></a> &nbsp;&bull;&nbsp;
   <a href="https://community-hub-project-eta.vercel.app/?tab=home"><strong>🏡 Open Community Hub</strong></a> &nbsp;&bull;&nbsp;
-  <a href="https://community-hub-project-eta.vercel.app/?tab=map"><strong>🗺️ Resilience Map</strong></a>
+  <a href="https://community-hub-project-eta.vercel.app/?tab=resilience"><strong>🗺️ Resilience Map</strong></a>
 </p>
 
 ---
