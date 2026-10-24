@@ -46,6 +46,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Server-side authentication check (do NOT trust client body.userId)
+    let authenticatedUserId: string | undefined = undefined;
+    try {
+      const { createClient } = await import('@/lib/supabase/server');
+      const supabase = await createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user?.id) {
+        authenticatedUserId = user.id;
+      }
+    } catch {
+      // Unauthenticated public submission
+    }
+
     // Server-side validation
     const input: CreateInquiryInput = {
       fullName: typeof body.fullName === 'string' ? body.fullName : '',
@@ -53,7 +66,6 @@ export async function POST(request: NextRequest) {
       phone: typeof body.phone === 'string' ? body.phone : undefined,
       category: typeof body.category === 'string' ? body.category : 'general',
       message: typeof body.message === 'string' ? body.message : '',
-      userId: typeof body.userId === 'string' ? body.userId : undefined,
     };
 
     const validation = validateInquiryInput(input);
@@ -68,8 +80,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create and persist inquiry
-    const savedInquiry = await createContactInquiry(input);
+    // Create and durably persist inquiry in Supabase
+    const savedInquiry = await createContactInquiry(input, authenticatedUserId);
 
     return NextResponse.json(
       {
@@ -90,9 +102,14 @@ export async function POST(request: NextRequest) {
     );
   } catch (error: unknown) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error('[API /api/contact POST] Unexpected error:', errorMsg);
+    console.error('[API /api/contact POST] Persistence error:', errorMsg);
     return NextResponse.json(
-      { success: false, error: 'A server error occurred while processing your inquiry.' },
+      { 
+        success: false, 
+        error: errorMsg.includes('Database') || errorMsg.includes('persistence')
+          ? errorMsg
+          : 'A server error occurred while processing your inquiry.' 
+      },
       { status: 500 }
     );
   }

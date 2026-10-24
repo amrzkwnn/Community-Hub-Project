@@ -66,7 +66,7 @@ test('TESDH Community Hub — Draggable AI Assistant with Magnetic Edge Snapping
   });
 
   await t.test('8. Accessibility & Keyboard Repositioning: Accessible name and arrow keys', () => {
-    assert.match(floatingContent, /aria-label="Open AI Assistant"/, 'Must have accessible label "Open AI Assistant"');
+    assert.match(floatingContent, /aria-label="Open (?:Nadi|AI) Assistant"/, 'Must have accessible label for assistant launcher');
     assert.match(floatingContent, /e\.key === 'ArrowLeft'/, 'Must support ArrowLeft for keyboard repositioning');
     assert.match(floatingContent, /e\.key === 'ArrowRight'/, 'Must support ArrowRight for keyboard repositioning');
     assert.match(floatingContent, /e\.key === 'ArrowUp'/, 'Must support ArrowUp for keyboard repositioning');

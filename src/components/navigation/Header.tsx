@@ -446,17 +446,31 @@ export default function Header() {
               {/* Authentication Action at bottom of Profile Dropdown (Requirement Part 13) */}
               <hr className="my-2 border-slate-100 dark:border-slate-800" />
 
-              <button
-                type="button"
-                onClick={() => {
-                  signOut();
-                  setRoleMenuOpen(false);
-                }}
-                className="w-full flex items-center justify-center gap-2 p-2.5 rounded-xl text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-rose-200/60 dark:border-rose-900/40 transition-colors cursor-pointer"
-              >
-                <LogOut className="w-4 h-4" />
-                <span>Log Out</span>
-              </button>
+              {supabaseUser ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    signOut();
+                    setRoleMenuOpen(false);
+                  }}
+                  className="w-full flex items-center justify-center gap-2 p-2.5 rounded-xl text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-rose-200/60 dark:border-rose-900/40 transition-colors cursor-pointer"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span>Log Out</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAuthModalOpen(true);
+                    setRoleMenuOpen(false);
+                  }}
+                  className="w-full flex items-center justify-center gap-2 p-2.5 rounded-xl text-xs font-bold text-[#9E1315] dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-rose-200/60 dark:border-rose-900/40 transition-colors cursor-pointer"
+                >
+                  <LogIn className="w-4 h-4" />
+                  <span>Sign In</span>
+                </button>
+              )}
             </div>
           </>
         )}

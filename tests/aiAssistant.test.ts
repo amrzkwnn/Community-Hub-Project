@@ -263,7 +263,7 @@ test('TESDH Community Hub — Gemini AI Integration & Security Safeguards', asyn
     const floatingPath = path.join(rootDir, 'src', 'components', 'ai', 'FloatingAiAssistant.tsx');
     const content = fs.readFileSync(floatingPath, 'utf8');
 
-    assert.match(content, /Thinking\.\.\./, 'Processing status must display Thinking...');
+    assert.match(content, /Thinking\.\.\.|is thinking/i, 'Processing status must display Thinking...');
     assert.strictEqual(
       content.includes('Gemini is retrieving verified Elmina community records'),
       false,
@@ -318,8 +318,8 @@ test('TESDH Community Hub — Gemini AI Integration & Security Safeguards', asyn
 
     assert.match(
       content,
-      /Ask AI Assistant\.\.\./,
-      'Must use short single-line placeholder Ask AI Assistant...'
+      /Ask Nadi anything\.\.\.|Ask AI Assistant\.\.\./,
+      'Must use short single-line placeholder Ask Nadi anything... or Ask AI Assistant...'
     );
     assert.strictEqual(
       content.includes('Ask about events, local services, exchange, or issues...'),
