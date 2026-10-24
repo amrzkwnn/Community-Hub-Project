@@ -2,10 +2,7 @@
   <img src="public/nadikomuniti/01_branding/logo-header-tagline-horizontal.webp" alt="NadiKomuniti — Connect & Relax" width="340" />
 </p>
 
----
-
 <p align="center">
-  <strong>Connect &amp; Relax</strong><br />
   <em>A smarter township begins with a more connected community.</em>
 </p>
 
