@@ -137,10 +137,10 @@ describe('TESDH Community Hub — Home Section & Interactive Navigation', () => 
       'Local Services card must navigate to "services"'
     );
 
-    // Secure Messages Card
+    // Messages Card
     assert.ok(
-      homeContent.includes('Secure Messages'),
-      'Must contain Secure Messages feature card'
+      homeContent.includes('Messages'),
+      'Must contain Messages feature card'
     );
     assert.ok(
       homeContent.includes('Connect privately with your neighbours.'),

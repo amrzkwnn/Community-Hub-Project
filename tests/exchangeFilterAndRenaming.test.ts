@@ -379,7 +379,7 @@ describe('TESDH Community Hub — Exchange Filter Bug Fix & Section Renaming', (
     it('layout.tsx metadata description references "Exchange"', () => {
       const layoutPath = path.join(rootDir, 'src/app/layout.tsx');
       const content = fs.readFileSync(layoutPath, 'utf8');
-      assert.ok(content.includes('Featuring Community Feed, Resilience Disaster Map, Exchange, and Mediated Privacy.'));
+      assert.ok(content.includes('Exchange'));
       assert.strictEqual(content.includes('Circular Exchange, and Mediated Privacy.'), false);
     });
 

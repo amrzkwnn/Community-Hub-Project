@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useSyncExternalStore } from 'react';
 import { useApp } from '@/lib/context/AppContext';
+
+const emptySubscribe = () => () => {};
 import { 
-  Sparkles, 
   Send, 
   RotateCcw, 
   ShieldCheck, 
@@ -17,9 +18,12 @@ import {
   RefreshCw,
   X,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   AlertTriangle,
 } from 'lucide-react';
 import type { AiSearchResultCard } from '@/types';
+import NadiMascot from './NadiMascot';
 
 export interface ChatEntry {
   id: string;
@@ -33,27 +37,27 @@ export interface ChatEntry {
 const SUGGESTED_PROMPTS_EN = [
   {
     icon: MapPin,
-    title: 'Report Hazards',
+    title: 'Report an issue',
     text: 'How do I report a flash flood or pothole on the Resilience Map?',
     targetTab: 'resilience',
   },
   {
     icon: Calendar,
-    title: 'Upcoming Events',
+    title: 'Upcoming events',
     text: 'What community events and activities are happening this month?',
     targetTab: 'home',
   },
   {
-    icon: Repeat,
-    title: 'Circular Exchange',
-    text: 'How does the Circular Exchange work and what items are available?',
-    targetTab: 'exchange',
-  },
-  {
     icon: Wrench,
-    title: 'Local Services',
+    title: 'Local services',
     text: 'Where can I find plumbing, tutoring, or home repair services in Elmina?',
     targetTab: 'services',
+  },
+  {
+    icon: Repeat,
+    title: 'Exchange items',
+    text: 'How does the Circular Exchange work and what items are available?',
+    targetTab: 'exchange',
   },
   {
     icon: ShieldCheck,
@@ -72,27 +76,27 @@ const SUGGESTED_PROMPTS_EN = [
 const SUGGESTED_PROMPTS_BM = [
   {
     icon: MapPin,
-    title: 'Lapor Aduan',
+    title: 'Lapor aduan',
     text: 'Bagaimana cara melaporkan banjir kilat atau jalan rosak di Peta Ketahanan?',
     targetTab: 'resilience',
   },
   {
     icon: Calendar,
-    title: 'Acara Komuniti',
+    title: 'Acara komuniti',
     text: 'Apakah aktiviti dan program komuniti yang dijadualkan bulan ini?',
     targetTab: 'home',
   },
   {
-    icon: Repeat,
-    title: 'Circular Exchange',
-    text: 'Bagaimana cara menyumbang atau menukar barangan di Circular Exchange?',
-    targetTab: 'exchange',
-  },
-  {
     icon: Wrench,
-    title: 'Servis Tempatan',
+    title: 'Servis tempatan',
     text: 'Bagaimana mencari perkhidmatan paip, kelas tuisyen atau bantuan di Elmina?',
     targetTab: 'services',
+  },
+  {
+    icon: Repeat,
+    title: 'Barangan pertukaran',
+    text: 'Bagaimana cara menyumbang atau menukar barangan di Circular Exchange?',
+    targetTab: 'exchange',
   },
   {
     icon: ShieldCheck,
@@ -238,14 +242,16 @@ export default function FloatingAiAssistant() {
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showMoreTopics, setShowMoreTopics] = useState(false);
 
   // Dragging and Snapping State
   const [bubblePos, setBubblePos] = useState<{ x: number; y: number } | null>(null);
   const [currentEdge, setCurrentEdge] = useState<StoredBubblePosition['edge']>('right');
-  const [isMounted, setIsMounted] = useState(false);
+  const isMounted = useSyncExternalStore(emptySubscribe, () => true, () => false);
   const [isDragging, setIsDragging] = useState(false);
   const [isSnapping, setIsSnapping] = useState(false);
   const [dragAnnouncement, setDragAnnouncement] = useState<string | null>(null);
+  const [isLauncherHovered, setIsLauncherHovered] = useState(false);
 
   // Drag interaction refs (avoids unnecessary re-renders while tracking pointer)
   const dragStartPointerRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -267,24 +273,27 @@ export default function FloatingAiAssistant() {
 
   // Load saved position on mount (prevents SSR hydration mismatch)
   useEffect(() => {
-    setIsMounted(true);
-    try {
-      const savedRaw = localStorage.getItem(STORAGE_KEY);
-      if (savedRaw) {
-        const parsed = JSON.parse(savedRaw) as StoredBubblePosition;
-        if (parsed && parsed.edge && typeof parsed.ratio === 'number') {
-          const coords = getCoordsFromPosition(parsed);
-          setBubblePos(coords);
-          setCurrentEdge(parsed.edge);
-          return;
+    const handle = requestAnimationFrame(() => {
+      try {
+        const savedRaw = localStorage.getItem(STORAGE_KEY);
+        if (savedRaw) {
+          const parsed = JSON.parse(savedRaw) as StoredBubblePosition;
+          if (parsed && parsed.edge && typeof parsed.ratio === 'number') {
+            const coords = getCoordsFromPosition(parsed);
+            setBubblePos(coords);
+            setCurrentEdge(parsed.edge);
+            return;
+          }
         }
-      }
-    } catch {}
+      } catch {}
 
-    // Default: bottom-right
-    const defaultCoords = getCoordsFromPosition({ edge: 'right', ratio: 1 });
-    setBubblePos(defaultCoords);
-    setCurrentEdge('right');
+      // Default: bottom-right
+      const defaultCoords = getCoordsFromPosition({ edge: 'right', ratio: 1 });
+      setBubblePos(defaultCoords);
+      setCurrentEdge('right');
+    });
+
+    return () => cancelAnimationFrame(handle);
   }, []);
 
   // Recalculate on window resize / orientation change
@@ -620,7 +629,7 @@ export default function FloatingAiAssistant() {
     }
   };
 
-  const handleSendMessage = async (textToSend?: string) => {
+  const handleSendMessage = useCallback(async (textToSend?: string) => {
     const query = (textToSend || inputValue).trim();
     if (!query || isLoading) return;
 
@@ -703,7 +712,7 @@ export default function FloatingAiAssistant() {
         inputRef.current?.focus();
       }, 50);
     }
-  };
+  }, [currentUser.id, inputValue, isLoading, isMalay, messages]);
 
   const handleInputKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -806,35 +815,35 @@ export default function FloatingAiAssistant() {
    */
   const renderResultCard = (card: AiSearchResultCard) => {
     let typeIcon = Repeat;
-    let badgeBg = 'bg-purple-100 text-purple-800 dark:bg-purple-950/70 dark:text-purple-300 border-purple-200 dark:border-purple-800';
+    let badgeBg = 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-200/80 dark:border-slate-700/80';
     let typeLabel = 'Exchange';
 
     if (card.type === 'incident_report_draft') {
       typeIcon = AlertTriangle;
-      badgeBg = 'bg-rose-100 text-rose-800 dark:bg-rose-950/70 dark:text-rose-300 border-rose-200 dark:border-rose-800';
+      badgeBg = 'bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-200 dark:border-amber-800';
       typeLabel = isMalay ? 'Cadangan Laporan' : 'Suggested Report';
     } else if (card.type === 'incident') {
       typeIcon = AlertTriangle;
       badgeBg = card.isVerified
-        ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/70 dark:text-blue-300 border-blue-200 dark:border-blue-800'
-        : 'bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 border-amber-200 dark:border-amber-800';
+        ? 'bg-blue-50 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border-blue-200 dark:border-blue-800'
+        : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700';
       typeLabel = card.category || 'Incident';
     } else if (card.type === 'service' || card.type === 'request') {
       typeIcon = Wrench;
       badgeBg = card.type === 'request'
-        ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 border-amber-200 dark:border-amber-800'
-        : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800';
+        ? 'bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+        : 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800';
       typeLabel = card.type === 'request' ? (isMalay ? 'Bantuan' : 'Help Request') : (isMalay ? 'Servis' : 'Local Service');
     } else if (card.type === 'event') {
       typeIcon = Calendar;
-      badgeBg = 'bg-rose-100 text-rose-800 dark:bg-rose-950/70 dark:text-rose-300 border-rose-200 dark:border-rose-800';
+      badgeBg = 'bg-rose-50 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border-rose-200 dark:border-rose-800';
       typeLabel = isMalay ? 'Acara Komuniti' : 'Community Event';
     } else if (card.type === 'exchange') {
       typeIcon = Repeat;
       const isGiveaway = card.price?.toLowerCase().includes('giveaway') || card.price?.toLowerCase().includes('free');
       badgeBg = isGiveaway
-        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
-        : 'bg-purple-100 text-purple-800 dark:bg-purple-950/70 dark:text-purple-300 border-purple-200 dark:border-purple-800';
+        ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+        : 'bg-purple-50 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border-purple-200 dark:border-purple-800';
       typeLabel = isGiveaway ? (isMalay ? 'Sumbangan Percuma' : 'Free Giveaway') : (isMalay ? 'Pertukaran' : 'Item Exchange');
     }
 
@@ -843,7 +852,7 @@ export default function FloatingAiAssistant() {
     return (
       <div
         key={card.id}
-        className="rounded-xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-[#1A1D21] p-3 shadow-xs hover:border-[#BA1B1D]/40 dark:hover:border-rose-500/40 transition-all text-left flex flex-col gap-2 group"
+        className="rounded-xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-[#181B1F] p-3 shadow-2xs hover:border-slate-300 dark:hover:border-slate-700 transition-all text-left flex flex-col gap-2.5 group"
       >
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-1.5 flex-wrap">
@@ -853,14 +862,14 @@ export default function FloatingAiAssistant() {
             </span>
 
             {card.type === 'incident_report_draft' && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
                 <span>{isMalay ? 'Sahkan Lokasi di Peta' : 'Review & Confirm Location'}</span>
               </span>
             )}
 
             {card.type === 'incident' && (
               card.isVerified ? (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-900">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 dark:bg-blue-950/70 dark:text-blue-300 border border-blue-200 dark:border-blue-900">
                   <ShieldCheck className="w-3 h-3 text-blue-600 dark:text-blue-400" />
                   <span>{isMalay ? 'Disahkan Pengurusan' : 'Verified by Management'}</span>
                 </span>
@@ -879,7 +888,7 @@ export default function FloatingAiAssistant() {
           </div>
 
           {card.date && (
-            <span className="text-[10px] text-slate-500 dark:text-slate-400 shrink-0 font-medium">
+            <span className="text-[10.5px] text-slate-500 dark:text-slate-400 shrink-0 font-medium">
               {card.date}
             </span>
           )}
@@ -891,7 +900,7 @@ export default function FloatingAiAssistant() {
             <img
               src={card.thumbnail}
               alt=""
-              className="w-12 h-12 rounded-lg object-cover shrink-0 border border-slate-200 dark:border-slate-700"
+              className="w-11 h-11 rounded-lg object-cover shrink-0 border border-slate-200 dark:border-slate-700"
               loading="lazy"
             />
           )}
@@ -900,7 +909,7 @@ export default function FloatingAiAssistant() {
               {card.title}
             </h4>
             {card.location && (
-              <p className="text-[10.5px] text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5 line-clamp-1">
+              <p className="text-[10.5px] text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5 line-clamp-1 font-medium">
                 <MapPin className="w-3 h-3 shrink-0 text-slate-400" />
                 <span>{card.location}</span>
               </p>
@@ -930,7 +939,7 @@ export default function FloatingAiAssistant() {
               closeAssistant();
               navigateToItem(card.navigationTarget);
             }}
-            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#BA1B1D] hover:bg-[#9E1315] text-white text-[11px] font-bold shadow-2xs hover:shadow-xs active:scale-95 transition-all cursor-pointer shrink-0 ml-auto"
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 text-[11px] font-bold shadow-2xs hover:shadow-xs active:scale-95 transition-all cursor-pointer shrink-0 ml-auto"
             title={`${card.actionLabel}: ${card.title}`}
           >
             <span>{card.actionLabel}</span>
@@ -985,7 +994,7 @@ export default function FloatingAiAssistant() {
                   : 'right-full mr-3 top-1/2 -translate-y-1/2 translate-x-1.5 group-hover:translate-x-0'
               }`}
             >
-              AI Assistant
+              Ask Nadi
               {/* Tooltip caret */}
               <span
                 className={`absolute border-4 border-transparent ${
@@ -1011,21 +1020,23 @@ export default function FloatingAiAssistant() {
             onPointerUp={handlePointerUp}
             onPointerCancel={handlePointerCancel}
             onKeyDown={handleLauncherKeyDown}
-            aria-label="Open AI Assistant"
+            onMouseEnter={() => setIsLauncherHovered(true)}
+            onMouseLeave={() => setIsLauncherHovered(false)}
+            aria-label="Open Nadi Assistant"
             aria-haspopup="dialog"
             aria-expanded={isOpen}
-            className={`w-[58px] h-[58px] rounded-full bg-[#BA1B1D] text-white flex items-center justify-center border border-white/20 dark:border-white/10 focus-visible:outline-hidden focus-visible:ring-3 focus-visible:ring-rose-500/60 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900 relative transition-transform duration-200 select-none ${
+            className={`w-[60px] h-[60px] rounded-full bg-white/90 dark:bg-slate-900/90 backdrop-blur-md flex items-center justify-center border border-slate-200/80 dark:border-slate-700/80 ring-1 ring-slate-900/5 dark:ring-white/10 focus-visible:outline-hidden focus-visible:ring-3 focus-visible:ring-[#BA1B1D] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900 relative transition-transform duration-200 select-none ${
               isDragging
-                ? 'cursor-grabbing scale-110 shadow-2xl shadow-rose-950/40 ring-4 ring-rose-500/30'
-                : 'cursor-grab hover:bg-[#9E1315] shadow-lg shadow-rose-950/25 hover:shadow-xl hover:shadow-rose-900/35 hover:scale-105 active:scale-95'
+                ? 'cursor-grabbing scale-110 shadow-2xl shadow-slate-950/30 ring-2 ring-[#BA1B1D]/40'
+                : 'cursor-grab shadow-lg shadow-slate-950/15 dark:shadow-black/40 hover:shadow-xl hover:scale-105 active:scale-95'
             }`}
           >
-            <Sparkles
-              className={`w-6 h-6 text-white transition-transform duration-200 ${
-                isDragging ? 'rotate-12 scale-110' : 'group-hover:rotate-12'
-              }`}
+            <NadiMascot
+              size={52}
+              isHovered={isLauncherHovered}
+              isDragging={isDragging}
             />
-            <span className="sr-only">Open AI Assistant</span>
+            <span className="sr-only">Open Nadi Assistant</span>
           </button>
 
           {/* Screen reader live region for keyboard repositioning */}
@@ -1060,7 +1071,7 @@ export default function FloatingAiAssistant() {
               ? 'transform 280ms cubic-bezier(0.4, 0, 0.2, 1), border-radius 280ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 280ms ease-in'
               : 'transform 380ms cubic-bezier(0.16, 1, 0.3, 1), border-radius 380ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 380ms ease-out',
           }}
-          className="ai-assistant-modal-surface fixed left-1/2 top-1/2 z-50 w-[calc(100vw-24px)] sm:w-[480px] max-w-[480px] h-[620px] sm:h-[660px] max-h-[calc(100dvh-32px)] sm:max-h-[80vh] bg-white dark:bg-[#15181C] border border-slate-200/90 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col will-change-transform"
+          className="ai-assistant-modal-surface fixed left-1/2 top-1/2 z-50 w-[calc(100vw-24px)] sm:w-[460px] max-w-[460px] h-[640px] sm:h-[680px] max-h-[calc(100dvh-32px)] sm:max-h-[82vh] bg-white dark:bg-[#15181C] border border-slate-200/90 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col will-change-transform"
         >
           {/* Inner Content Container: fades in when expanding, fades out immediately on closing */}
           <div
@@ -1071,23 +1082,17 @@ export default function FloatingAiAssistant() {
             }`}
           >
             {/* Region 1: Header Bar */}
-            <header className="shrink-0 bg-white dark:bg-[#15181C] border-b border-slate-200/80 dark:border-slate-800 px-4 py-3 flex items-center justify-between shadow-2xs z-10 select-none">
+            <header className="shrink-0 bg-white dark:bg-[#15181C] border-b border-slate-200/80 dark:border-slate-800/80 px-4 py-3 flex items-center justify-between z-10 select-none">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-[#BA1B1D] text-white flex items-center justify-center shadow-xs shrink-0">
-                  <Sparkles className="w-4 h-4" />
+                <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200/70 dark:border-slate-700/70 flex items-center justify-center overflow-hidden shrink-0 shadow-2xs">
+                  <NadiMascot size={32} disableAnimations />
                 </div>
                 <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100 leading-tight">
-                      AI Assistant
-                    </h2>
-                    <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-900 text-emerald-700 dark:text-emerald-300 text-[10px] font-semibold">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                      Active
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    {isMalay ? 'Panduan Komuniti Elmina' : 'Elmina Township Guide'}
+                  <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100 leading-tight">
+                    Nadi
+                  </h2>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium leading-normal">
+                    {isMalay ? 'Panduan komuniti anda' : 'Your community guide'}
                   </p>
                 </div>
               </div>
@@ -1095,11 +1100,11 @@ export default function FloatingAiAssistant() {
               {/* Header Action Buttons */}
               <div className="flex items-center gap-1.5">
                 {/* Language Switcher */}
-                <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700 text-[11px] font-semibold">
+                <div className="flex items-center bg-slate-100 dark:bg-slate-800/90 p-0.5 rounded-lg border border-slate-200/80 dark:border-slate-700/80 text-[11px] font-semibold">
                   <button
                     type="button"
                     onClick={() => setLanguage('en')}
-                    className={`px-1.5 py-0.5 rounded transition-colors cursor-pointer ${
+                    className={`px-2 py-0.5 rounded transition-colors cursor-pointer ${
                       !isMalay
                         ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-2xs'
                         : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
@@ -1110,7 +1115,7 @@ export default function FloatingAiAssistant() {
                   <button
                     type="button"
                     onClick={() => setLanguage('ms-MY')}
-                    className={`px-1.5 py-0.5 rounded transition-colors cursor-pointer ${
+                    className={`px-2 py-0.5 rounded transition-colors cursor-pointer ${
                       isMalay
                         ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-2xs'
                         : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
@@ -1125,7 +1130,7 @@ export default function FloatingAiAssistant() {
                   <button
                     type="button"
                     onClick={handleClearChat}
-                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                    className="p-1.5 rounded-lg border border-slate-200/80 dark:border-slate-700/80 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                     title={isMalay ? 'Padam Sembang' : 'Clear Chat'}
                     aria-label="Clear chat"
                   >
@@ -1138,74 +1143,61 @@ export default function FloatingAiAssistant() {
                   type="button"
                   onClick={closeAssistant}
                   aria-label="Close AI Assistant"
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-rose-500"
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-slate-400"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
             </header>
 
-            {/* Region 1b: Privacy Shield Notice */}
-            <div className="shrink-0 bg-slate-100/80 dark:bg-slate-900/50 border-b border-slate-200/60 dark:border-slate-800/80 px-3.5 py-1 text-[10.5px] text-slate-600 dark:text-slate-400 flex items-center justify-between gap-2 select-none">
-              <div className="flex items-center gap-1.5 truncate">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                <span className="truncate">
-                  <strong>{isMalay ? 'Privasi Aktif:' : 'Privacy Shield:'}</strong>{' '}
-                  {isMalay ? 'Data peribadi dirahsiakan' : 'Resident PII masked · Zero persistence'}
-                </span>
-              </div>
-              <div className="hidden sm:flex items-center gap-1 text-slate-500 text-[10px] shrink-0 font-mono">
-                <span>Hotline:</span>
-                <strong className="text-[#BA1B1D] dark:text-rose-400">03-7845 2222</strong>
-              </div>
-            </div>
-
             {/* Region 2: Conversation Stream (Scrollable Area) */}
             <div className="flex-1 min-h-0 overflow-y-auto px-3.5 sm:px-4 py-4 space-y-4">
               {messages.length === 0 ? (
-                <div className="space-y-4 animate-in fade-in duration-200">
-                  {/* Welcome Card */}
-                  <div className="bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-4 shadow-2xs flex gap-3.5 items-start">
-                    <div className="w-9 h-9 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200/80 dark:border-rose-900/60 text-[#BA1B1D] dark:text-rose-300 flex items-center justify-center shrink-0">
-                      <Sparkles className="w-4.5 h-4.5" />
+                <div className="space-y-5 py-2 animate-in fade-in duration-200">
+                  {/* Clean Welcome Header without a heavy card wrapper */}
+                  <div className="flex flex-col items-center text-center pt-2 px-2">
+                    <div className="relative mb-3 flex items-center justify-center">
+                      <NadiMascot size={72} />
                     </div>
-                    <div className="space-y-1">
-                      <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100">
-                        {isMalay
-                          ? `Hai, ${currentUser.displayName || currentUser.fullName}!`
-                          : `Hello, ${currentUser.displayName || currentUser.fullName}!`}
-                      </h3>
-                      <p className="text-[11px] sm:text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-                        {isMalay
-                          ? 'Saya sedia membantu anda mencari pengumuman rasmi, acara komuniti, panduan lapor isu Peta Ketahanan, atau semakan Circular Exchange.'
-                          : 'I am here to help you navigate community announcements, upcoming events, reporting issues on the Resilience Map, or finding local services.'}
-                      </p>
-                    </div>
+                    <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+                      {isMalay
+                        ? 'Bagaimana saya boleh bantu anda hari ini?'
+                        : 'How can I help you today?'}
+                    </h3>
+                    <p className="text-xs sm:text-[13px] text-slate-500 dark:text-slate-400 mt-1.5 max-w-sm leading-relaxed">
+                      {isMalay
+                        ? 'Cari maklumat tempatan, ikuti perkembangan komuniti atau dapatkan bantuan membuat aduan.'
+                        : 'Find local information, follow community updates or get help with reporting an issue.'}
+                    </p>
                   </div>
 
-                  {/* Suggested Question Chips */}
-                  <div>
-                    <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 px-1">
-                      {isMalay ? 'Cadangan Soalan' : 'Suggested Questions'}
-                    </h4>
-                    <div className="grid grid-cols-1 gap-2">
-                      {suggestedPrompts.map((prompt, idx) => {
+                  {/* Suggested Question Grid */}
+                  <div className="pt-1">
+                    <div className="flex items-center justify-between mb-2 px-1">
+                      <h4 className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                        {isMalay ? 'Cadangan Topik' : 'Suggested Topics'}
+                      </h4>
+                    </div>
+
+                    {/* Primary 4 suggestions in 2-column grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {suggestedPrompts.slice(0, 4).map((prompt, idx) => {
                         const Icon = prompt.icon;
                         return (
                           <button
                             key={idx}
                             type="button"
                             onClick={() => handleSendMessage(prompt.text)}
-                            className="p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#17191D] hover:border-[#BA1B1D]/40 dark:hover:border-rose-500/40 hover:bg-rose-50/30 dark:hover:bg-rose-950/20 text-left transition-all duration-150 cursor-pointer shadow-2xs group flex items-start gap-2.5"
+                            className="p-3 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#191C20] hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50/80 dark:hover:bg-slate-800/60 text-left transition-all duration-150 cursor-pointer shadow-2xs group flex items-start gap-2.5 min-h-[58px]"
                           >
-                            <div className="w-6 h-6 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 group-hover:bg-[#BA1B1D] group-hover:text-white transition-colors flex items-center justify-center shrink-0 mt-0.5">
+                            <div className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white transition-colors flex items-center justify-center shrink-0 mt-0.5">
                               <Icon className="w-3.5 h-3.5" />
                             </div>
                             <div className="flex-1 min-w-0">
-                              <div className="text-[11.5px] font-bold text-slate-900 dark:text-slate-100 group-hover:text-[#BA1B1D] dark:group-hover:text-rose-400 transition-colors">
+                              <div className="text-xs font-semibold text-slate-900 dark:text-slate-100 group-hover:text-slate-950 dark:group-hover:text-white transition-colors line-clamp-1">
                                 {prompt.title}
                               </div>
-                              <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1">
+                              <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1 mt-0.5 leading-snug">
                                 {prompt.text}
                               </p>
                             </div>
@@ -1213,10 +1205,59 @@ export default function FloatingAiAssistant() {
                         );
                       })}
                     </div>
+
+                    {/* Expandable More Topics */}
+                    {suggestedPrompts.length > 4 && (
+                      <div className="mt-2">
+                        {showMoreTopics && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2 animate-in fade-in duration-150">
+                            {suggestedPrompts.slice(4).map((prompt, idx) => {
+                              const Icon = prompt.icon;
+                              return (
+                                <button
+                                  key={idx + 4}
+                                  type="button"
+                                  onClick={() => handleSendMessage(prompt.text)}
+                                  className="p-3 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#191C20] hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50/80 dark:hover:bg-slate-800/60 text-left transition-all duration-150 cursor-pointer shadow-2xs group flex items-start gap-2.5 min-h-[58px]"
+                                >
+                                  <div className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white transition-colors flex items-center justify-center shrink-0 mt-0.5">
+                                    <Icon className="w-3.5 h-3.5" />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-xs font-semibold text-slate-900 dark:text-slate-100 group-hover:text-slate-950 dark:group-hover:text-white transition-colors line-clamp-1">
+                                      {prompt.title}
+                                    </div>
+                                    <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1 mt-0.5 leading-snug">
+                                      {prompt.text}
+                                    </p>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setShowMoreTopics((prev) => !prev)}
+                          className="w-full py-2 px-3 rounded-lg text-xs font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100/70 dark:hover:bg-slate-800/50 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                        >
+                          <span>
+                            {showMoreTopics
+                              ? (isMalay ? 'Kurangkan topik' : 'Fewer topics')
+                              : (isMalay ? 'Lebih banyak topik' : 'More topics')}
+                          </span>
+                          {showMoreTopics ? (
+                            <ChevronUp className="w-3.5 h-3.5" />
+                          ) : (
+                            <ChevronDown className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : (
-                <div className="space-y-3.5">
+                <div className="space-y-4">
                   {messages.map((msg) => (
                     <div
                       key={msg.id}
@@ -1224,43 +1265,43 @@ export default function FloatingAiAssistant() {
                         msg.role === 'user' ? 'justify-end' : 'justify-start'
                       }`}
                     >
-                      {/* Assistant Avatar */}
+                      {/* Assistant Mascot Avatar */}
                       {msg.role === 'model' && (
-                        <div className="w-7 h-7 rounded-lg bg-[#BA1B1D] text-white flex items-center justify-center shrink-0 shadow-2xs mt-0.5">
-                          <Sparkles className="w-3.5 h-3.5" />
+                        <div className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 flex items-center justify-center shrink-0 overflow-hidden mt-0.5 shadow-2xs">
+                          <NadiMascot size={26} disableAnimations />
                         </div>
                       )}
 
                       {/* Message Bubble Card */}
                       <div
-                        className={`max-w-[85%] rounded-2xl p-3 shadow-2xs ${
+                        className={`max-w-[85%] rounded-2xl p-3.5 shadow-2xs ${
                           msg.role === 'user'
                             ? 'bg-[#BA1B1D] text-white rounded-br-xs'
                             : msg.isError
                             ? 'bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-900/80 text-rose-950 dark:text-rose-200 rounded-bl-xs'
-                            : 'bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 rounded-bl-xs'
+                            : 'bg-slate-50/90 dark:bg-slate-900/70 border border-slate-200/80 dark:border-slate-800 rounded-bl-xs'
                         }`}
                       >
                         {/* Meta */}
-                        <div className="flex items-center justify-between gap-3 mb-1 text-[9.5px] opacity-75">
-                          <span className="font-bold">
+                        <div className="flex items-center justify-between gap-3 mb-1.5 text-[10px] opacity-75">
+                          <span className="font-semibold">
                             {msg.role === 'user'
                               ? currentUser.displayName || currentUser.fullName
-                              : 'AI Assistant'}
+                              : 'Nadi'}
                           </span>
                           <span>{msg.timestamp}</span>
                         </div>
 
                         {/* Content */}
                         {msg.role === 'user' ? (
-                          <p className="text-xs sm:text-sm leading-relaxed whitespace-pre-wrap font-medium">
+                          <p className="text-[13px] sm:text-sm leading-relaxed whitespace-pre-wrap font-medium">
                             {msg.text}
                           </p>
                         ) : (
                           <div className="space-y-2.5">
                             {renderFormattedText(msg.text)}
                             {msg.cards && msg.cards.length > 0 && (
-                              <div className="mt-3 space-y-2 pt-2 border-t border-slate-200/80 dark:border-slate-800">
+                              <div className="mt-3 space-y-2.5 pt-2.5 border-t border-slate-200/80 dark:border-slate-800">
                                 {msg.cards.map((card) => renderResultCard(card))}
                               </div>
                             )}
@@ -1270,9 +1311,9 @@ export default function FloatingAiAssistant() {
                         {/* Retry action on error */}
                         {msg.isError && (
                           <div className="mt-2.5 pt-2 border-t border-rose-200 dark:border-rose-900/60 flex items-center justify-between">
-                            <span className="text-[10.5px] text-rose-700 dark:text-rose-300 flex items-center gap-1">
-                              <AlertCircle className="w-3 h-3" />
-                              {isMalay ? 'Gagal memproses' : 'Could not process query'}
+                            <span className="text-[11px] text-rose-700 dark:text-rose-300 flex items-center gap-1 font-medium">
+                              <AlertCircle className="w-3.5 h-3.5" />
+                              {isMalay ? 'Gagal memproses soalan' : 'Could not process query'}
                             </span>
                             <button
                               type="button"
@@ -1282,7 +1323,7 @@ export default function FloatingAiAssistant() {
                                   handleSendMessage(lastUserMsg.text);
                                 }
                               }}
-                              className="px-2 py-0.5 rounded-md bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                              className="px-2.5 py-1 rounded-md bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer"
                             >
                               <RefreshCw className="w-2.5 h-2.5" />
                               <span>{isMalay ? 'Cuba Semula' : 'Retry'}</span>
@@ -1293,6 +1334,7 @@ export default function FloatingAiAssistant() {
 
                       {/* User Avatar */}
                       {msg.role === 'user' && (
+                        // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={currentUser.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
                           alt={currentUser.fullName}
@@ -1302,20 +1344,20 @@ export default function FloatingAiAssistant() {
                     </div>
                   ))}
 
-                  {/* Unified Thinking Animation */}
+                  {/* Clean Loading State */}
                   {isLoading && (
                     <div className="flex gap-2.5 items-start justify-start animate-in fade-in duration-150">
-                      <div className="w-7 h-7 rounded-lg bg-[#BA1B1D] text-white flex items-center justify-center shrink-0 shadow-2xs">
-                        <Sparkles className="w-3.5 h-3.5 animate-pulse" />
+                      <div className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 flex items-center justify-center shrink-0 overflow-hidden mt-0.5 shadow-2xs">
+                        <NadiMascot size={26} disableAnimations />
                       </div>
-                      <div className="bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 rounded-2xl rounded-bl-xs px-3.5 py-2.5 shadow-2xs flex items-center gap-2.5">
+                      <div className="bg-slate-50/90 dark:bg-slate-900/70 border border-slate-200/80 dark:border-slate-800 rounded-2xl rounded-bl-xs px-3.5 py-2.5 shadow-2xs flex items-center gap-2.5">
                         <div className="flex items-center gap-1">
-                          <span className="w-1.5 h-1.5 rounded-full bg-[#BA1B1D] animate-bounce" style={{ animationDelay: '0ms' }} />
-                          <span className="w-1.5 h-1.5 rounded-full bg-[#BA1B1D] animate-bounce" style={{ animationDelay: '150ms' }} />
-                          <span className="w-1.5 h-1.5 rounded-full bg-[#BA1B1D] animate-bounce" style={{ animationDelay: '300ms' }} />
+                          <span className="w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-slate-500 animate-bounce" style={{ animationDelay: '0ms' }} />
+                          <span className="w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-slate-500 animate-bounce" style={{ animationDelay: '150ms' }} />
+                          <span className="w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-slate-500 animate-bounce" style={{ animationDelay: '300ms' }} />
                         </div>
-                        <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                          {isMalay ? 'Sedang memproses...' : 'Thinking...'}
+                        <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                          {isMalay ? 'Nadi sedang mencari jawapan...' : 'Nadi is thinking...'}
                         </span>
                       </div>
                     </div>
@@ -1326,8 +1368,8 @@ export default function FloatingAiAssistant() {
               )}
             </div>
 
-            {/* Region 3: Composer Box (Anchored at Bottom, Compact Single-Line Default) */}
-            <div className="shrink-0 bg-white dark:bg-[#15181C] border-t border-slate-200/80 dark:border-slate-800 p-2.5 sm:p-3 shadow-xs z-10">
+            {/* Region 3: Composer Box (Anchored at Bottom, Clean Minimal SaaS Design) */}
+            <div className="shrink-0 bg-white dark:bg-[#15181C] border-t border-slate-200/80 dark:border-slate-800 p-2.5 sm:p-3 z-10">
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
@@ -1335,10 +1377,10 @@ export default function FloatingAiAssistant() {
                 }}
                 className="space-y-1"
               >
-                {/* Compact Input Pill Container (44-48px height when empty) */}
+                {/* Input Pill Container with natural multiline growth */}
                 <div 
-                  className={`relative rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/60 focus-within:border-[#BA1B1D] focus-within:ring-2 focus-within:ring-[#BA1B1D]/20 transition-all px-3 py-1.5 flex ${
-                    inputValue.includes('\n') || (inputRef.current && inputRef.current.scrollHeight > 36)
+                  className={`relative rounded-xl border border-slate-200 dark:border-slate-700/80 bg-slate-50/80 dark:bg-slate-900/60 focus-within:border-slate-400 dark:focus-within:border-slate-500 focus-within:ring-2 focus-within:ring-slate-400/10 transition-all px-3 py-1.5 flex ${
+                    inputValue.includes('\n') || inputValue.length > 50
                       ? 'items-end'
                       : 'items-center'
                   } gap-2 min-h-[44px] sm:min-h-[46px]`}
@@ -1349,9 +1391,9 @@ export default function FloatingAiAssistant() {
                     value={inputValue}
                     onChange={handleInputChange}
                     onKeyDown={handleInputKeyDown}
-                    placeholder={isMalay ? 'Tanya AI Assistant...' : 'Ask AI Assistant...'}
+                    placeholder={isMalay ? 'Tanya Nadi apa-apa soalan...' : 'Ask Nadi anything...'}
                     disabled={isLoading}
-                    className="flex-1 bg-transparent border-0 focus:outline-hidden resize-none text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 leading-5 py-0.5 px-0 h-[22px] min-h-[22px] max-h-[120px] overflow-hidden"
+                    className="flex-1 bg-transparent border-0 focus:outline-hidden resize-none text-[13px] sm:text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 leading-5 py-0.5 px-0 h-[22px] min-h-[22px] max-h-[120px] overflow-y-auto"
                   />
 
                   <button
@@ -1370,9 +1412,9 @@ export default function FloatingAiAssistant() {
                 </div>
 
                 {/* Footer notes */}
-                <div className="flex items-center justify-between text-[10px] text-slate-400 dark:text-slate-500 px-1">
+                <div className="flex items-center justify-between text-[10px] text-slate-400 dark:text-slate-500 px-1 pt-0.5">
                   <span>Enter to send · Shift+Enter for new line</span>
-                  <span className={`${inputValue.length > 900 ? 'text-amber-600 font-bold' : ''}`}>
+                  <span className={inputValue.length > 900 ? 'text-amber-600 font-bold' : ''}>
                     {inputValue.length}/1000
                   </span>
                 </div>
