@@ -2,7 +2,6 @@
   <img src="public/nadikomuniti/01_branding/logo-header-tagline-horizontal.webp" alt="NadiKomuniti — Connect & Relax" width="340" />
 </p>
 
-<h1 align="center">NadiKomuniti</h1>
 
 <p align="center">
   <strong>Connect &amp; Relax</strong><br />
